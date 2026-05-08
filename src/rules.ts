@@ -254,6 +254,20 @@ const rules: Rule[] = [
     evidence: () => "No map or directions link found"
   },
   {
+    id: "broken-internal-links",
+    title: "Some internal links are broken",
+    category: "technical-health",
+    severity: "high",
+    source: "Internal links",
+    recommendation: "Fix or remove broken internal links so visitors and crawlers do not hit dead pages.",
+    check: ({ snapshot }) =>
+      !snapshot.internalLinks || snapshot.internalLinks.every((link) => link.statusCode > 0 && link.statusCode < 400),
+    evidence: ({ snapshot }) => {
+      const broken = snapshot.internalLinks?.filter((link) => link.statusCode === 0 || link.statusCode >= 400) ?? [];
+      return broken.map((link) => `${link.statusCode} ${link.finalUrl}`).join("; ") || "No broken links";
+    }
+  },
+  {
     id: "image-alt-coverage",
     title: "Some images are missing alt text",
     category: "mobile-usability",

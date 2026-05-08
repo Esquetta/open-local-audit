@@ -17,6 +17,7 @@ export const inputUrlSchema = z
   });
 
 export const outputFormatSchema = z.enum(["json", "markdown", "all"]);
+export const failOnSchema = z.enum(["none", "high", "medium", "low"]);
 
 export const cliOptionsSchema = z.object({
   format: outputFormatSchema.default("markdown"),
@@ -24,5 +25,8 @@ export const cliOptionsSchema = z.object({
   outDir: z.string().optional(),
   timeout: z.coerce.number().int().positive().max(60000).default(10000),
   maxRedirects: z.coerce.number().int().min(0).max(10).default(5),
+  checkLinks: z.boolean().default(false),
+  maxPages: z.coerce.number().int().positive().max(100).default(10),
+  failOn: failOnSchema.default("none"),
   pretty: z.boolean().default(false)
 });

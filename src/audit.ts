@@ -1,9 +1,12 @@
 import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, Score } from "./types.js";
 import { runRules } from "./rules.js";
+import { load } from "cheerio";
 
 const defaultOptions: AuditOptions = {
   timeoutMs: 10000,
-  maxRedirects: 5
+  maxRedirects: 5,
+  checkLinks: false,
+  maxPages: 10
 };
 
 const categories: FindingCategory[] = [
@@ -77,6 +80,37 @@ async function fetchResource(url: string, options: AuditOptions): Promise<PageRe
       statusCode: 0
     };
   }
+}
+
+function collectInternalLinks(snapshot: PageSnapshot, maxPages: number): string[] {
+  const $ = load(snapshot.html);
+  const origin = new URL(snapshot.finalUrl).origin;
+  const seen = new Set<string>();
+
+  for (const element of $("a").toArray()) {
+    const href = $(element).attr("href")?.trim();
+    if (!href || /^(mailto|tel|javascript):/i.test(href)) {
+      continue;
+    }
+
+    try {
+      const url = new URL(href, snapshot.finalUrl);
+      url.hash = "";
+      if (url.origin !== origin) {
+        continue;
+      }
+
+      seen.add(url.toString());
+    } catch {
+      continue;
+    }
+
+    if (seen.size >= maxPages) {
+      break;
+    }
+  }
+
+  return Array.from(seen);
 }
 
 function summarize(reportFindings: ReturnType<typeof runRules>): AuditSummary {
@@ -167,6 +201,12 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
     robotsTxt: await fetchResource(new URL("/robots.txt", origin).toString(), effectiveOptions),
     sitemapXml: await fetchResource(new URL("/sitemap.xml", origin).toString(), effectiveOptions)
   };
+
+  if (effectiveOptions.checkLinks) {
+    snapshot.internalLinks = await Promise.all(
+      collectInternalLinks(snapshot, effectiveOptions.maxPages).map((link) => fetchResource(link, effectiveOptions))
+    );
+  }
 
   return auditSnapshot(snapshot);
 }

@@ -57,11 +57,14 @@ export interface PageSnapshot {
     robotsTxt?: PageResource;
     sitemapXml?: PageResource;
   };
+  internalLinks?: PageResource[];
 }
 
 export interface AuditOptions {
   timeoutMs: number;
   maxRedirects: number;
+  checkLinks: boolean;
+  maxPages: number;
 }
 
 export interface PageResource {
