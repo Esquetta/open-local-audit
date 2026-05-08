@@ -65,6 +65,23 @@ function hasJsonLdType($: CheerioAPI, matcher: (type: string) => boolean): boole
     });
 }
 
+function hasInvalidJsonLd($: CheerioAPI): boolean {
+  return $('script[type="application/ld+json"]')
+    .toArray()
+    .some((element) => {
+      try {
+        JSON.parse($(element).text());
+        return false;
+      } catch {
+        return true;
+      }
+    });
+}
+
+function hasSuccessfulResource(statusCode: number | undefined): boolean {
+  return typeof statusCode === "number" && statusCode >= 200 && statusCode < 400;
+}
+
 const rules: Rule[] = [
   {
     id: "http-status-ok",
@@ -137,6 +154,36 @@ const rules: Rule[] = [
     evidence: ({ $ }) => $('link[rel="canonical"]').attr("href")?.trim() || "Missing"
   },
   {
+    id: "open-graph-present",
+    title: "Open Graph metadata is incomplete",
+    category: "search-basics",
+    severity: "low",
+    source: "Open Graph metadata",
+    recommendation: "Add og:title, og:description, and og:url so shared links have clear previews.",
+    check: ({ $ }) =>
+      Boolean(
+        $('meta[property="og:title"]').attr("content")?.trim() &&
+          $('meta[property="og:description"]').attr("content")?.trim() &&
+          $('meta[property="og:url"]').attr("content")?.trim()
+      ),
+    evidence: ({ $ }) => {
+      const missing = ["og:title", "og:description", "og:url"].filter(
+        (property) => !$(`meta[property="${property}"]`).attr("content")?.trim()
+      );
+      return missing.length ? `Missing ${missing.join(", ")}` : "Complete";
+    }
+  },
+  {
+    id: "json-ld-valid",
+    title: "JSON-LD structured data is invalid",
+    category: "search-basics",
+    severity: "medium",
+    source: "JSON-LD",
+    recommendation: "Fix invalid JSON-LD so structured data can be parsed by search engines.",
+    check: ({ $ }) => !hasInvalidJsonLd($),
+    evidence: () => "At least one application/ld+json script could not be parsed"
+  },
+  {
     id: "phone-link-present",
     title: "Phone action is missing",
     category: "trust-contact",
@@ -175,6 +222,26 @@ const rules: Rule[] = [
     recommendation: "Add LocalBusiness schema when the page represents a local business location.",
     check: ({ $ }) => hasJsonLdType($, (type) => type.endsWith("LocalBusiness") || type === "LocalBusiness"),
     evidence: () => "No LocalBusiness JSON-LD type found"
+  },
+  {
+    id: "robots-txt-present",
+    title: "robots.txt is missing or unavailable",
+    category: "technical-health",
+    severity: "low",
+    source: "robots.txt",
+    recommendation: "Publish a robots.txt file so crawlers can discover crawl guidance.",
+    check: ({ snapshot }) => hasSuccessfulResource(snapshot.resources?.robotsTxt?.statusCode),
+    evidence: ({ snapshot }) => `${snapshot.resources?.robotsTxt?.statusCode ?? "Not checked"}`
+  },
+  {
+    id: "sitemap-xml-present",
+    title: "sitemap.xml is missing or unavailable",
+    category: "search-basics",
+    severity: "medium",
+    source: "sitemap.xml",
+    recommendation: "Publish a sitemap.xml file so important pages are easier to discover.",
+    check: ({ snapshot }) => hasSuccessfulResource(snapshot.resources?.sitemapXml?.statusCode),
+    evidence: ({ snapshot }) => `${snapshot.resources?.sitemapXml?.statusCode ?? "Not checked"}`
   },
   {
     id: "map-link-present",

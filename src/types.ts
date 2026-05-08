@@ -53,9 +53,19 @@ export interface PageSnapshot {
   statusCode: number;
   headers: Record<string, string>;
   html: string;
+  resources?: {
+    robotsTxt?: PageResource;
+    sitemapXml?: PageResource;
+  };
 }
 
 export interface AuditOptions {
   timeoutMs: number;
   maxRedirects: number;
+}
+
+export interface PageResource {
+  url: string;
+  finalUrl: string;
+  statusCode: number;
 }

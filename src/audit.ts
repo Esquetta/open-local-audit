@@ -1,4 +1,4 @@
-import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageSnapshot, Score } from "./types.js";
+import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, Score } from "./types.js";
 import { runRules } from "./rules.js";
 
 const defaultOptions: AuditOptions = {
@@ -56,6 +56,27 @@ async function fetchWithRedirects(url: string, options: AuditOptions): Promise<P
   }
 
   throw new Error(`Exceeded redirect limit of ${options.maxRedirects}`);
+}
+
+async function fetchResource(url: string, options: AuditOptions): Promise<PageResource> {
+  try {
+    const snapshot = await fetchWithRedirects(url, {
+      ...options,
+      maxRedirects: Math.min(options.maxRedirects, 3)
+    });
+
+    return {
+      url,
+      finalUrl: snapshot.finalUrl,
+      statusCode: snapshot.statusCode
+    };
+  } catch {
+    return {
+      url,
+      finalUrl: url,
+      statusCode: 0
+    };
+  }
 }
 
 function summarize(reportFindings: ReturnType<typeof runRules>): AuditSummary {
@@ -135,10 +156,17 @@ export function auditSnapshot(snapshot: PageSnapshot, scannedAt = new Date().toI
 }
 
 export async function auditUrl(url: string, options: Partial<AuditOptions> = {}): Promise<AuditReport> {
-  const snapshot = await fetchWithRedirects(url, {
+  const effectiveOptions = {
     ...defaultOptions,
     ...options
-  });
+  };
+  const snapshot = await fetchWithRedirects(url, effectiveOptions);
+  const origin = new URL(snapshot.finalUrl).origin;
+
+  snapshot.resources = {
+    robotsTxt: await fetchResource(new URL("/robots.txt", origin).toString(), effectiveOptions),
+    sitemapXml: await fetchResource(new URL("/sitemap.xml", origin).toString(), effectiveOptions)
+  };
 
   return auditSnapshot(snapshot);
 }

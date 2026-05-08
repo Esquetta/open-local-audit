@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import { writeFile } from "node:fs/promises";
 import { Command } from "commander";
 import { auditUrl } from "./audit.js";
-import { renderJsonReport, renderMarkdownReport } from "./reporters.js";
+import { writeReportOutputs } from "./output.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 
 const program = new Command();
@@ -11,8 +10,9 @@ program
   .name("open-local-audit")
   .description("Audit a public local-business website and generate an evidence-backed report.")
   .argument("<url>", "HTTP or HTTPS URL to audit")
-  .option("-f, --format <format>", "output format: json or markdown", "markdown")
+  .option("-f, --format <format>", "output format: json, markdown, or all", "markdown")
   .option("-o, --out <path>", "write report to a file instead of stdout")
+  .option("--out-dir <path>", "write generated report files to a directory")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--max-redirects <count>", "maximum redirects to follow", "5")
   .option("--pretty", "pretty-print JSON output", false)
@@ -25,13 +25,17 @@ program
         maxRedirects: options.maxRedirects
       });
 
-      const output =
-        options.format === "json" ? renderJsonReport(report, options.pretty) : renderMarkdownReport(report);
+      const outputs = await writeReportOutputs(report, {
+        format: options.format,
+        out: options.out,
+        outDir: options.outDir,
+        pretty: options.pretty
+      });
 
-      if (options.out) {
-        await writeFile(options.out, output, "utf8");
-      } else {
-        process.stdout.write(output);
+      for (const output of outputs) {
+        if (!output.path) {
+          process.stdout.write(output.content);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
