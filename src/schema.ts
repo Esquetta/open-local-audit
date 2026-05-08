@@ -1,0 +1,27 @@
+import { z } from "zod";
+
+export const inputUrlSchema = z
+  .string()
+  .trim()
+  .min(1, "URL is required")
+  .transform((value) => {
+    if (/^https?:\/\//i.test(value)) {
+      return value;
+    }
+
+    return `https://${value}`;
+  })
+  .pipe(z.string().url("URL must be a valid HTTP or HTTPS URL"))
+  .refine((value) => /^https?:\/\//i.test(value), {
+    message: "Only HTTP and HTTPS URLs are supported"
+  });
+
+export const outputFormatSchema = z.enum(["json", "markdown"]);
+
+export const cliOptionsSchema = z.object({
+  format: outputFormatSchema.default("markdown"),
+  out: z.string().optional(),
+  timeout: z.coerce.number().int().positive().max(60000).default(10000),
+  maxRedirects: z.coerce.number().int().min(0).max(10).default(5),
+  pretty: z.boolean().default(false)
+});

@@ -1,0 +1,57 @@
+{
+  "name": "open-local-audit",
+  "version": "0.1.0",
+  "description": "Open-source website and local presence auditor for small businesses.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "open-local-audit": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "tsx src/cli.ts"
+  },
+  "keywords": [
+    "local-seo",
+    "website-audit",
+    "small-business",
+    "cli",
+    "seo",
+    "accessibility",
+    "structured-data",
+    "local-business"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Esquetta/open-local-audit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Esquetta/open-local-audit/issues"
+  },
+  "homepage": "https://github.com/Esquetta/open-local-audit#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.5"
+  }
+}
