@@ -25,14 +25,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Build
-        run: npm run build
-
-      - name: Package dry run
-        run: npm pack --dry-run
+      - name: Release check
+        run: npm run release-check
