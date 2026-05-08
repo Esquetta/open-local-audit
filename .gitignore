@@ -7,6 +7,6 @@ coverage/
 npm-debug.log*
 *.tgz
 tmp/
-reports/
+/reports/
 playwright-report/
 test-results/

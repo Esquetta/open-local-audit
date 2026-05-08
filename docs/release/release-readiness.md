@@ -6,28 +6,28 @@ Prepare Open Local Audit for a professional GitHub and npm release. Do not publi
 
 ## GitHub readiness checklist
 
-- [ ] Repository created.
-- [ ] README is accurate and not overstated.
-- [ ] Product brief is current.
+- [x] Repository created.
+- [x] README is accurate and not overstated.
+- [x] Product brief is current.
 - [x] License selected.
-- [ ] Contributing guide added.
-- [ ] Security policy added.
-- [ ] Code of conduct decision made.
-- [ ] GitHub Actions runs tests.
-- [ ] Example reports committed.
-- [ ] Changelog started.
-- [ ] First release notes drafted.
+- [x] Contributing guide added.
+- [x] Security policy added.
+- [x] Code of conduct decision made.
+- [x] GitHub Actions runs tests.
+- [x] Example reports committed.
+- [x] Changelog started.
+- [x] First release notes drafted.
 
 ## npm readiness checklist
 
-- [ ] Package name confirmed available.
-- [ ] `package.json` metadata complete.
-- [ ] `bin` entry points to compiled CLI.
-- [ ] Package exports are intentional.
-- [ ] `files` list prevents accidental publishing.
-- [ ] `npm pack --dry-run` reviewed.
-- [ ] Install test from packed tarball passes.
-- [ ] CLI smoke test passes through `npx`.
+- [x] Package name confirmed available.
+- [x] `package.json` metadata complete.
+- [x] `bin` entry points to compiled CLI.
+- [x] Package exports are intentional.
+- [x] `files` list prevents accidental publishing.
+- [x] `npm pack --dry-run` reviewed.
+- [x] Install test from packed tarball passes.
+- [x] CLI smoke test passes through `npx`.
 - [ ] Version matches GitHub release tag.
 
 ## Quality gates
@@ -42,6 +42,14 @@ npm pack --dry-run
 ```
 
 Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js --help
+npx --yes --package ./open-local-audit-0.1.0.tgz open-local-audit --help
+```
 
 ## First release recommendation
 

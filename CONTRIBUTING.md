@@ -1,6 +1,6 @@
 # Contributing
 
-Open Local Audit is in planning. Contribution rules will be finalized before the first public release.
+Open Local Audit is early-stage open-source software. Contributions should keep the CLI small, testable, and evidence-backed.
 
 ## Expected contribution style
 
@@ -12,4 +12,21 @@ Open Local Audit is in planning. Contribution rules will be finalized before the
 
 ## Local development
 
-Implementation has not started yet. Add setup commands here once the project is scaffolded.
+Requirements:
+- Node.js 20 or newer.
+- npm.
+
+Setup and verification:
+
+```bash
+npm install
+npm test
+npm run lint
+npm run build
+```
+
+Run the CLI during development:
+
+```bash
+npm start -- https://example.com --format markdown
+```

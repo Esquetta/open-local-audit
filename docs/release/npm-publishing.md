@@ -17,16 +17,16 @@ Recommendation:
 ## Package metadata
 
 Required before publish:
-- name,
-- version,
-- description,
-- license,
-- repository,
-- bugs URL,
-- homepage,
-- keywords,
-- bin entry,
-- files allowlist.
+- name: `open-local-audit`,
+- version: `0.1.0`,
+- description: complete,
+- license: MIT,
+- repository: complete,
+- bugs URL: complete,
+- homepage: complete,
+- keywords: complete,
+- bin entry: `open-local-audit`,
+- files allowlist: `dist`, `README.md`, `LICENSE`, `CHANGELOG.md`.
 
 Suggested keywords:
 - local-seo,
