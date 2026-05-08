@@ -28,7 +28,7 @@ Prepare Open Local Audit for a professional GitHub and npm release. Do not publi
 - [x] `npm pack --dry-run` reviewed.
 - [x] Install test from packed tarball passes.
 - [x] CLI smoke test passes through `npx`.
-- [ ] Version matches GitHub release tag.
+- [x] Version matches GitHub release tag.
 
 ## Quality gates
 
@@ -48,6 +48,7 @@ Current project-specific verification:
 ```bash
 npm audit
 node dist/cli.js --help
+npm pack
 npx --yes --package ./open-local-audit-0.1.0.tgz open-local-audit --help
 ```
 
