@@ -6,13 +6,13 @@ Preferred:
 - `open-local-audit`
 
 Alternatives:
-- `@torut/open-local-audit`
+- `@scope/open-local-audit`
 - `local-presence-audit`
 - `local-site-audit`
 
 Recommendation:
 - Use `open-local-audit` if available.
-- Use `@torut/open-local-audit` if TORUT wants scoped package ownership and brand control.
+- Use a scoped package only if maintainers need namespace ownership and brand control.
 
 ## Package metadata
 
@@ -36,7 +36,7 @@ Suggested keywords:
 - seo,
 - accessibility,
 - structured-data,
-- torut.
+- local-business.
 
 Current license:
 - MIT.

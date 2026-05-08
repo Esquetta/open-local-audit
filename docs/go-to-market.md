@@ -6,10 +6,10 @@ Open Local Audit is a practical diagnostic tool for local business websites. It 
 
 ## Primary audiences
 
-1. TORUT internal operator.
+1. Internal operator.
 2. Freelancers and small agencies.
 3. Technical founders and indie operators.
-4. Local business owners through TORUT-generated reports.
+4. Local business owners through generated reports.
 
 ## Launch narrative
 
@@ -20,14 +20,14 @@ Open Local Audit is a practical diagnostic tool for local business websites. It 
 - Public GitHub README.
 - Example reports.
 - Screenshots of Markdown reports.
-- TORUT article explaining the first 10 checks.
-- One demo page on `torut.dev`.
+- Launch article explaining the first 10 checks.
+- One demo page on the project website.
 
 ## Lead path
 
 1. Run audit for a prospect.
 2. Send short owner-readable report.
-3. Offer TORUT Local Presence Kit if the business wants implementation.
+3. Offer an implementation package if the business wants execution help.
 4. Convert successful work into before/after case study.
 
 ## Initial content ideas
@@ -40,7 +40,7 @@ Open Local Audit is a practical diagnostic tool for local business websites. It 
 ## Success metrics
 
 - 20 real audits completed manually.
-- 3 qualified Local Presence Kit conversations.
+- 3 qualified implementation conversations.
 - 1 reference customer.
 - 50 GitHub stars after public launch.
 - 10 external users running the CLI.
@@ -56,4 +56,4 @@ Do not market as:
 Market as:
 - a local website quality auditor,
 - a practical evidence generator,
-- an open-source trust asset from TORUT.
+- an open-source trust asset.

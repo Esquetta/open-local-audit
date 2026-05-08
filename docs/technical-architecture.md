@@ -77,7 +77,7 @@ Recommended categories:
 
 Responsibilities:
 - Emit JSON for machines.
-- Emit Markdown for TORUT mini-audit handoff.
+- Emit Markdown for mini-audit handoff.
 - Keep report wording practical and non-alarmist.
 
 ## Data model
@@ -105,7 +105,7 @@ Finding fields:
 
 | Area | Choice | Rationale |
 | --- | --- | --- |
-| Language | TypeScript | Strong fit with existing TORUT tooling and npm release path. |
+| Language | TypeScript | Strong fit with CLI tooling and npm release path. |
 | Runtime | Node.js | Fast CLI delivery and ecosystem fit. |
 | Parser | Cheerio | Simple and fast HTML inspection. |
 | Browser | Playwright | Needed for rendered DOM and screenshots later. |
@@ -128,5 +128,5 @@ Finding fields:
 - Screenshot capture.
 - Web UI using the same rule engine.
 - GitHub Action mode.
-- Branded TORUT report templates.
+- Branded report templates.
 - Vertical-specific scoring for clinics, salons, real estate, and education.

@@ -26,7 +26,7 @@ Open Local Audit must be useful without becoming a scraping or spam engine. The 
 Default behavior:
 - Do not store scan history.
 - Write reports only when the operator passes an output path.
-- Do not send scan data to TORUT or third-party services.
+- Do not send scan data to maintainers or third-party services.
 
 If future telemetry is added:
 - Make it opt-in.
@@ -47,7 +47,7 @@ The CLI should include:
 Reports can support manual outreach, but outreach should be:
 - personalized,
 - low volume,
-- clear about TORUT identity,
+- clear about the sender identity,
 - easy to decline,
 - logged with do-not-contact status when requested.
 

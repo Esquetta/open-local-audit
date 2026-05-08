@@ -4,19 +4,19 @@
 
 Open Local Audit is an open-source website and local presence auditor for small businesses. It scans a public website and produces a practical report covering technical SEO, performance basics, contact conversion, mobile readiness, schema, broken links, social/contact links, and local business trust signals.
 
-Its main job is credibility and lead generation for TORUT. It should be useful enough to earn trust from developers and business owners, but focused enough that it can be built and maintained by a solo founder.
+Its main job is credibility and lead generation for implementation services. It should be useful enough to earn trust from developers and business owners, but focused enough that it can be built and maintained by a solo founder.
 
 ## Strategic role
 
 - Role in portfolio: open-source trust engine and lead magnet.
-- Company benefit: public proof that TORUT builds serious technical tools.
-- Business link: every audit can recommend a Local Presence Kit package.
-- Distribution: GitHub, developer communities, local SEO content, TORUT landing pages.
+- Commercial benefit: public proof that maintainers can build serious technical tools.
+- Business link: every audit can recommend an implementation package.
+- Distribution: GitHub, developer communities, local SEO content, and product landing pages.
 
 ## Target users
 
 Primary:
-- TORUT internal operator running audits for prospects.
+- Internal operator running audits for prospects.
 - Small agencies and freelancers.
 - Technical founders checking local business sites.
 
@@ -36,7 +36,7 @@ Local business websites often fail on simple basics: unclear contact actions, mi
 - Name direction: Open Local Audit.
 - Tone: diagnostic, plain-language, evidence-first.
 - Visual style: report-like, not flashy.
-- Public identity: open-source utility by TORUT.
+- Public identity: open-source local website auditing utility.
 
 ## MVP scope
 
@@ -84,7 +84,7 @@ Alternative stack:
 - Go for single-binary distribution if CLI adoption becomes the priority.
 
 Why TypeScript first:
-- Matches current TORUT/CodexPluginDoctor strengths.
+- Matches current TypeScript CLI and Playwright strengths.
 - Fast to build.
 - Easy to share logic between CLI and web UI.
 - Good ecosystem for website parsing and Playwright.
@@ -101,7 +101,7 @@ Why TypeScript first:
 ## Open-source strategy
 
 Repository:
-- Public GitHub repo under TORUT or Esquetta.
+- Public GitHub repo under a neutral project or maintainer account.
 - MIT or Apache-2.0 license.
 - Clear contributing guide.
 - Example reports for demo businesses.
@@ -121,12 +121,12 @@ Commercial boundary:
 
 Launch content:
 - "We audited 20 local business websites and found the same 10 fixable issues."
-- Demo report page on torut.dev.
+- Demo report page on the project website.
 - GitHub README with sample command.
 
 Lead capture:
 - Free report request form.
-- "Send this report to TORUT for a fixed-price cleanup quote."
+- "Send this report to an implementation partner for a fixed-price cleanup quote."
 
 ## 30-60-90 day plan
 
@@ -134,7 +134,7 @@ First 30 days:
 - Build CLI MVP.
 - Create 3 sample reports.
 - Use it manually for outreach.
-- Publish repo and TORUT article.
+- Publish repo and launch article.
 
 Days 31-60:
 - Add web UI for one-off scans.
@@ -153,7 +153,7 @@ Days 61-90:
 - CLI downloads or npm installs.
 - Reports generated.
 - Qualified leads from reports.
-- Conversion from audit to Local Presence Kit.
+- Conversion from audit to implementation services.
 - Average time to generate and explain a report.
 
 ## Risks

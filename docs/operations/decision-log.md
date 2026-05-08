@@ -3,7 +3,7 @@
 ## 2026-05-08: Project split into standalone workspace
 
 Decision:
-- Open Local Audit moved from the TORUT venture portfolio folder into `D:\Workstation\open-local-audit`.
+- Open Local Audit moved from a venture portfolio folder into `D:\Workstation\open-local-audit`.
 
 Reason:
 - It is likely to become its own GitHub repository and npm package.
@@ -26,7 +26,7 @@ Decision:
 
 Reason:
 - Higher platform and compliance risk.
-- TORUT can still use manual market research and public website audits safely.
+- Operators can still use manual market research and public website audits safely.
 
 ## 2026-05-08: Initial open-source license
 
@@ -35,5 +35,5 @@ Decision:
 
 Reason:
 - Familiar for npm users.
-- Low friction for freelancers, agencies, and internal TORUT usage.
-- Can be reviewed before the first public release if TORUT wants a different license.
+- Low friction for freelancers, agencies, and internal usage.
+- Can be reviewed before the first public release if maintainers want a different license.

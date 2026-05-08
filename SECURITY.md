@@ -6,7 +6,7 @@ Open Local Audit is not released yet.
 
 ## Reporting a vulnerability
 
-Until the public repository is created, report security concerns directly to TORUT.
+Until the public repository is created, report security concerns directly to the maintainers.
 
 After repository creation, replace this section with the public security contact and expected response window.
 
