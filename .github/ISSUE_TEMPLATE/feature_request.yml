@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a focused improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What practical audit or reporting problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the behavior you want.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Rule engine
+        - Report output
+        - Documentation
+        - Release process
+        - Other
+    validations:
+      required: true
