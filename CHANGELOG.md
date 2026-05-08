@@ -4,6 +4,14 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.2.0 - 2026-05-08
+
+- Added optional same-origin internal link scanning with `--check-links` and `--max-pages`.
+- Added a high-severity finding for broken internal links.
+- Added `--fail-on none|high|medium|low` for CI-friendly exit codes.
+- Added compact terminal summaries when reports are written to files.
+- Added integration tests for link scanning and CLI behavior helpers.
+
 ## v0.1.1 - 2026-05-08
 
 - Added `robots.txt`, `sitemap.xml`, Open Graph, and invalid JSON-LD checks.

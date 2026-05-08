@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Initial published CLI. The project can run a single URL audit and produce JSON, Markdown, or both report formats.
+Published CLI. The project can run a single URL audit, optionally check same-origin links, and produce JSON, Markdown, or both report formats.
 
 ## Business purpose
 
@@ -78,6 +78,12 @@ Write both report formats to a directory:
 open-local-audit https://example.com --format all --out-dir reports
 ```
 
+Check same-origin links and fail CI when high-severity issues are found:
+
+```bash
+open-local-audit https://example.com --check-links --max-pages 10 --fail-on high --format all --out-dir reports
+```
+
 ## First implementation milestone
 
 The first implementation milestone is a CLI that accepts one URL and outputs:
@@ -87,6 +93,9 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Combined JSON and Markdown report output with `--format all --out-dir`.
 - Score summary.
 - Evidence table.
+- Optional same-origin link checks.
+- Terminal summary when reports are written to files.
+- CI-friendly exit codes with `--fail-on`.
 - Clear owner-readable recommendations.
 
 Example target command:
