@@ -41,6 +41,12 @@ npm run build
 npm pack --dry-run
 ```
 
+The preferred single command is:
+
+```bash
+npm run release-check
+```
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -49,7 +55,7 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.1.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.1.1.tgz open-local-audit --help
 ```
 
 ## First release recommendation

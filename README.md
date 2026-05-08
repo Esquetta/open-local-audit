@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Initial CLI implementation and release preparation. The project can run a single URL audit and produce JSON or Markdown output, but it is not published to npm yet.
+Initial published CLI. The project can run a single URL audit and produce JSON, Markdown, or both report formats.
 
 ## Business purpose
 
@@ -51,6 +51,7 @@ npm install
 npm test
 npm run lint
 npm run build
+npm run release-check
 ```
 
 Run the CLI locally:
@@ -65,12 +66,25 @@ After building, run the compiled CLI:
 node dist/cli.js https://example.com --format json --pretty
 ```
 
+Run the published package:
+
+```bash
+npx open-local-audit https://example.com --format markdown
+```
+
+Write both report formats to a directory:
+
+```bash
+open-local-audit https://example.com --format all --out-dir reports
+```
+
 ## First implementation milestone
 
 The first implementation milestone is a CLI that accepts one URL and outputs:
 
 - JSON report.
 - Markdown report.
+- Combined JSON and Markdown report output with `--format all --out-dir`.
 - Score summary.
 - Evidence table.
 - Clear owner-readable recommendations.
@@ -93,4 +107,4 @@ The project should be prepared for:
 - GitHub Actions for lint, tests, build, and release checks.
 - npm package after the CLI has real tests and example reports.
 
-No npm package should be published until the release checklist in `docs/release/release-readiness.md` is complete.
+Release work should follow the checklist in `docs/release/release-readiness.md`.

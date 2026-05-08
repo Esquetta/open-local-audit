@@ -10,7 +10,7 @@
 | Category | Score |
 | --- | ---: |
 | Technical health | 100/100 |
-| Search basics | 85/100 |
+| Search basics | 77/100 |
 | Mobile and usability | 100/100 |
 | Trust and contact readiness | 77/100 |
 
@@ -20,10 +20,12 @@
 | --- | --- | --- | --- |
 | medium | LocalBusiness structured data is missing | JSON-LD: No LocalBusiness JSON-LD type found | Add LocalBusiness schema when the page represents a local business location. |
 | medium | Map or directions link is missing | Links: No map or directions link found | Add a map or directions link so visitors can confirm the business location quickly. |
+| low | Open Graph metadata is incomplete | Open Graph metadata: Missing og:title, og:description, og:url | Add og:title, og:description, and og:url so shared links have clear previews. |
 | low | WhatsApp action is missing | Contact links: No WhatsApp link found | Add a WhatsApp action if customers commonly use WhatsApp for bookings or questions. |
 
 ## Recommendations
 
+- Add og:title, og:description, and og:url so shared links have clear previews.
 - Add a WhatsApp action if customers commonly use WhatsApp for bookings or questions.
 - Add LocalBusiness schema when the page represents a local business location.
 - Add a map or directions link so visitors can confirm the business location quickly.
