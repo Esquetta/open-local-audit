@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "open-local-audit": "./dist/cli.js"
+    "open-local-audit": "dist/cli.js"
   },
   "exports": {
     ".": "./dist/index.js"
