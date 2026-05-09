@@ -4,6 +4,14 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.3.0 - 2026-05-09
+
+- Added standalone HTML report rendering.
+- Added `--format html`.
+- Expanded `--format all` to write JSON, Markdown, and HTML reports.
+- Added `--input <path>` for batch audits from text files.
+- Added safe per-site output folders for batch reports.
+
 ## v0.2.0 - 2026-05-08
 
 - Added optional same-origin internal link scanning with `--check-links` and `--max-pages`.

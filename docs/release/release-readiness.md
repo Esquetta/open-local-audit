@@ -55,7 +55,7 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.2.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.3.0.tgz open-local-audit --help
 ```
 
 ## First release recommendation
