@@ -1,12 +1,14 @@
 import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, Score } from "./types.js";
 import { runRules } from "./rules.js";
 import { load } from "cheerio";
+import { renderPageSnapshot } from "./render.js";
 
 const defaultOptions: AuditOptions = {
   timeoutMs: 10000,
   maxRedirects: 5,
   checkLinks: false,
-  maxPages: 10
+  maxPages: 10,
+  render: false
 };
 
 const categories: FindingCategory[] = [
@@ -194,7 +196,12 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
     ...defaultOptions,
     ...options
   };
-  const snapshot = await fetchWithRedirects(url, effectiveOptions);
+  const snapshot =
+    effectiveOptions.render && effectiveOptions.renderPage
+      ? await effectiveOptions.renderPage(url, { timeoutMs: effectiveOptions.timeoutMs })
+      : effectiveOptions.render
+        ? await renderPageSnapshot(url, { timeoutMs: effectiveOptions.timeoutMs })
+        : await fetchWithRedirects(url, effectiveOptions);
   const origin = new URL(snapshot.finalUrl).origin;
 
   snapshot.resources = {

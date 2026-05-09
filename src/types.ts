@@ -65,6 +65,8 @@ export interface AuditOptions {
   maxRedirects: number;
   checkLinks: boolean;
   maxPages: number;
+  render: boolean;
+  renderPage?: (url: string, options: Pick<AuditOptions, "timeoutMs">) => Promise<PageSnapshot>;
 }
 
 export interface PageResource {

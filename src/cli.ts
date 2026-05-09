@@ -21,6 +21,7 @@ program
   .option("--max-redirects <count>", "maximum redirects to follow", "5")
   .option("--check-links", "check same-origin links found on the audited page", false)
   .option("--max-pages <count>", "maximum same-origin links to check", "10")
+  .option("--render", "use Playwright-rendered HTML instead of the static response", false)
   .option("--fail-on <severity>", "exit with code 1 when findings meet severity: none, high, medium, or low", "none")
   .option("--pretty", "pretty-print JSON output", false)
   .action(async (rawUrl: string | undefined, rawOptions: unknown) => {
@@ -30,7 +31,8 @@ program
         timeoutMs: options.timeout,
         maxRedirects: options.maxRedirects,
         checkLinks: options.checkLinks,
-        maxPages: options.maxPages
+        maxPages: options.maxPages,
+        render: options.render
       };
 
       if (options.input) {

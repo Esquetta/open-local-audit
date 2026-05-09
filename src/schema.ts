@@ -28,6 +28,7 @@ export const cliOptionsSchema = z.object({
   maxRedirects: z.coerce.number().int().min(0).max(10).default(5),
   checkLinks: z.boolean().default(false),
   maxPages: z.coerce.number().int().positive().max(100).default(10),
+  render: z.boolean().default(false),
   failOn: failOnSchema.default("none"),
   pretty: z.boolean().default(false)
 });
