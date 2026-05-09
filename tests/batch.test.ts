@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
 import { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "../src/batch.js";
-import type { AuditReport } from "../src/types.js";
+import type { AuditReport, Finding, Severity } from "../src/types.js";
 
 function reportFor(url: string): AuditReport {
   return auditSnapshot(
@@ -19,6 +19,42 @@ function reportFor(url: string): AuditReport {
     },
     "2026-05-09T00:00:00.000Z"
   );
+}
+
+function findingFor(severity: Severity, title: string): Finding {
+  return {
+    id: `${severity}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    title,
+    severity,
+    category: "technical-health",
+    evidence: [],
+    recommendation: "Fix the issue.",
+    source: "test"
+  };
+}
+
+function scoredReportFor(url: string, score: number, severities: Severity[]): AuditReport {
+  const report = reportFor(url);
+  return {
+    ...report,
+    scores: Object.fromEntries(
+      Object.entries(report.scores).map(([category, value]) => [
+        category,
+        {
+          ...value,
+          score
+        }
+      ])
+    ) as AuditReport["scores"],
+    findings: severities.map((severity) => findingFor(severity, `${severity} issue`)),
+    summary: {
+      totalFindings: severities.length,
+      high: severities.filter((severity) => severity === "high").length,
+      medium: severities.filter((severity) => severity === "medium").length,
+      low: severities.filter((severity) => severity === "low").length,
+      info: severities.filter((severity) => severity === "info").length
+    }
+  };
 }
 
 describe("batch reports", () => {
@@ -179,6 +215,121 @@ describe("batch reports", () => {
       expect(markdown).toContain("# Open Local Audit Batch Index");
       expect(markdown).toContain("https://example.com");
       await expect(readFile(join(dir, "open-local-audit-batch-index.json"), "utf8")).rejects.toThrow();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("filters the aggregate index by segment and minimum score", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      await runBatchReports(
+        [
+          {
+            url: "https://dental-low.test",
+            segment: "dental"
+          },
+          {
+            url: "https://dental-high.test",
+            segment: "dental"
+          },
+          {
+            url: "https://legal-high.test",
+            segment: "legal"
+          }
+        ],
+        {
+          format: "json",
+          outDir: dir,
+          pretty: true,
+          index: {
+            segment: "dental",
+            minScore: 70
+          },
+          audit: async (url) => {
+            if (url === "https://dental-low.test") {
+              return scoredReportFor(url, 45, ["high"]);
+            }
+
+            return scoredReportFor(url, 85, ["low"]);
+          }
+        }
+      );
+
+      const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(index.summary).toEqual({
+        total: 1,
+        succeeded: 1,
+        failed: 0
+      });
+      expect(index.entries.map((entry: { url: string }) => entry.url)).toEqual(["https://dental-high.test"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sorts the aggregate index by ascending score before applying top N", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      await runBatchReports(["https://middle.test", "https://worst.test", "https://best.test"], {
+        format: "json",
+        outDir: dir,
+        pretty: true,
+        index: {
+          sort: "score-asc",
+          top: 2
+        },
+        audit: async (url) => {
+          const scores: Record<string, number> = {
+            "https://middle.test": 60,
+            "https://worst.test": 25,
+            "https://best.test": 95
+          };
+          return scoredReportFor(url, scores[url] ?? 0, ["medium"]);
+        }
+      });
+
+      const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(index.summary).toEqual({
+        total: 2,
+        succeeded: 2,
+        failed: 0
+      });
+      expect(index.entries.map((entry: { url: string; score: number }) => [entry.url, entry.score])).toEqual([
+        ["https://worst.test", 25],
+        ["https://middle.test", 60]
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sorts the aggregate index by descending worst severity", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      await runBatchReports(["https://low.test", "https://high.test", "https://medium.test"], {
+        format: "json",
+        outDir: dir,
+        pretty: true,
+        index: {
+          sort: "severity-desc"
+        },
+        audit: async (url) => {
+          const severities: Record<string, Severity[]> = {
+            "https://low.test": ["low"],
+            "https://high.test": ["high"],
+            "https://medium.test": ["medium"]
+          };
+          return scoredReportFor(url, 80, severities[url] ?? []);
+        }
+      });
+
+      const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(index.entries.map((entry: { url: string }) => entry.url)).toEqual([
+        "https://high.test",
+        "https://medium.test",
+        "https://low.test"
+      ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

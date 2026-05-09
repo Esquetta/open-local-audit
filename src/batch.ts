@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { inputUrlSchema } from "./schema.js";
-import type { AuditOptions, AuditReport } from "./types.js";
+import type { AuditOptions, AuditReport, Severity } from "./types.js";
 
 export interface BatchInputEntry {
   url: string;
@@ -16,6 +16,16 @@ export interface BatchReportOptions {
   outDir: string;
   pretty?: boolean;
   audit?: (url: string) => Promise<AuditReport>;
+  index?: BatchIndexOptions;
+}
+
+export type BatchIndexSort = "score-asc" | "severity-desc";
+
+export interface BatchIndexOptions {
+  segment?: string;
+  minScore?: number;
+  top?: number;
+  sort?: BatchIndexSort;
 }
 
 export interface SuccessfulBatchReportResult extends BatchInputEntry {
@@ -36,24 +46,26 @@ export interface FailedBatchReportResult extends BatchInputEntry {
 
 export type BatchReportResult = SuccessfulBatchReportResult | FailedBatchReportResult;
 
+type BatchIndexEntry = {
+  url: string;
+  label?: string;
+  segment?: string;
+  status: BatchReportResult["status"];
+  slug: string;
+  score?: number;
+  findings?: AuditReport["summary"];
+  topFinding?: string;
+  reports?: Partial<Record<Exclude<OutputFormat, "all">, string>>;
+  error?: string;
+};
+
 interface BatchIndex {
   summary: {
     total: number;
     succeeded: number;
     failed: number;
   };
-  entries: Array<{
-    url: string;
-    label?: string;
-    segment?: string;
-    status: BatchReportResult["status"];
-    slug: string;
-    score?: number;
-    findings?: AuditReport["summary"];
-    topFinding?: string;
-    reports?: Partial<Record<Exclude<OutputFormat, "all">, string>>;
-    error?: string;
-  }>;
+  entries: BatchIndexEntry[];
 }
 
 function parseCsvLine(line: string): string[] {
@@ -182,37 +194,93 @@ function totalScore(report: AuditReport): number {
   return Math.round(scores.reduce((total, score) => total + score.score, 0) / scores.length);
 }
 
-function buildBatchIndex(results: BatchReportResult[]): BatchIndex {
+function worstSeverityRank(report: AuditReport): number {
+  const ranks: Record<Severity, number> = {
+    high: 4,
+    medium: 3,
+    low: 2,
+    info: 1
+  };
+
+  return Math.max(0, ...report.findings.map((finding) => ranks[finding.severity]));
+}
+
+function buildBatchIndexEntry(result: BatchReportResult): BatchIndexEntry {
+  if (result.status === "failed") {
+    return {
+      url: result.url,
+      label: result.label,
+      segment: result.segment,
+      status: result.status,
+      slug: result.slug,
+      error: result.error
+    };
+  }
+
+  return {
+    url: result.url,
+    label: result.label,
+    segment: result.segment,
+    status: result.status,
+    slug: result.slug,
+    score: totalScore(result.report),
+    findings: result.report.summary,
+    topFinding: result.report.findings[0]?.title,
+    reports: outputReports(result.slug, result.outputs)
+  };
+}
+
+function resultScore(result: BatchReportResult): number {
+  return result.status === "success" ? totalScore(result.report) : Number.POSITIVE_INFINITY;
+}
+
+function resultSeverityRank(result: BatchReportResult): number {
+  return result.status === "success" ? worstSeverityRank(result.report) : 0;
+}
+
+function filterBatchIndexResults(results: BatchReportResult[], options: BatchIndexOptions): BatchReportResult[] {
+  return results.filter((result) => {
+    if (options.segment !== undefined && result.segment !== options.segment) {
+      return false;
+    }
+
+    if (options.minScore !== undefined && (result.status !== "success" || totalScore(result.report) < options.minScore)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function sortBatchIndexResults(results: BatchReportResult[], sort: BatchIndexSort | undefined): BatchReportResult[] {
+  if (sort === "score-asc") {
+    return [...results].sort((left, right) => resultScore(left) - resultScore(right));
+  }
+
+  if (sort === "severity-desc") {
+    return [...results].sort((left, right) => resultSeverityRank(right) - resultSeverityRank(left));
+  }
+
+  return results;
+}
+
+function applyBatchIndexOptions(results: BatchReportResult[], options: BatchIndexOptions = {}): BatchReportResult[] {
+  const filtered = filterBatchIndexResults(results, options);
+  const sorted = sortBatchIndexResults(filtered, options.sort);
+
+  return options.top === undefined ? sorted : sorted.slice(0, options.top);
+}
+
+function buildBatchIndex(results: BatchReportResult[], options?: BatchIndexOptions): BatchIndex {
+  const entries = applyBatchIndexOptions(results, options).map(buildBatchIndexEntry);
+
   return {
     summary: {
-      total: results.length,
-      succeeded: results.filter((result) => result.status === "success").length,
-      failed: results.filter((result) => result.status === "failed").length
+      total: entries.length,
+      succeeded: entries.filter((entry) => entry.status === "success").length,
+      failed: entries.filter((entry) => entry.status === "failed").length
     },
-    entries: results.map((result) => {
-      if (result.status === "failed") {
-        return {
-          url: result.url,
-          label: result.label,
-          segment: result.segment,
-          status: result.status,
-          slug: result.slug,
-          error: result.error
-        };
-      }
-
-      return {
-        url: result.url,
-        label: result.label,
-        segment: result.segment,
-        status: result.status,
-        slug: result.slug,
-        score: totalScore(result.report),
-        findings: result.report.summary,
-        topFinding: result.report.findings[0]?.title,
-        reports: outputReports(result.slug, result.outputs)
-      };
-    })
+    entries
   };
 }
 
@@ -300,7 +368,7 @@ ${rows}
 
 async function writeBatchIndex(results: BatchReportResult[], options: BatchReportOptions): Promise<void> {
   await mkdir(options.outDir, { recursive: true });
-  const index = buildBatchIndex(results);
+  const index = buildBatchIndex(results, options.index);
   const writers = {
     json: () => JSON.stringify(index, null, options.pretty ? 2 : 0) + "\n",
     markdown: () => renderBatchIndexMarkdown(index),

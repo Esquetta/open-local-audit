@@ -82,4 +82,46 @@ describe("CLI behavior helpers", () => {
       rmSync(tmp, { force: true, recursive: true });
     }
   });
+
+  it("accepts batch triage options before validating mutually exclusive input", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      const outDir = join(tmp, "reports");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "https://ignored.test",
+          "--input",
+          inputPath,
+          "--out-dir",
+          outDir,
+          "--segment",
+          "dental",
+          "--min-score",
+          "70",
+          "--top",
+          "5",
+          "--sort",
+          "severity-desc"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Use either a URL or --input, not both");
+      expect(result.stderr).not.toContain("unknown option");
+      expect(result.stdout).not.toContain("Audited");
+    } finally {
+      rmSync(tmp, { force: true, recursive: true });
+    }
+  });
 });

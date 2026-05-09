@@ -17,6 +17,10 @@ program
   .option("-f, --format <format>", "output format: json, markdown, html, or all", "markdown")
   .option("-o, --out <path>", "write report to a file instead of stdout")
   .option("--out-dir <path>", "write generated report files to a directory")
+  .option("--segment <segment>", "include only batch index entries matching a segment")
+  .option("--min-score <score>", "include only successful batch index entries at or above a score")
+  .option("--top <count>", "limit the batch index to the top N entries after filtering and sorting")
+  .option("--sort <sort>", "batch index sort: score-asc or severity-desc")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--max-redirects <count>", "maximum redirects to follow", "5")
   .option("--check-links", "check same-origin links found on the audited page", false)
@@ -49,6 +53,12 @@ program
           format: options.format,
           outDir: options.outDir,
           pretty: options.pretty,
+          index: {
+            segment: options.segment,
+            minScore: options.minScore,
+            top: options.top,
+            sort: options.sort
+          },
           audit: (url) => auditUrl(url, auditOptions)
         });
 
