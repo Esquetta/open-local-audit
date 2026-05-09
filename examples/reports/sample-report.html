@@ -19,10 +19,10 @@
     <table>
       <thead><tr><th>Category</th><th>Score</th></tr></thead>
       <tbody>
-<tr><td>Technical health</td><td>100/100</td></tr>
-<tr><td>Search basics</td><td>77/100</td></tr>
+<tr><td>Technical health</td><td>92/100</td></tr>
+<tr><td>Search basics</td><td>54/100</td></tr>
 <tr><td>Mobile and usability</td><td>100/100</td></tr>
-<tr><td>Trust and contact readiness</td><td>77/100</td></tr>
+<tr><td>Trust and contact readiness</td><td>39/100</td></tr>
       </tbody>
     </table>
     <h2>Findings</h2>
@@ -30,9 +30,15 @@
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>
       <tbody>
 <tr><td>medium</td><td>LocalBusiness structured data is missing</td><td>JSON-LD: No LocalBusiness JSON-LD type found</td><td>Add LocalBusiness schema when the page represents a local business location.</td></tr>
+<tr><td>medium</td><td>Visible address details are missing</td><td>Page text: No address-like text found</td><td>Show a clear address or location cue on the page so customers can confirm where the business operates.</td></tr>
+<tr><td>medium</td><td>Primary booking or contact CTA is missing</td><td>CTA links: No primary booking/contact CTA found</td><td>Add a clear booking, appointment, contact, or quote CTA near the main content.</td></tr>
+<tr><td>medium</td><td>sitemap.xml is missing or unavailable</td><td>sitemap.xml: 404</td><td>Publish a sitemap.xml file so important pages are easier to discover.</td></tr>
 <tr><td>medium</td><td>Map or directions link is missing</td><td>Links: No map or directions link found</td><td>Add a map or directions link so visitors can confirm the business location quickly.</td></tr>
 <tr><td>low</td><td>Open Graph metadata is incomplete</td><td>Open Graph metadata: Missing og:title, og:description, og:url</td><td>Add og:title, og:description, and og:url so shared links have clear previews.</td></tr>
 <tr><td>low</td><td>WhatsApp action is missing</td><td>Contact links: No WhatsApp link found</td><td>Add a WhatsApp action if customers commonly use WhatsApp for bookings or questions.</td></tr>
+<tr><td>low</td><td>Organization structured data is missing</td><td>JSON-LD: No Organization JSON-LD type found</td><td>Add Organization schema with a clear name and customer contact point.</td></tr>
+<tr><td>low</td><td>Opening hours are missing</td><td>Page text: No opening-hours text found</td><td>Show opening hours or appointment availability so visitors know when to contact the business.</td></tr>
+<tr><td>low</td><td>robots.txt is missing or unavailable</td><td>robots.txt: 404</td><td>Publish a robots.txt file so crawlers can discover crawl guidance.</td></tr>
       </tbody>
     </table>
     <h2>Recommendations</h2>
@@ -40,6 +46,12 @@
 <li>Add og:title, og:description, and og:url so shared links have clear previews.</li>
 <li>Add a WhatsApp action if customers commonly use WhatsApp for bookings or questions.</li>
 <li>Add LocalBusiness schema when the page represents a local business location.</li>
+<li>Add Organization schema with a clear name and customer contact point.</li>
+<li>Show a clear address or location cue on the page so customers can confirm where the business operates.</li>
+<li>Show opening hours or appointment availability so visitors know when to contact the business.</li>
+<li>Add a clear booking, appointment, contact, or quote CTA near the main content.</li>
+<li>Publish a robots.txt file so crawlers can discover crawl guidance.</li>
+<li>Publish a sitemap.xml file so important pages are easier to discover.</li>
 <li>Add a map or directions link so visitors can confirm the business location quickly.</li>
     </ul>
   </body>

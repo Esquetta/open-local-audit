@@ -4,22 +4,22 @@
   "scannedAt": "2026-05-09T00:00:00.000Z",
   "statusCode": 200,
   "summary": {
-    "totalFindings": 4,
+    "totalFindings": 10,
     "high": 0,
-    "medium": 2,
-    "low": 2,
+    "medium": 5,
+    "low": 5,
     "info": 0
   },
   "scores": {
     "technical-health": {
       "label": "Technical health",
       "max": 100,
-      "score": 100
+      "score": 92
     },
     "search-basics": {
       "label": "Search basics",
       "max": 100,
-      "score": 77
+      "score": 54
     },
     "mobile-usability": {
       "label": "Mobile and usability",
@@ -29,7 +29,7 @@
     "trust-contact": {
       "label": "Trust and contact readiness",
       "max": 100,
-      "score": 77
+      "score": 39
     }
   },
   "findings": [
@@ -76,6 +76,90 @@
       ]
     },
     {
+      "id": "organization-schema-present",
+      "title": "Organization structured data is missing",
+      "severity": "low",
+      "category": "search-basics",
+      "source": "JSON-LD",
+      "recommendation": "Add Organization schema with a clear name and customer contact point.",
+      "evidence": [
+        {
+          "label": "JSON-LD",
+          "value": "No Organization JSON-LD type found"
+        }
+      ]
+    },
+    {
+      "id": "visible-address-present",
+      "title": "Visible address details are missing",
+      "severity": "medium",
+      "category": "trust-contact",
+      "source": "Page text",
+      "recommendation": "Show a clear address or location cue on the page so customers can confirm where the business operates.",
+      "evidence": [
+        {
+          "label": "Page text",
+          "value": "No address-like text found"
+        }
+      ]
+    },
+    {
+      "id": "opening-hours-present",
+      "title": "Opening hours are missing",
+      "severity": "low",
+      "category": "trust-contact",
+      "source": "Page text",
+      "recommendation": "Show opening hours or appointment availability so visitors know when to contact the business.",
+      "evidence": [
+        {
+          "label": "Page text",
+          "value": "No opening-hours text found"
+        }
+      ]
+    },
+    {
+      "id": "primary-cta-present",
+      "title": "Primary booking or contact CTA is missing",
+      "severity": "medium",
+      "category": "trust-contact",
+      "source": "CTA links",
+      "recommendation": "Add a clear booking, appointment, contact, or quote CTA near the main content.",
+      "evidence": [
+        {
+          "label": "CTA links",
+          "value": "No primary booking/contact CTA found"
+        }
+      ]
+    },
+    {
+      "id": "robots-txt-present",
+      "title": "robots.txt is missing or unavailable",
+      "severity": "low",
+      "category": "technical-health",
+      "source": "robots.txt",
+      "recommendation": "Publish a robots.txt file so crawlers can discover crawl guidance.",
+      "evidence": [
+        {
+          "label": "robots.txt",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "id": "sitemap-xml-present",
+      "title": "sitemap.xml is missing or unavailable",
+      "severity": "medium",
+      "category": "search-basics",
+      "source": "sitemap.xml",
+      "recommendation": "Publish a sitemap.xml file so important pages are easier to discover.",
+      "evidence": [
+        {
+          "label": "sitemap.xml",
+          "value": "404"
+        }
+      ]
+    },
+    {
       "id": "map-link-present",
       "title": "Map or directions link is missing",
       "severity": "medium",
@@ -94,6 +178,12 @@
     "Add og:title, og:description, and og:url so shared links have clear previews.",
     "Add a WhatsApp action if customers commonly use WhatsApp for bookings or questions.",
     "Add LocalBusiness schema when the page represents a local business location.",
+    "Add Organization schema with a clear name and customer contact point.",
+    "Show a clear address or location cue on the page so customers can confirm where the business operates.",
+    "Show opening hours or appointment availability so visitors know when to contact the business.",
+    "Add a clear booking, appointment, contact, or quote CTA near the main content.",
+    "Publish a robots.txt file so crawlers can discover crawl guidance.",
+    "Publish a sitemap.xml file so important pages are easier to discover.",
     "Add a map or directions link so visitors can confirm the business location quickly."
   ],
   "evidence": [

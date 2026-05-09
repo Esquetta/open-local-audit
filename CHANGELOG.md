@@ -4,6 +4,14 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.4.0 - 2026-05-09
+
+- Added resilient batch runs that keep auditing after individual URL failures.
+- Added aggregate batch index reports in JSON, Markdown, and HTML.
+- Added CSV batch input with `url`, `label`, and `segment` columns.
+- Added `@graph` JSON-LD support for structured-data checks.
+- Added LocalBusiness contact-field, Organization schema, visible address, opening-hours, service-location copy, primary CTA, and placeholder-copy checks.
+
 ## v0.3.0 - 2026-05-09
 
 - Added standalone HTML report rendering.

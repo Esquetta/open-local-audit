@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit or batch URL list, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats.
+Published CLI. The project can run a single URL audit, plain-text batch URL list, or CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a top-level batch index.
 
 ## Business purpose
 
@@ -90,6 +90,20 @@ Run a batch audit from a text file:
 open-local-audit --input sites.txt --format all --out-dir reports
 ```
 
+Run a labeled CSV batch audit:
+
+```bash
+open-local-audit --input sites.csv --format all --out-dir reports
+```
+
+Supported CSV columns:
+
+```csv
+url,label,segment
+example.com,Example Clinic,dental
+https://example.org/path,Example Salon,beauty
+```
+
 Check same-origin links and fail CI when high-severity issues are found:
 
 ```bash
@@ -105,12 +119,15 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - HTML report.
 - Combined JSON, Markdown, and HTML report output with `--format all --out-dir`.
 - Batch input files with per-site report folders.
+- CSV batch input with optional labels and segments.
+- Aggregate batch index reports for prospect triage.
 - Score summary.
 - Evidence table.
 - Optional same-origin link checks.
 - Terminal summary when reports are written to files.
 - CI-friendly exit codes with `--fail-on`.
 - Clear owner-readable recommendations.
+- Structured-data quality, address, opening-hours, service-location, CTA, and placeholder-copy checks.
 
 Example target command:
 
