@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, plain-text batch URL list, or CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a top-level batch index.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit, a plain-text batch URL list, or a CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a filterable top-level batch index for prospect triage.
 
 ## Business purpose
 
@@ -72,6 +72,18 @@ Run the published package:
 npx open-local-audit https://example.com --format markdown
 ```
 
+Render the page before auditing when static HTML is not enough:
+
+```bash
+open-local-audit https://example.com --render --format markdown
+```
+
+`--render` loads Playwright from the current project. Install it alongside the CLI when needed:
+
+```bash
+npm install -D playwright
+```
+
 Write both report formats to a directory:
 
 ```bash
@@ -95,6 +107,14 @@ Run a labeled CSV batch audit:
 ```bash
 open-local-audit --input sites.csv --format all --out-dir reports
 ```
+
+Run a focused batch triage index:
+
+```bash
+open-local-audit --input sites.csv --format all --out-dir reports --segment dental --sort score-asc --top 25
+```
+
+Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, and `--sort score-asc|severity-desc`.
 
 Supported CSV columns:
 
@@ -121,6 +141,8 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Batch input files with per-site report folders.
 - CSV batch input with optional labels and segments.
 - Aggregate batch index reports for prospect triage.
+- Batch index filtering, sorting, and top-N triage controls.
+- Optional rendered DOM audits with `--render`.
 - Score summary.
 - Evidence table.
 - Optional same-origin link checks.
@@ -128,6 +150,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - CI-friendly exit codes with `--fail-on`.
 - Clear owner-readable recommendations.
 - Structured-data quality, address, opening-hours, service-location, CTA, and placeholder-copy checks.
+- Trust and conversion checks for current date signals, review cues, service detail depth, brand icons, and placeholder social links.
 
 Example target command:
 
@@ -136,6 +159,13 @@ open-local-audit https://example.com --format markdown --out report.md
 ```
 
 Example report artifacts are available under [`examples/reports`](./examples/reports).
+
+## Known limits
+
+- `--render` requires Playwright in the calling project and a working browser runtime.
+- Batch triage options apply to the aggregate batch index, not individual per-site report contents.
+- Batch input requires `--out-dir` and cannot be combined with a positional URL.
+- Rule checks are deterministic heuristics, so they can miss or over-flag site-specific markup.
 
 ## GitHub and npm release intent
 

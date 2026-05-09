@@ -4,22 +4,22 @@
   "scannedAt": "2026-05-09T00:00:00.000Z",
   "statusCode": 200,
   "summary": {
-    "totalFindings": 10,
+    "totalFindings": 13,
     "high": 0,
-    "medium": 5,
-    "low": 5,
+    "medium": 6,
+    "low": 7,
     "info": 0
   },
   "scores": {
     "technical-health": {
       "label": "Technical health",
       "max": 100,
-      "score": 92
+      "score": 84
     },
     "search-basics": {
       "label": "Search basics",
       "max": 100,
-      "score": 54
+      "score": 39
     },
     "mobile-usability": {
       "label": "Mobile and usability",
@@ -29,7 +29,7 @@
     "trust-contact": {
       "label": "Trust and contact readiness",
       "max": 100,
-      "score": 39
+      "score": 31
     }
   },
   "findings": [
@@ -132,6 +132,48 @@
       ]
     },
     {
+      "id": "review-cue-present",
+      "title": "Review or testimonial cue is missing",
+      "severity": "low",
+      "category": "trust-contact",
+      "source": "Page text",
+      "recommendation": "Add a visible review, rating, or testimonial cue when customer feedback is available.",
+      "evidence": [
+        {
+          "label": "Page text",
+          "value": "No review, rating, or testimonial cue found"
+        }
+      ]
+    },
+    {
+      "id": "service-detail-depth",
+      "title": "Service details are too shallow",
+      "severity": "medium",
+      "category": "search-basics",
+      "source": "Service content",
+      "recommendation": "Add a dedicated service section with several concrete services or treatments.",
+      "evidence": [
+        {
+          "label": "Service content",
+          "value": "No detailed service section with at least three items found"
+        }
+      ]
+    },
+    {
+      "id": "brand-icons-present",
+      "title": "Favicon or touch icon is missing",
+      "severity": "low",
+      "category": "technical-health",
+      "source": "Icon links",
+      "recommendation": "Add favicon and apple-touch-icon links so the site looks branded in browser tabs and saved shortcuts.",
+      "evidence": [
+        {
+          "label": "Icon links",
+          "value": "Missing favicon or apple-touch-icon link"
+        }
+      ]
+    },
+    {
       "id": "robots-txt-present",
       "title": "robots.txt is missing or unavailable",
       "severity": "low",
@@ -182,6 +224,9 @@
     "Show a clear address or location cue on the page so customers can confirm where the business operates.",
     "Show opening hours or appointment availability so visitors know when to contact the business.",
     "Add a clear booking, appointment, contact, or quote CTA near the main content.",
+    "Add a visible review, rating, or testimonial cue when customer feedback is available.",
+    "Add a dedicated service section with several concrete services or treatments.",
+    "Add favicon and apple-touch-icon links so the site looks branded in browser tabs and saved shortcuts.",
     "Publish a robots.txt file so crawlers can discover crawl guidance.",
     "Publish a sitemap.xml file so important pages are easier to discover.",
     "Add a map or directions link so visitors can confirm the business location quickly."

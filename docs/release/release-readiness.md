@@ -55,17 +55,18 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.4.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.5.0.tgz open-local-audit --help
 ```
 
-## First release recommendation
+## Current release recommendation
 
-Use `v0.1.0` only after:
+Use `v0.5.0` after:
 
-- single URL scan works,
-- JSON and Markdown reports work,
-- at least 10 rules exist,
-- tests cover rule engine and report generation,
-- example report is committed.
+- single URL, rendered URL, and CSV batch paths are covered by tests or smoke checks,
+- JSON, Markdown, HTML, and `--format all` outputs build from current code,
+- batch index filtering and sorting are verified,
+- example reports are regenerated from the current build,
+- GitHub Actions passes on the pushed commit,
+- GitHub Release is created before npm publish.
 
-Use `v0.0.x` only for private/internal test packages if needed.
+Use patch releases for documentation, packaging, or narrow rule fixes that do not change CLI behavior.

@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.5.0 - 2026-05-09
+
+- Added opt-in Playwright-rendered audits with `--render`.
+- Added batch triage controls with `--segment`, `--min-score`, `--top`, and `--sort`.
+- Added trust and conversion checks for current date signals, review cues, service detail depth, brand icons, and placeholder social profile links.
+
 ## v0.4.0 - 2026-05-09
 
 - Added resilient batch runs that keep auditing after individual URL failures.
