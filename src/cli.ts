@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { auditUrl } from "./audit.js";
+import { readInputUrls, runBatchReports } from "./batch.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
 import { writeReportOutputs } from "./output.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
@@ -11,8 +12,9 @@ const program = new Command();
 program
   .name("open-local-audit")
   .description("Audit a public local-business website and generate an evidence-backed report.")
-  .argument("<url>", "HTTP or HTTPS URL to audit")
-  .option("-f, --format <format>", "output format: json, markdown, or all", "markdown")
+  .argument("[url]", "HTTP or HTTPS URL to audit")
+  .option("--input <path>", "read URLs from a text file for batch audits")
+  .option("-f, --format <format>", "output format: json, markdown, html, or all", "markdown")
   .option("-o, --out <path>", "write report to a file instead of stdout")
   .option("--out-dir <path>", "write generated report files to a directory")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
@@ -21,15 +23,45 @@ program
   .option("--max-pages <count>", "maximum same-origin links to check", "10")
   .option("--fail-on <severity>", "exit with code 1 when findings meet severity: none, high, medium, or low", "none")
   .option("--pretty", "pretty-print JSON output", false)
-  .action(async (rawUrl: string, rawOptions: unknown) => {
+  .action(async (rawUrl: string | undefined, rawOptions: unknown) => {
     try {
-      const url = inputUrlSchema.parse(rawUrl);
       const options = cliOptionsSchema.parse(rawOptions);
-      const report = await auditUrl(url, {
+      const auditOptions = {
         timeoutMs: options.timeout,
         maxRedirects: options.maxRedirects,
         checkLinks: options.checkLinks,
         maxPages: options.maxPages
+      };
+
+      if (options.input) {
+        if (!options.outDir) {
+          throw new Error("--out-dir is required when --input is used");
+        }
+
+        const urls = await readInputUrls(options.input);
+        const results = await runBatchReports(urls, {
+          format: options.format,
+          outDir: options.outDir,
+          pretty: options.pretty,
+          audit: (url) => auditUrl(url, auditOptions)
+        });
+
+        process.stdout.write(`Audited ${results.length} URL${results.length === 1 ? "" : "s"}\n`);
+        const failed = results.some((result) => shouldFailOnThreshold(result.report, options.failOn));
+        if (failed) {
+          process.stderr.write(`open-local-audit: findings met --fail-on ${options.failOn}\n`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      if (!rawUrl) {
+        throw new Error("URL is required unless --input is used");
+      }
+
+      const url = inputUrlSchema.parse(rawUrl);
+      const report = await auditUrl(url, {
+        ...auditOptions
       });
 
       const outputs = await writeReportOutputs(report, {

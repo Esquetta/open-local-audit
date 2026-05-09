@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
-import { renderJsonReport, renderMarkdownReport } from "../src/reporters.js";
+import { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "../src/reporters.js";
 
 const report = auditSnapshot(
   {
@@ -35,5 +35,14 @@ describe("report renderers", () => {
     expect(markdown).toContain("## Score Summary");
     expect(markdown).toContain("## Findings");
     expect(markdown).toContain("## Recommendations");
+  });
+
+  it("renders standalone HTML with escaped report content", () => {
+    const html = renderHtmlReport(report);
+
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain("<title>Open Local Audit Report");
+    expect(html).toContain("Score Summary");
+    expect(html).toContain("Findings");
   });
 });

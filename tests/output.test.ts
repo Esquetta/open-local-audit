@@ -6,7 +6,7 @@ import { auditSnapshot } from "../src/audit.js";
 import { writeReportOutputs } from "../src/output.js";
 
 describe("report output writer", () => {
-  it("writes JSON and Markdown reports when format is all", async () => {
+  it("writes JSON, Markdown, and HTML reports when format is all", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "open-local-audit-"));
     try {
       const report = auditSnapshot(
@@ -40,11 +40,12 @@ describe("report output writer", () => {
         pretty: true
       });
 
-      expect(outputs.map((output) => output.format)).toEqual(["json", "markdown"]);
+      expect(outputs.map((output) => output.format)).toEqual(["json", "markdown", "html"]);
       expect(JSON.parse(await readFile(join(outDir, "open-local-audit-report.json"), "utf8")).url).toBe(
         "https://example.test"
       );
       expect(await readFile(join(outDir, "open-local-audit-report.md"), "utf8")).toContain("# Open Local Audit Report");
+      expect(await readFile(join(outDir, "open-local-audit-report.html"), "utf8")).toContain("<!doctype html>");
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }

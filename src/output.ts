@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { renderJsonReport, renderMarkdownReport } from "./reporters.js";
+import { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 import type { AuditReport } from "./types.js";
 
-export type OutputFormat = "json" | "markdown" | "all";
+export type OutputFormat = "json" | "markdown" | "html" | "all";
 
 export interface ReportOutputOptions {
   format: OutputFormat;
@@ -19,20 +19,32 @@ export interface ReportOutput {
 }
 
 function outputFor(report: AuditReport, format: Exclude<OutputFormat, "all">, pretty: boolean): ReportOutput {
+  const contentByFormat = {
+    json: renderJsonReport(report, pretty),
+    markdown: renderMarkdownReport(report),
+    html: renderHtmlReport(report)
+  };
+
   return {
     format,
-    content: format === "json" ? renderJsonReport(report, pretty) : renderMarkdownReport(report)
+    content: contentByFormat[format]
   };
 }
 
 function defaultReportName(format: Exclude<OutputFormat, "all">): string {
-  return `open-local-audit-report.${format === "json" ? "json" : "md"}`;
+  const extension = {
+    json: "json",
+    markdown: "md",
+    html: "html"
+  }[format];
+
+  return `open-local-audit-report.${extension}`;
 }
 
 export async function writeReportOutputs(report: AuditReport, options: ReportOutputOptions): Promise<ReportOutput[]> {
   const pretty = options.pretty ?? false;
   const formats: Array<Exclude<OutputFormat, "all">> =
-    options.format === "all" ? ["json", "markdown"] : [options.format];
+    options.format === "all" ? ["json", "markdown", "html"] : [options.format];
   const outputs = formats.map((format) => outputFor(report, format, pretty));
 
   if (options.outDir) {

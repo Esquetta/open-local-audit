@@ -16,13 +16,14 @@ export const inputUrlSchema = z
     message: "Only HTTP and HTTPS URLs are supported"
   });
 
-export const outputFormatSchema = z.enum(["json", "markdown", "all"]);
+export const outputFormatSchema = z.enum(["json", "markdown", "html", "all"]);
 export const failOnSchema = z.enum(["none", "high", "medium", "low"]);
 
 export const cliOptionsSchema = z.object({
   format: outputFormatSchema.default("markdown"),
   out: z.string().optional(),
   outDir: z.string().optional(),
+  input: z.string().optional(),
   timeout: z.coerce.number().int().positive().max(60000).default(10000),
   maxRedirects: z.coerce.number().int().min(0).max(10).default(5),
   checkLinks: z.boolean().default(false),

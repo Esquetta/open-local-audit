@@ -1,7 +1,8 @@
 export { auditUrl, auditSnapshot } from "./audit.js";
+export { readInputUrls, runBatchReports, safeReportSlug } from "./batch.js";
 export { shouldFailOnThreshold } from "./exit-policy.js";
 export { writeReportOutputs } from "./output.js";
-export { renderJsonReport, renderMarkdownReport } from "./reporters.js";
+export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
   AuditOptions,
