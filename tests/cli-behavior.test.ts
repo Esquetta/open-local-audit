@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
 import { shouldFailOnThreshold } from "../src/exit-policy.js";
@@ -42,5 +46,40 @@ describe("CLI behavior helpers", () => {
     expect(summary).toContain("High:");
     expect(summary).toContain("Medium:");
     expect(summary).toContain("Top issue:");
+  });
+
+  it("rejects a positional URL when batch input is used", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      const outDir = join(tmp, "reports");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "https://ignored.test",
+          "--input",
+          inputPath,
+          "--out-dir",
+          outDir,
+          "--timeout",
+          "1"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Use either a URL or --input, not both");
+      expect(result.stdout).not.toContain("Audited");
+    } finally {
+      rmSync(tmp, { force: true, recursive: true });
+    }
   });
 });

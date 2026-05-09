@@ -34,6 +34,10 @@ program
       };
 
       if (options.input) {
+        if (rawUrl) {
+          throw new Error("Use either a URL or --input, not both");
+        }
+
         if (!options.outDir) {
           throw new Error("--out-dir is required when --input is used");
         }
