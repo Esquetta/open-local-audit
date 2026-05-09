@@ -9,11 +9,40 @@
     <meta property="og:url" content="https://example.test/">
     <link rel="canonical" href="https://example.test/">
     <script type="application/ld+json">
-      {"@context":"https://schema.org","@type":"LocalBusiness","name":"Example Dental Clinic"}
+      {
+        "@context":"https://schema.org",
+        "@graph":[
+          {
+            "@type":"LocalBusiness",
+            "name":"Example Dental Clinic",
+            "telephone":"+902120000000",
+            "address":{
+              "@type":"PostalAddress",
+              "streetAddress":"Example Street 12",
+              "addressLocality":"Istanbul",
+              "addressCountry":"TR"
+            },
+            "openingHours":"Mo-Fr 09:00-18:00"
+          },
+          {
+            "@type":"Organization",
+            "name":"Example Dental Clinic",
+            "contactPoint":{
+              "@type":"ContactPoint",
+              "telephone":"+902120000000",
+              "contactType":"customer service"
+            }
+          }
+        ]
+      }
     </script>
   </head>
   <body>
     <h1>Example Dental Clinic</h1>
+    <p>Family dental services in Istanbul for Kadikoy and nearby neighborhoods.</p>
+    <p>Address: Example Street 12, Kadikoy, Istanbul.</p>
+    <p>Opening hours: Monday-Friday 09:00-18:00.</p>
+    <a href="/book">Book an appointment</a>
     <a href="tel:+902120000000">Call</a>
     <a href="mailto:hello@example.test">Email</a>
     <a href="https://wa.me/902120000000">WhatsApp</a>

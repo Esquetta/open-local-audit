@@ -102,4 +102,95 @@ describe("audit rules", () => {
       expect.arrayContaining(["open-graph-present", "json-ld-valid"])
     );
   });
+
+  it("recognizes LocalBusiness schema nested in @graph", () => {
+    const report = auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>Graph Clinic Istanbul</title>
+            <meta name="description" content="Dental services in Istanbul.">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta property="og:title" content="Graph Clinic Istanbul">
+            <meta property="og:description" content="Dental services in Istanbul.">
+            <meta property="og:url" content="https://example.test/">
+            <link rel="canonical" href="https://example.test/">
+            <script type="application/ld+json">
+              {
+                "@context":"https://schema.org",
+                "@graph":[
+                  {"@type":"Organization","name":"Graph Clinic"},
+                  {
+                    "@type":"LocalBusiness",
+                    "name":"Graph Clinic",
+                    "telephone":"+902120000000",
+                    "address":{"@type":"PostalAddress","streetAddress":"Example Street 12","addressLocality":"Istanbul"},
+                    "openingHours":"Mo-Fr 09:00-18:00"
+                  }
+                ]
+              }
+            </script>
+          </head>
+          <body>
+            <h1>Graph Clinic</h1>
+            <p>Dental services in Istanbul.</p>
+            <p>Address: Example Street 12, Istanbul.</p>
+            <p>Opening hours: Monday-Friday 09:00-18:00.</p>
+            <a href="tel:+902120000000">Call</a>
+            <a href="mailto:hello@example.test">Email</a>
+            <a href="https://wa.me/902120000000">WhatsApp</a>
+            <a href="https://www.google.com/maps?q=example">Directions</a>
+            <a href="/book">Book an appointment</a>
+            <img src="/office.jpg" alt="Office">
+          </body>
+        </html>
+      `)
+    );
+
+    expect(report.findings.map((finding) => finding.id)).not.toContain("localbusiness-schema-present");
+  });
+
+  it("flags weak structured data and local-business conversion signals", () => {
+    const report = auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>Example Services</title>
+            <meta name="description" content="Professional services.">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta property="og:title" content="Example Services">
+            <meta property="og:description" content="Professional services.">
+            <meta property="og:url" content="https://example.test/">
+            <link rel="canonical" href="https://example.test/">
+            <script type="application/ld+json">
+              {"@context":"https://schema.org","@type":"LocalBusiness","name":"Example Services"}
+            </script>
+          </head>
+          <body>
+            <h1>Example Services</h1>
+            <p>Lorem ipsum dolor sit amet. Coming soon.</p>
+            <a href="tel:+902120000000">Call</a>
+            <a href="mailto:hello@example.test">Email</a>
+            <a href="https://wa.me/902120000000">WhatsApp</a>
+            <a href="https://www.google.com/maps?q=example">Directions</a>
+            <img src="/team.jpg" alt="Team">
+          </body>
+        </html>
+      `)
+    );
+
+    expect(report.findings.map((finding) => finding.id)).toEqual(
+      expect.arrayContaining([
+        "localbusiness-schema-contact-fields",
+        "organization-schema-present",
+        "visible-address-present",
+        "opening-hours-present",
+        "service-location-copy-present",
+        "primary-cta-present",
+        "placeholder-copy-absent"
+      ])
+    );
+  });
 });

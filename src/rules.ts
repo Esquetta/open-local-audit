@@ -18,6 +18,8 @@ type RuleContext = {
   text: string;
 };
 
+type JsonLdNode = Record<string, unknown>;
+
 function finding(rule: Rule, context: RuleContext): Finding {
   return {
     id: rule.id,
@@ -42,25 +44,39 @@ function hasLink($: CheerioAPI, matcher: (href: string) => boolean): boolean {
 }
 
 function hasJsonLdType($: CheerioAPI, matcher: (type: string) => boolean): boolean {
+  return jsonLdNodes($).some((node) => jsonLdTypes(node).some(matcher));
+}
+
+function jsonLdTypes(node: JsonLdNode): string[] {
+  const typeValue = node["@type"];
+  const types = Array.isArray(typeValue) ? typeValue : [typeValue];
+  return types.filter((type): type is string => typeof type === "string");
+}
+
+function flattenJsonLd(value: unknown): JsonLdNode[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => flattenJsonLd(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const node = value as JsonLdNode;
+  const graphNodes = flattenJsonLd(node["@graph"]);
+  return [node, ...graphNodes];
+}
+
+function jsonLdNodes($: CheerioAPI): JsonLdNode[] {
   return $('script[type="application/ld+json"]')
     .toArray()
-    .some((element) => {
+    .flatMap((element) => {
       const raw = $(element).text();
       try {
         const parsed = JSON.parse(raw) as unknown;
-        const nodes = Array.isArray(parsed) ? parsed : [parsed];
-
-        return nodes.some((node) => {
-          if (!node || typeof node !== "object") {
-            return false;
-          }
-
-          const typeValue = (node as { "@type"?: unknown })["@type"];
-          const types = Array.isArray(typeValue) ? typeValue : [typeValue];
-          return types.some((type) => typeof type === "string" && matcher(type));
-        });
+        return flattenJsonLd(parsed);
       } catch {
-        return false;
+        return [];
       }
     });
 }
@@ -80,6 +96,70 @@ function hasInvalidJsonLd($: CheerioAPI): boolean {
 
 function hasSuccessfulResource(statusCode: number | undefined): boolean {
   return typeof statusCode === "number" && statusCode >= 200 && statusCode < 400;
+}
+
+function localBusinessNodes($: CheerioAPI): JsonLdNode[] {
+  return jsonLdNodes($).filter((node) =>
+    jsonLdTypes(node).some((type) => type.endsWith("LocalBusiness") || type === "LocalBusiness")
+  );
+}
+
+function hasObjectField(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function hasStringField(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasLocalBusinessContactFields($: CheerioAPI): boolean {
+  const nodes = localBusinessNodes($);
+  if (nodes.length === 0) {
+    return true;
+  }
+
+  return nodes.some(
+    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasStringField(node.openingHours)
+  );
+}
+
+function hasOrganizationSchema($: CheerioAPI): boolean {
+  return hasJsonLdType($, (type) => type === "Organization" || type.endsWith("Organization"));
+}
+
+function hasVisibleAddress(text: string): boolean {
+  return /\b(address|street|avenue|road|suite|floor|cadde|caddesi|sokak|mahalle|no:?)\b/i.test(text);
+}
+
+function hasOpeningHours(text: string): boolean {
+  return /\b(opening hours|hours|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon-fri|mo-fr|pazartesi|sali|çarşamba|cuma|cumartesi|pazar|\d{1,2}:\d{2})\b/i.test(
+    text
+  );
+}
+
+function hasServiceLocationCopy(text: string): boolean {
+  const hasService = /\b(service|services|clinic|dental|salon|restaurant|repair|legal|appointment|booking|consultation)\b/i.test(
+    text
+  );
+  const hasLocation = /\b(istanbul|ankara|izmir|bursa|antalya|kadikoy|nearby|neighborhood|service area|located in|serves)\b/i.test(
+    text
+  );
+
+  return hasService && hasLocation;
+}
+
+function hasPrimaryCta($: CheerioAPI): boolean {
+  return $("a, button")
+    .toArray()
+    .some((element) => {
+      const href = $(element).attr("href") ?? "";
+      const text = $(element).text();
+      return /book|booking|appointment|schedule|reserve|contact|get-?quote/i.test(`${href} ${text}`);
+    });
+}
+
+function hasPlaceholderCopy(text: string): boolean {
+  return /\b(lorem ipsum|coming soon|under construction|placeholder|sample text)\b/i.test(text);
 }
 
 const rules: Rule[] = [
@@ -222,6 +302,76 @@ const rules: Rule[] = [
     recommendation: "Add LocalBusiness schema when the page represents a local business location.",
     check: ({ $ }) => hasJsonLdType($, (type) => type.endsWith("LocalBusiness") || type === "LocalBusiness"),
     evidence: () => "No LocalBusiness JSON-LD type found"
+  },
+  {
+    id: "localbusiness-schema-contact-fields",
+    title: "LocalBusiness structured data is missing contact fields",
+    category: "search-basics",
+    severity: "medium",
+    source: "JSON-LD",
+    recommendation: "Add telephone, address, and openingHours fields to LocalBusiness schema.",
+    check: ({ $ }) => hasLocalBusinessContactFields($),
+    evidence: () => "LocalBusiness schema is missing telephone, address, or openingHours"
+  },
+  {
+    id: "organization-schema-present",
+    title: "Organization structured data is missing",
+    category: "search-basics",
+    severity: "low",
+    source: "JSON-LD",
+    recommendation: "Add Organization schema with a clear name and customer contact point.",
+    check: ({ $ }) => hasOrganizationSchema($),
+    evidence: () => "No Organization JSON-LD type found"
+  },
+  {
+    id: "visible-address-present",
+    title: "Visible address details are missing",
+    category: "trust-contact",
+    severity: "medium",
+    source: "Page text",
+    recommendation: "Show a clear address or location cue on the page so customers can confirm where the business operates.",
+    check: ({ text }) => hasVisibleAddress(text),
+    evidence: () => "No address-like text found"
+  },
+  {
+    id: "opening-hours-present",
+    title: "Opening hours are missing",
+    category: "trust-contact",
+    severity: "low",
+    source: "Page text",
+    recommendation: "Show opening hours or appointment availability so visitors know when to contact the business.",
+    check: ({ text }) => hasOpeningHours(text),
+    evidence: () => "No opening-hours text found"
+  },
+  {
+    id: "service-location-copy-present",
+    title: "Service and location copy is unclear",
+    category: "search-basics",
+    severity: "medium",
+    source: "Page text",
+    recommendation: "Describe the main service and location or service area in plain language.",
+    check: ({ text }) => hasServiceLocationCopy(text),
+    evidence: () => "No clear service-plus-location phrase found"
+  },
+  {
+    id: "primary-cta-present",
+    title: "Primary booking or contact CTA is missing",
+    category: "trust-contact",
+    severity: "medium",
+    source: "CTA links",
+    recommendation: "Add a clear booking, appointment, contact, or quote CTA near the main content.",
+    check: ({ $ }) => hasPrimaryCta($),
+    evidence: () => "No primary booking/contact CTA found"
+  },
+  {
+    id: "placeholder-copy-absent",
+    title: "Placeholder copy is still visible",
+    category: "search-basics",
+    severity: "medium",
+    source: "Page text",
+    recommendation: "Replace placeholder or coming-soon copy with real business-specific content.",
+    check: ({ text }) => !hasPlaceholderCopy(text),
+    evidence: () => "Placeholder or coming-soon copy found"
   },
   {
     id: "robots-txt-present",
