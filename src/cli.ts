@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { auditUrl } from "./audit.js";
-import { readInputUrls, runBatchReports } from "./batch.js";
+import { readBatchInput, runBatchReports } from "./batch.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
 import { writeReportOutputs } from "./output.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
@@ -42,7 +42,7 @@ program
           throw new Error("--out-dir is required when --input is used");
         }
 
-        const urls = await readInputUrls(options.input);
+        const urls = await readBatchInput(options.input);
         const results = await runBatchReports(urls, {
           format: options.format,
           outDir: options.outDir,
@@ -51,7 +51,9 @@ program
         });
 
         process.stdout.write(`Audited ${results.length} URL${results.length === 1 ? "" : "s"}\n`);
-        const failed = results.some((result) => shouldFailOnThreshold(result.report, options.failOn));
+        const failed = results.some(
+          (result) => result.status === "success" && shouldFailOnThreshold(result.report, options.failOn)
+        );
         if (failed) {
           process.stderr.write(`open-local-audit: findings met --fail-on ${options.failOn}\n`);
           process.exitCode = 1;
