@@ -1,4 +1,4 @@
-import { load, type CheerioAPI } from "cheerio";
+﻿import { load, type CheerioAPI } from "cheerio";
 import type { Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
 type Rule = {
@@ -132,7 +132,7 @@ function hasVisibleAddress(text: string): boolean {
 }
 
 function hasOpeningHours(text: string): boolean {
-  return /\b(opening hours|hours|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon-fri|mo-fr|pazartesi|sali|çarşamba|cuma|cumartesi|pazar|\d{1,2}:\d{2})\b/i.test(
+  return /\b(opening hours|hours|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon-fri|mo-fr|\d{1,2}:\d{2})\b/i.test(
     text
   );
 }
@@ -160,6 +160,115 @@ function hasPrimaryCta($: CheerioAPI): boolean {
 
 function hasPlaceholderCopy(text: string): boolean {
   return /\b(lorem ipsum|coming soon|under construction|placeholder|sample text)\b/i.test(text);
+}
+
+function hasCurrentDateSignals($: CheerioAPI, currentYear = new Date().getFullYear()): boolean {
+  const candidateText = $("footer, [class*='footer' i], [id*='footer' i]")
+    .toArray()
+    .map((element) => $(element).text())
+    .join(" ");
+  const scopedText = candidateText || $("body").text();
+  const dateCuePattern =
+    /(?:copyright|copy|all rights reserved|last updated|updated|since)[^0-9]{0,30}((?:19|20)\d{2})(?:\s*-\s*((?:19|20)\d{2}))?/gi;
+  const matches = Array.from(scopedText.matchAll(dateCuePattern));
+
+  if (matches.length === 0) {
+    return true;
+  }
+
+  return matches.some((match) => {
+    const startYear = Number(match[1]);
+    const endYear = match[2] ? Number(match[2]) : startYear;
+    return Math.max(startYear, endYear) >= currentYear;
+  });
+}
+
+function dateSignalEvidence($: CheerioAPI): string {
+  const text = $("footer, [class*='footer' i], [id*='footer' i]").text() || $("body").text();
+  const match = text.match(
+    /(?:copyright|copy|all rights reserved|last updated|updated|since)[^0-9]{0,30}(?:19|20)\d{2}(?:\s*-\s*(?:19|20)\d{2})?/i
+  );
+  return match?.[0].replace(/\s+/g, " ").trim() ?? "No current date or copyright signal found";
+}
+
+function hasReviewCue(text: string): boolean {
+  return /\b(review|reviews|testimonial|testimonials|rating|rated|stars?|google reviews?)\b/i.test(text);
+}
+
+function hasServiceDetailDepth($: CheerioAPI): boolean {
+  return $("section, article, main, div")
+    .toArray()
+    .some((element) => {
+      const headingText = $(element).find("h2, h3").first().text();
+      if (!/\b(services?|treatments?|repairs?|menu|solutions?)\b/i.test(headingText)) {
+        return false;
+      }
+
+      const itemCount = $(element).find("li").length;
+      const words = $(element).text().trim().split(/\s+/).filter(Boolean).length;
+      return itemCount >= 3 || words >= 35;
+    });
+}
+
+function hasBrandIcons($: CheerioAPI): boolean {
+  const relValues = $("link[rel]")
+    .toArray()
+    .map((element) => ($(element).attr("rel") ?? "").toLowerCase());
+  const hasFavicon = relValues.some((rel) => /\b(?:shortcut\s+)?icon\b/.test(rel));
+  const hasTouchIcon = relValues.some((rel) => /\bapple-touch-icon\b/.test(rel));
+
+  return hasFavicon && hasTouchIcon;
+}
+
+function isPlaceholderSocialHref(href: string): boolean {
+  if (!href.trim() || href.trim() === "#") {
+    return false;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(href, "https://example.test");
+  } catch {
+    return false;
+  }
+
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  const socialHosts = [
+    "facebook.com",
+    "instagram.com",
+    "linkedin.com",
+    "tiktok.com",
+    "twitter.com",
+    "x.com",
+    "youtube.com"
+  ];
+
+  if (!socialHosts.some((domain) => host === domain || host.endsWith(`.${domain}`))) {
+    return false;
+  }
+
+  const segments = url.pathname
+    .split("/")
+    .map((segment) => segment.trim().toLowerCase())
+    .filter(Boolean);
+  const placeholderSegments = new Set([
+    "yourbusiness",
+    "your-business",
+    "your_company",
+    "yourcompany",
+    "username",
+    "yourusername",
+    "handle",
+    "placeholder"
+  ]);
+
+  return segments.some((segment) => placeholderSegments.has(segment));
+}
+
+function hasPlaceholderSocialLinks($: CheerioAPI): boolean {
+  return $("a")
+    .toArray()
+    .some((element) => isPlaceholderSocialHref($(element).attr("href") ?? ""));
 }
 
 const rules: Rule[] = [
@@ -372,6 +481,56 @@ const rules: Rule[] = [
     recommendation: "Replace placeholder or coming-soon copy with real business-specific content.",
     check: ({ text }) => !hasPlaceholderCopy(text),
     evidence: () => "Placeholder or coming-soon copy found"
+  },
+  {
+    id: "current-date-signals",
+    title: "Date or copyright signal looks outdated",
+    category: "trust-contact",
+    severity: "low",
+    source: "Page date signals",
+    recommendation: "Update visible copyright or last-updated text so visitors see the business is active.",
+    check: ({ $ }) => hasCurrentDateSignals($),
+    evidence: ({ $ }) => dateSignalEvidence($)
+  },
+  {
+    id: "review-cue-present",
+    title: "Review or testimonial cue is missing",
+    category: "trust-contact",
+    severity: "low",
+    source: "Page text",
+    recommendation: "Add a visible review, rating, or testimonial cue when customer feedback is available.",
+    check: ({ text }) => hasReviewCue(text),
+    evidence: () => "No review, rating, or testimonial cue found"
+  },
+  {
+    id: "service-detail-depth",
+    title: "Service details are too shallow",
+    category: "search-basics",
+    severity: "medium",
+    source: "Service content",
+    recommendation: "Add a dedicated service section with several concrete services or treatments.",
+    check: ({ $ }) => hasServiceDetailDepth($),
+    evidence: () => "No detailed service section with at least three items found"
+  },
+  {
+    id: "brand-icons-present",
+    title: "Favicon or touch icon is missing",
+    category: "technical-health",
+    severity: "low",
+    source: "Icon links",
+    recommendation: "Add favicon and apple-touch-icon links so the site looks branded in browser tabs and saved shortcuts.",
+    check: ({ $ }) => hasBrandIcons($),
+    evidence: () => "Missing favicon or apple-touch-icon link"
+  },
+  {
+    id: "placeholder-social-links",
+    title: "Placeholder social profile link is visible",
+    category: "trust-contact",
+    severity: "medium",
+    source: "Social links",
+    recommendation: "Replace placeholder social profile URLs with real business profiles or remove them.",
+    check: ({ $ }) => !hasPlaceholderSocialLinks($),
+    evidence: () => "A social profile URL contains a placeholder handle"
   },
   {
     id: "robots-txt-present",

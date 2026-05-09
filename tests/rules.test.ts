@@ -193,4 +193,122 @@ describe("audit rules", () => {
       ])
     );
   });
+
+  it("flags stale trust signals, missing social proof, shallow service detail, and missing brand icons", () => {
+    const report = auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>Example Dental Clinic Istanbul</title>
+            <meta name="description" content="Family dental clinic in Istanbul.">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta property="og:title" content="Example Dental Clinic Istanbul">
+            <meta property="og:description" content="Family dental clinic in Istanbul.">
+            <meta property="og:url" content="https://example.test/">
+            <link rel="canonical" href="https://example.test/">
+            <script type="application/ld+json">
+              {
+                "@context":"https://schema.org",
+                "@graph":[
+                  {
+                    "@type":"LocalBusiness",
+                    "name":"Example Dental Clinic",
+                    "telephone":"+902120000000",
+                    "address":{"@type":"PostalAddress","streetAddress":"Example Street 12","addressLocality":"Istanbul"},
+                    "openingHours":"Mo-Fr 09:00-18:00"
+                  },
+                  {"@type":"Organization","name":"Example Dental Clinic"}
+                ]
+              }
+            </script>
+          </head>
+          <body>
+            <h1>Example Dental Clinic</h1>
+            <p>Family dental services in Istanbul for Kadikoy and nearby neighborhoods.</p>
+            <p>Address: Example Street 12, Istanbul.</p>
+            <p>Opening hours: Monday-Friday 09:00-18:00.</p>
+            <a href="/book">Book an appointment</a>
+            <a href="tel:+902120000000">Call</a>
+            <a href="mailto:hello@example.test">Email</a>
+            <a href="https://wa.me/902120000000">WhatsApp</a>
+            <a href="https://www.google.com/maps?q=example">Directions</a>
+            <footer>Copyright 2023 Example Dental Clinic</footer>
+            <img src="/office.jpg" alt="Clinic reception">
+          </body>
+        </html>
+      `)
+    );
+
+    expect(report.findings.map((finding) => finding.id)).toEqual(
+      expect.arrayContaining([
+        "current-date-signals",
+        "review-cue-present",
+        "service-detail-depth",
+        "brand-icons-present"
+      ])
+    );
+  });
+
+  it("flags deterministic placeholder social profile links", async () => {
+    const report = auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>Example Dental Clinic Istanbul</title>
+            <meta name="description" content="Family dental clinic in Istanbul.">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta property="og:title" content="Example Dental Clinic Istanbul">
+            <meta property="og:description" content="Family dental clinic in Istanbul.">
+            <meta property="og:url" content="https://example.test/">
+            <link rel="canonical" href="https://example.test/">
+            <link rel="icon" href="/favicon.ico">
+            <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+            <script type="application/ld+json">
+              {
+                "@context":"https://schema.org",
+                "@graph":[
+                  {
+                    "@type":"LocalBusiness",
+                    "name":"Example Dental Clinic",
+                    "telephone":"+902120000000",
+                    "address":{"@type":"PostalAddress","streetAddress":"Example Street 12","addressLocality":"Istanbul"},
+                    "openingHours":"Mo-Fr 09:00-18:00"
+                  },
+                  {"@type":"Organization","name":"Example Dental Clinic"}
+                ]
+              }
+            </script>
+          </head>
+          <body>
+            <h1>Example Dental Clinic</h1>
+            <p>Family dental services in Istanbul for Kadikoy and nearby neighborhoods.</p>
+            <section>
+              <h2>Dental services</h2>
+              <ul>
+                <li>Preventive dental exams for families.</li>
+                <li>Cosmetic whitening with appointment planning.</li>
+                <li>Emergency dental repair and follow-up care.</li>
+              </ul>
+            </section>
+            <blockquote>Patients rate our service 4.9 stars in local reviews.</blockquote>
+            <p>Address: Example Street 12, Istanbul.</p>
+            <p>Opening hours: Monday-Friday 09:00-18:00.</p>
+            <a href="/book">Book an appointment</a>
+            <a href="tel:+902120000000">Call</a>
+            <a href="mailto:hello@example.test">Email</a>
+            <a href="https://wa.me/902120000000">WhatsApp</a>
+            <a href="https://www.google.com/maps?q=example">Directions</a>
+            <a href="https://www.instagram.com/yourbusiness">Instagram</a>
+            <img src="/office.jpg" alt="Clinic reception">
+          </body>
+        </html>
+      `)
+    );
+
+    expect(report.findings.map((finding) => finding.id)).toEqual(
+      expect.arrayContaining(["placeholder-social-links"])
+    );
+  });
 });
