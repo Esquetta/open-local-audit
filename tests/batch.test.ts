@@ -33,6 +33,20 @@ function findingFor(severity: Severity, title: string): Finding {
   };
 }
 
+function reportWithVisualEvidenceFor(url: string): AuditReport {
+  const report = reportFor(url);
+  return {
+    ...report,
+    visualEvidence: [
+      {
+        path: `artifacts/${safeReportSlug(url)}.png`,
+        screenshotPath: `artifacts/${safeReportSlug(url)}.png`,
+        label: "Homepage screenshot"
+      }
+    ]
+  };
+}
+
 function scoredReportFor(url: string, score: number, severities: Severity[]): AuditReport {
   const report = reportFor(url);
   return {
@@ -330,6 +344,34 @@ describe("batch reports", () => {
         "https://medium.test",
         "https://low.test"
       ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("copies per-site visual evidence metadata into all batch report formats", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      await runBatchReports(["https://example.com"], {
+        format: "all",
+        outDir: dir,
+        pretty: true,
+        audit: async (url) => reportWithVisualEvidenceFor(url)
+      });
+
+      const reportPath = join(dir, "example-com", "open-local-audit-report.json");
+      const markdownPath = join(dir, "example-com", "open-local-audit-report.md");
+      const htmlPath = join(dir, "example-com", "open-local-audit-report.html");
+
+      const jsonReport = JSON.parse(await readFile(reportPath, "utf8"));
+      const markdownReport = await readFile(markdownPath, "utf8");
+      const htmlReport = await readFile(htmlPath, "utf8");
+
+      expect(jsonReport.visualEvidence[0].path).toBe("artifacts/example-com.png");
+      expect(markdownReport).toContain("## Visual Evidence");
+      expect(markdownReport).toContain("artifacts/example-com.png");
+      expect(htmlReport).toContain("<h2>Visual Evidence</h2>");
+      expect(htmlReport).toContain("artifacts/example-com.png");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

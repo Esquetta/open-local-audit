@@ -66,4 +66,53 @@ describe("rendered audit mode", () => {
   it("parses the CLI render flag", () => {
     expect(cliOptionsSchema.parse({ render: true }).render).toBe(true);
   });
+
+  it("passes screenshot capture paths to the rendered page snapshot", async () => {
+    const capture = {
+      screenshotPath: "",
+      screenshotReportPath: ""
+    };
+
+    const report = await auditUrl("https://example.test", {
+      render: true,
+      screenshot: true,
+      screenshotPath: "C:/tmp/open-local-audit/homepage.png",
+      screenshotReportPath: "artifacts/homepage.png",
+      timeoutMs: 1000,
+      renderPage: async (url, options) => {
+        capture.screenshotPath = options.screenshotPath ?? "";
+        capture.screenshotReportPath = options.screenshotReportPath ?? "";
+
+        return {
+          url,
+          finalUrl: url,
+          statusCode: 200,
+          headers: {
+            "content-type": "text/html"
+          },
+          html: "<html><head><title>Example</title></head><body><h1>Example</h1></body></html>",
+          visualEvidence: [
+            {
+              label: "Homepage screenshot",
+              path: options.screenshotReportPath ?? "",
+              screenshotPath: options.screenshotReportPath ?? ""
+            }
+          ]
+        };
+      }
+    });
+
+    expect(capture).toEqual({
+      screenshotPath: "C:/tmp/open-local-audit/homepage.png",
+      screenshotReportPath: "artifacts/homepage.png"
+    });
+    expect(report.visualEvidence?.[0]).toMatchObject({
+      label: "Homepage screenshot",
+      path: "artifacts/homepage.png"
+    });
+  });
+
+  it("parses the CLI screenshot flag", () => {
+    expect(cliOptionsSchema.parse({ screenshot: true }).screenshot).toBe(true);
+  });
 });

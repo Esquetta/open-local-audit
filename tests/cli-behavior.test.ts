@@ -124,4 +124,15 @@ describe("CLI behavior helpers", () => {
       rmSync(tmp, { force: true, recursive: true });
     }
   });
+
+  it("requires an output directory when screenshot capture is requested", () => {
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "https://example.test", "--screenshot"], {
+      cwd: process.cwd(),
+      encoding: "utf8"
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--out-dir is required when --screenshot is used");
+    expect(result.stderr).not.toContain("Playwright is required");
+  });
 });

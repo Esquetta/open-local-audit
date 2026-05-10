@@ -8,7 +8,8 @@ const defaultOptions: AuditOptions = {
   maxRedirects: 5,
   checkLinks: false,
   maxPages: 10,
-  render: false
+  render: false,
+  screenshot: false
 };
 
 const categories: FindingCategory[] = [
@@ -165,7 +166,7 @@ export function auditSnapshot(snapshot: PageSnapshot, scannedAt = new Date().toI
   const findings = runRules(snapshot);
   const recommendations = findings.map((finding) => finding.recommendation);
 
-  return {
+  const report: AuditReport = {
     url: snapshot.url,
     finalUrl: snapshot.finalUrl,
     scannedAt,
@@ -189,6 +190,12 @@ export function auditSnapshot(snapshot: PageSnapshot, scannedAt = new Date().toI
       }
     ]
   };
+
+  if (snapshot.visualEvidence && snapshot.visualEvidence.length > 0) {
+    report.visualEvidence = snapshot.visualEvidence;
+  }
+
+  return report;
 }
 
 export async function auditUrl(url: string, options: Partial<AuditOptions> = {}): Promise<AuditReport> {
@@ -196,11 +203,22 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
     ...defaultOptions,
     ...options
   };
+  const shouldRender = effectiveOptions.render || effectiveOptions.screenshot;
   const snapshot =
-    effectiveOptions.render && effectiveOptions.renderPage
-      ? await effectiveOptions.renderPage(url, { timeoutMs: effectiveOptions.timeoutMs })
-      : effectiveOptions.render
-        ? await renderPageSnapshot(url, { timeoutMs: effectiveOptions.timeoutMs })
+    shouldRender && effectiveOptions.renderPage
+      ? await effectiveOptions.renderPage(url, {
+          timeoutMs: effectiveOptions.timeoutMs,
+          screenshot: effectiveOptions.screenshot,
+          screenshotPath: effectiveOptions.screenshotPath,
+          screenshotReportPath: effectiveOptions.screenshotReportPath
+        })
+      : shouldRender
+        ? await renderPageSnapshot(url, {
+            timeoutMs: effectiveOptions.timeoutMs,
+            screenshot: effectiveOptions.screenshot,
+            screenshotPath: effectiveOptions.screenshotPath,
+            screenshotReportPath: effectiveOptions.screenshotReportPath
+          })
         : await fetchWithRedirects(url, effectiveOptions);
   const origin = new URL(snapshot.finalUrl).origin;
 

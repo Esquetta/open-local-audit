@@ -24,6 +24,43 @@ function severityRank(finding: Finding): number {
   return ranks[finding.severity];
 }
 
+function renderMarkdownVisualEvidence(report: AuditReport): string[] {
+  if (!report.visualEvidence || report.visualEvidence.length === 0) {
+    return [];
+  }
+
+  return [
+    "## Visual Evidence",
+    "",
+    "| Label | Path |",
+    "| --- | --- |",
+    ...report.visualEvidence.map((item) => `| ${escapeCell(item.label)} | ${escapeCell(item.path)} |`),
+    ""
+  ];
+}
+
+function renderHtmlVisualEvidence(report: AuditReport): string {
+  if (!report.visualEvidence || report.visualEvidence.length === 0) {
+    return "";
+  }
+
+  const rows = report.visualEvidence
+    .map(
+      (item) =>
+        `<tr><td>${escapeHtml(item.label)}</td><td><a href="${escapeHtml(item.path)}">${escapeHtml(item.path)}</a></td></tr>`
+    )
+    .join("\n");
+
+  return `    <h2>Visual Evidence</h2>
+    <table>
+      <thead><tr><th>Label</th><th>Path</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
+`;
+}
+
 export function renderJsonReport(report: AuditReport, pretty = true): string {
   return `${JSON.stringify(report, null, pretty ? 2 : 0)}\n`;
 }
@@ -47,6 +84,8 @@ export function renderMarkdownReport(report: AuditReport): string {
     "## Findings",
     ""
   ];
+
+  lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownVisualEvidence(report));
 
   if (findings.length === 0) {
     lines.push("No findings were detected by the current rule set.", "");
@@ -91,6 +130,7 @@ export function renderHtmlReport(report: AuditReport): string {
     report.recommendations.length > 0
       ? report.recommendations.map((recommendation) => `<li>${escapeHtml(recommendation)}</li>`).join("\n")
       : "<li>Keep monitoring the page as content and templates change.</li>";
+  const visualEvidence = renderHtmlVisualEvidence(report);
 
   return `<!doctype html>
 <html lang="en">
@@ -116,7 +156,7 @@ export function renderHtmlReport(report: AuditReport): string {
 ${scoreRows}
       </tbody>
     </table>
-    <h2>Findings</h2>
+${visualEvidence}    <h2>Findings</h2>
     <table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>
       <tbody>

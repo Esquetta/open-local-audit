@@ -45,6 +45,7 @@ export interface AuditReport {
   findings: Finding[];
   recommendations: string[];
   evidence: Evidence[];
+  visualEvidence?: VisualEvidence[];
 }
 
 export interface PageSnapshot {
@@ -58,6 +59,7 @@ export interface PageSnapshot {
     sitemapXml?: PageResource;
   };
   internalLinks?: PageResource[];
+  visualEvidence?: VisualEvidence[];
 }
 
 export interface AuditOptions {
@@ -66,11 +68,23 @@ export interface AuditOptions {
   checkLinks: boolean;
   maxPages: number;
   render: boolean;
-  renderPage?: (url: string, options: Pick<AuditOptions, "timeoutMs">) => Promise<PageSnapshot>;
+  screenshot: boolean;
+  screenshotPath?: string;
+  screenshotReportPath?: string;
+  renderPage?: (
+    url: string,
+    options: Pick<AuditOptions, "timeoutMs" | "screenshot" | "screenshotPath" | "screenshotReportPath">
+  ) => Promise<PageSnapshot>;
 }
 
 export interface PageResource {
   url: string;
   finalUrl: string;
   statusCode: number;
+}
+
+export interface VisualEvidence {
+  label: string;
+  path: string;
+  screenshotPath?: string;
 }

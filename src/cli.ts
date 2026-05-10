@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
@@ -26,6 +27,7 @@ program
   .option("--check-links", "check same-origin links found on the audited page", false)
   .option("--max-pages <count>", "maximum same-origin links to check", "10")
   .option("--render", "use Playwright-rendered HTML instead of the static response", false)
+  .option("--screenshot", "capture a rendered homepage screenshot into the report output directory", false)
   .option("--fail-on <severity>", "exit with code 1 when findings meet severity: none, high, medium, or low", "none")
   .option("--pretty", "pretty-print JSON output", false)
   .action(async (rawUrl: string | undefined, rawOptions: unknown) => {
@@ -36,7 +38,8 @@ program
         maxRedirects: options.maxRedirects,
         checkLinks: options.checkLinks,
         maxPages: options.maxPages,
-        render: options.render
+        render: options.render || options.screenshot,
+        screenshot: options.screenshot
       };
 
       if (options.input) {
@@ -59,7 +62,12 @@ program
             top: options.top,
             sort: options.sort
           },
-          audit: (url) => auditUrl(url, auditOptions)
+          audit: (url, context) =>
+            auditUrl(url, {
+              ...auditOptions,
+              screenshotPath: options.screenshot ? join(context.outDir, "artifacts", "homepage.png") : undefined,
+              screenshotReportPath: options.screenshot ? "artifacts/homepage.png" : undefined
+            })
         });
 
         process.stdout.write(`Audited ${results.length} URL${results.length === 1 ? "" : "s"}\n`);
@@ -77,9 +85,16 @@ program
         throw new Error("URL is required unless --input is used");
       }
 
+      if (options.screenshot && !options.outDir) {
+        throw new Error("--out-dir is required when --screenshot is used");
+      }
+
+      const screenshotOutDir = options.screenshot ? options.outDir : undefined;
       const url = inputUrlSchema.parse(rawUrl);
       const report = await auditUrl(url, {
-        ...auditOptions
+        ...auditOptions,
+        screenshotPath: screenshotOutDir ? join(screenshotOutDir, "artifacts", "homepage.png") : undefined,
+        screenshotReportPath: screenshotOutDir ? "artifacts/homepage.png" : undefined
       });
 
       const outputs = await writeReportOutputs(report, {

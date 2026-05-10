@@ -20,6 +20,17 @@ const report = auditSnapshot(
   "2026-05-08T00:00:00.000Z"
 );
 
+const reportWithVisualEvidence = {
+  ...report,
+  visualEvidence: [
+    {
+      path: "artifacts/example-home.png",
+      screenshotPath: "artifacts/example-home.png",
+      label: "Homepage render"
+    }
+  ]
+};
+
 describe("report renderers", () => {
   it("renders parseable JSON", () => {
     const parsed = JSON.parse(renderJsonReport(report));
@@ -44,5 +55,19 @@ describe("report renderers", () => {
     expect(html).toContain("<title>Open Local Audit Report");
     expect(html).toContain("Score Summary");
     expect(html).toContain("Findings");
+  });
+
+  it("renders Markdown with Visual Evidence section when visual evidence is provided", () => {
+    const markdown = renderMarkdownReport(reportWithVisualEvidence);
+
+    expect(markdown).toContain("## Visual Evidence");
+    expect(markdown).toContain("artifacts/example-home.png");
+  });
+
+  it("renders HTML with Visual Evidence section when visual evidence is provided", () => {
+    const html = renderHtmlReport(reportWithVisualEvidence);
+
+    expect(html).toContain("<h2>Visual Evidence</h2>");
+    expect(html).toContain("artifacts/example-home.png");
   });
 });

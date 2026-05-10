@@ -15,8 +15,13 @@ export interface BatchReportOptions {
   format: OutputFormat;
   outDir: string;
   pretty?: boolean;
-  audit?: (url: string) => Promise<AuditReport>;
+  audit?: (url: string, context: BatchAuditContext) => Promise<AuditReport>;
   index?: BatchIndexOptions;
+}
+
+export interface BatchAuditContext {
+  slug: string;
+  outDir: string;
 }
 
 export type BatchIndexSort = "score-asc" | "severity-desc";
@@ -396,12 +401,16 @@ export async function runBatchReports(
   for (const rawEntry of urls) {
     const entry = normalizeEntry(rawEntry);
     const slug = uniqueSlug(safeReportSlug(entry.url), usedSlugs);
+    const siteOutDir = join(options.outDir, slug);
 
     try {
-      const report = await audit(entry.url);
+      const report = await audit(entry.url, {
+        slug,
+        outDir: siteOutDir
+      });
       const outputs = await writeReportOutputs(report, {
         format: options.format,
-        outDir: join(options.outDir, slug),
+        outDir: siteOutDir,
         pretty: options.pretty
       });
 
