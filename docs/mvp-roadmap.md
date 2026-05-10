@@ -97,7 +97,6 @@ Exit criteria:
 
 - Web UI.
 - CSV batch mode.
-- Screenshots.
 - Lighthouse integration.
 - Branded PDF reports.
 - SaaS dashboard.

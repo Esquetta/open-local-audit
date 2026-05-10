@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit, a plain-text batch URL list, or a CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a filterable top-level batch index for prospect triage.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a filterable top-level batch index for prospect triage.
 
 ## Business purpose
 
@@ -78,6 +78,12 @@ Render the page before auditing when static HTML is not enough:
 open-local-audit https://example.com --render --format markdown
 ```
 
+Capture a rendered homepage screenshot and add it as visual evidence:
+
+```bash
+open-local-audit https://example.com --screenshot --format all --out-dir reports
+```
+
 `--render` loads Playwright from the current project. Install it alongside the CLI when needed:
 
 ```bash
@@ -114,6 +120,12 @@ Run a focused batch triage index:
 open-local-audit --input sites.csv --format all --out-dir reports --segment dental --sort score-asc --top 25
 ```
 
+Capture screenshots during batch audits:
+
+```bash
+open-local-audit --input sites.csv --screenshot --format all --out-dir reports
+```
+
 Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, and `--sort score-asc|severity-desc`.
 
 Supported CSV columns:
@@ -143,6 +155,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Aggregate batch index reports for prospect triage.
 - Batch index filtering, sorting, and top-N triage controls.
 - Optional rendered DOM audits with `--render`.
+- Optional rendered screenshot evidence with `--screenshot`.
 - Score summary.
 - Evidence table.
 - Optional same-origin link checks.
@@ -163,6 +176,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 ## Known limits
 
 - `--render` requires Playwright in the calling project and a working browser runtime.
+- `--screenshot` uses the rendered audit path, requires `--out-dir`, and also requires Playwright.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
 - Rule checks are deterministic heuristics, so they can miss or over-flag site-specific markup.

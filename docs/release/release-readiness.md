@@ -55,16 +55,17 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.5.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.6.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.5.0` after:
+Use `v0.6.0` after:
 
-- single URL, rendered URL, and CSV batch paths are covered by tests or smoke checks,
+- single URL, rendered URL, screenshot metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
 - batch index filtering and sorting are verified,
+- visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
 - GitHub Release is created before npm publish.

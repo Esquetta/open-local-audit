@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.6.0 - 2026-05-10
+
+- Added `--screenshot` for rendered homepage screenshot capture.
+- Added visual evidence metadata to JSON reports.
+- Added Visual Evidence sections to Markdown and HTML reports.
+- Added batch screenshot artifact paths for per-site report folders.
+
 ## v0.5.0 - 2026-05-09
 
 - Added opt-in Playwright-rendered audits with `--render`.
