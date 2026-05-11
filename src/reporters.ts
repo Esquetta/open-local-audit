@@ -74,6 +74,7 @@ export function renderMarkdownReport(report: AuditReport): string {
     `- Final URL: ${report.finalUrl}`,
     `- Scanned at: ${report.scannedAt}`,
     `- Status code: ${report.statusCode}`,
+    `- Profile: ${report.profile}`,
     "",
     "## Score Summary",
     "",
@@ -148,7 +149,7 @@ export function renderHtmlReport(report: AuditReport): string {
   </head>
   <body>
     <h1>Open Local Audit Report</h1>
-    <p class="meta">URL: ${escapeHtml(report.url)}<br>Final URL: ${escapeHtml(report.finalUrl)}<br>Scanned at: ${escapeHtml(report.scannedAt)}<br>Status code: ${report.statusCode}</p>
+    <p class="meta">URL: ${escapeHtml(report.url)}<br>Final URL: ${escapeHtml(report.finalUrl)}<br>Scanned at: ${escapeHtml(report.scannedAt)}<br>Status code: ${report.statusCode}<br>Profile: ${escapeHtml(report.profile)}</p>
     <h2>Score Summary</h2>
     <table>
       <thead><tr><th>Category</th><th>Score</th></tr></thead>

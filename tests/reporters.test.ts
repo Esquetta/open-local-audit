@@ -43,6 +43,7 @@ describe("report renderers", () => {
     const markdown = renderMarkdownReport(report);
 
     expect(markdown).toContain("# Open Local Audit Report");
+    expect(markdown).toContain("- Profile: generic");
     expect(markdown).toContain("## Score Summary");
     expect(markdown).toContain("## Findings");
     expect(markdown).toContain("## Recommendations");
@@ -53,6 +54,7 @@ describe("report renderers", () => {
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("<title>Open Local Audit Report");
+    expect(html).toContain("Profile: generic");
     expect(html).toContain("Score Summary");
     expect(html).toContain("Findings");
   });

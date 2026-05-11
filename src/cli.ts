@@ -22,6 +22,8 @@ program
   .option("--min-score <score>", "include only successful batch index entries at or above a score")
   .option("--top <count>", "limit the batch index to the top N entries after filtering and sorting")
   .option("--sort <sort>", "batch index sort: score-asc or severity-desc")
+  .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, or contractor", "generic")
+  .option("--export-csv <path>", "write a batch prospect CSV export")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--max-redirects <count>", "maximum redirects to follow", "5")
   .option("--check-links", "check same-origin links found on the audited page", false)
@@ -38,6 +40,7 @@ program
         maxRedirects: options.maxRedirects,
         checkLinks: options.checkLinks,
         maxPages: options.maxPages,
+        profile: options.profile,
         render: options.render || options.screenshot,
         screenshot: options.screenshot
       };
@@ -56,6 +59,8 @@ program
           format: options.format,
           outDir: options.outDir,
           pretty: options.pretty,
+          exportCsv: options.exportCsv,
+          profile: options.profile,
           index: {
             segment: options.segment,
             minScore: options.minScore,
@@ -65,6 +70,7 @@ program
           audit: (url, context) =>
             auditUrl(url, {
               ...auditOptions,
+              profile: context.profile,
               screenshotPath: options.screenshot ? join(context.outDir, "artifacts", "homepage.png") : undefined,
               screenshotReportPath: options.screenshot ? "artifacts/homepage.png" : undefined
             })
@@ -83,6 +89,10 @@ program
 
       if (!rawUrl) {
         throw new Error("URL is required unless --input is used");
+      }
+
+      if (options.exportCsv) {
+        throw new Error("--export-csv is only supported when --input is used");
       }
 
       if (options.screenshot && !options.outDir) {

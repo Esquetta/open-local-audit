@@ -32,6 +32,15 @@ const report = auditSnapshot(
   "2026-05-08T00:00:00.000Z"
 );
 
+function removeTempDir(path: string): void {
+  rmSync(path, {
+    force: true,
+    recursive: true,
+    maxRetries: 5,
+    retryDelay: 100
+  });
+}
+
 describe("CLI behavior helpers", () => {
   it("fails when findings meet the configured severity threshold", () => {
     expect(shouldFailOnThreshold(report, "high")).toBe(true);
@@ -79,7 +88,7 @@ describe("CLI behavior helpers", () => {
       expect(result.stderr).toContain("Use either a URL or --input, not both");
       expect(result.stdout).not.toContain("Audited");
     } finally {
-      rmSync(tmp, { force: true, recursive: true });
+      removeTempDir(tmp);
     }
   });
 
@@ -121,7 +130,7 @@ describe("CLI behavior helpers", () => {
       expect(result.stderr).not.toContain("unknown option");
       expect(result.stdout).not.toContain("Audited");
     } finally {
-      rmSync(tmp, { force: true, recursive: true });
+      removeTempDir(tmp);
     }
   });
 
@@ -134,5 +143,43 @@ describe("CLI behavior helpers", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--out-dir is required when --screenshot is used");
     expect(result.stderr).not.toContain("Playwright is required");
+  });
+
+  it("accepts profile and export CSV options before validating mutually exclusive input", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      const outDir = join(tmp, "reports");
+      const exportCsv = join(tmp, "prospects.csv");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "https://ignored.test",
+          "--input",
+          inputPath,
+          "--out-dir",
+          outDir,
+          "--profile",
+          "dental",
+          "--export-csv",
+          exportCsv
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Use either a URL or --input, not both");
+      expect(result.stderr).not.toContain("unknown option");
+    } finally {
+      removeTempDir(tmp);
+    }
   });
 });

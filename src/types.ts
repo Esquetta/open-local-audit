@@ -1,5 +1,7 @@
 export type Severity = "high" | "medium" | "low" | "info";
 
+export type AuditProfile = "generic" | "dental" | "beauty" | "restaurant" | "contractor";
+
 export type FindingCategory =
   | "technical-health"
   | "search-basics"
@@ -40,6 +42,7 @@ export interface AuditReport {
   finalUrl: string;
   scannedAt: string;
   statusCode: number;
+  profile: AuditProfile;
   summary: AuditSummary;
   scores: Record<FindingCategory, Score>;
   findings: Finding[];
@@ -67,6 +70,7 @@ export interface AuditOptions {
   maxRedirects: number;
   checkLinks: boolean;
   maxPages: number;
+  profile: AuditProfile;
   render: boolean;
   screenshot: boolean;
   screenshotPath?: string;

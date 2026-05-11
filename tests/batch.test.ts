@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
-import { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "../src/batch.js";
+import { readBatchInput, readInputUrls, runBatchReports, safeReportSlug, type BatchInputEntry } from "../src/batch.js";
 import type { AuditReport, Finding, Severity } from "../src/types.js";
 
 function reportFor(url: string): AuditReport {
@@ -31,6 +31,39 @@ function findingFor(severity: Severity, title: string): Finding {
     recommendation: "Fix the issue.",
     source: "test"
   };
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === "\"" && quoted && next === "\"") {
+      current += "\"";
+      index += 1;
+      continue;
+    }
+
+    if (char === "\"") {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (char === "," && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells.map((cell) => (cell.startsWith("\"") && cell.endsWith("\"") ? cell.slice(1, -1) : cell));
 }
 
 function reportWithVisualEvidenceFor(url: string): AuditReport {
@@ -107,6 +140,35 @@ describe("batch reports", () => {
         }
       ]);
       await expect(readInputUrls(input)).resolves.toEqual(["https://example.com", "https://example.org/path"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads CSV batch input with profile column", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      const input = join(dir, "sites.csv");
+      await writeFile(
+        input,
+        "url,label,segment,profile\nexample.com,Example Dental,dental,dental\nhttps://example.org/path,Example Salon,beauty,beauty\n",
+        "utf8"
+      );
+
+      await expect(readBatchInput(input)).resolves.toEqual([
+        {
+          url: "https://example.com",
+          label: "Example Dental",
+          segment: "dental",
+          profile: "dental"
+        },
+        {
+          url: "https://example.org/path",
+          label: "Example Salon",
+          segment: "beauty",
+          profile: "beauty"
+        }
+      ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -210,6 +272,122 @@ describe("batch reports", () => {
       });
       expect(await readFile(join(dir, "open-local-audit-batch-index.md"), "utf8")).toContain("| failed | Bad Site |");
       expect(await readFile(join(dir, "open-local-audit-batch-index.html"), "utf8")).toContain("Bad Site");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("includes profile in aggregate batch index entries", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      const results = await runBatchReports(
+        [
+          {
+            url: "https://good.test",
+            label: "Good Dental",
+            segment: "dental",
+            profile: "dental"
+          },
+          {
+            url: "https://good.test/about",
+            label: "Contractor Prospect",
+            segment: "contractor",
+            profile: "contractor"
+          }
+        ] satisfies BatchInputEntry[],
+        {
+          format: "json",
+          outDir: dir,
+          pretty: true,
+          audit: async (url) => reportFor(url)
+        }
+      );
+
+      expect((results as Array<{ profile?: string; status: string }>).map((result) => result.profile)).toEqual([
+        "dental",
+        "contractor"
+      ]);
+      const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(index.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ url: "https://good.test", profile: "dental" }),
+          expect.objectContaining({ url: "https://good.test/about", profile: "contractor" })
+        ])
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes a prospect CSV export with profile, score, topFinding, report paths, and error columns", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    const csvPath = join(dir, "prospects.csv");
+
+    try {
+      await runBatchReports(
+        [
+          {
+            url: "https://good.test",
+            label: "Good Dental",
+            segment: "dental",
+            profile: "dental"
+          },
+          {
+            url: "https://bad.test",
+            label: "Bad Restaurant",
+            segment: "restaurant",
+            profile: "restaurant"
+          }
+        ] satisfies BatchInputEntry[],
+        {
+          format: "json",
+          outDir: dir,
+          pretty: true,
+          exportCsv: csvPath,
+          audit: async (url) => {
+            if (url === "https://bad.test") {
+              throw new Error("timeout");
+            }
+
+            return scoredReportFor(url, 93, ["high"]);
+          }
+        }
+      );
+
+      const rows = (await readFile(csvPath, "utf8")).trim().split(/\r?\n/).map(parseCsvLine);
+      expect(rows[0]).toEqual([
+        "url",
+        "label",
+        "segment",
+        "profile",
+        "status",
+        "score",
+        "topFinding",
+        "report paths",
+        "error"
+      ]);
+      expect(rows[1]).toEqual([
+        "https://good.test",
+        "Good Dental",
+        "dental",
+        "dental",
+        "success",
+        "93",
+        "high issue",
+        "good-test/open-local-audit-report.json",
+        ""
+      ]);
+      expect(rows[2]).toEqual([
+        "https://bad.test",
+        "Bad Restaurant",
+        "restaurant",
+        "restaurant",
+        "failed",
+        "",
+        "",
+        "",
+        "timeout"
+      ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

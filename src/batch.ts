@@ -2,13 +2,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
-import { inputUrlSchema } from "./schema.js";
-import type { AuditOptions, AuditReport, Severity } from "./types.js";
+import { auditProfileSchema, inputUrlSchema } from "./schema.js";
+import type { AuditOptions, AuditProfile, AuditReport, Severity } from "./types.js";
 
 export interface BatchInputEntry {
   url: string;
   label?: string;
   segment?: string;
+  profile?: AuditProfile;
 }
 
 export interface BatchReportOptions {
@@ -17,11 +18,14 @@ export interface BatchReportOptions {
   pretty?: boolean;
   audit?: (url: string, context: BatchAuditContext) => Promise<AuditReport>;
   index?: BatchIndexOptions;
+  exportCsv?: string;
+  profile?: AuditProfile;
 }
 
 export interface BatchAuditContext {
   slug: string;
   outDir: string;
+  profile: AuditProfile;
 }
 
 export type BatchIndexSort = "score-asc" | "severity-desc";
@@ -55,6 +59,7 @@ type BatchIndexEntry = {
   url: string;
   label?: string;
   segment?: string;
+  profile?: AuditProfile;
   status: BatchReportResult["status"];
   slug: string;
   score?: number;
@@ -132,6 +137,7 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
   const urlIndex = headers.indexOf("url");
   const labelIndex = headers.indexOf("label");
   const segmentIndex = headers.indexOf("segment");
+  const profileIndex = headers.indexOf("profile");
 
   if (urlIndex < 0) {
     throw new Error("CSV batch input requires a url column");
@@ -149,6 +155,10 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
 
     if (segmentIndex >= 0 && cells[segmentIndex]) {
       entry.segment = cells[segmentIndex];
+    }
+
+    if (profileIndex >= 0 && cells[profileIndex]) {
+      entry.profile = auditProfileSchema.parse(cells[profileIndex]);
     }
 
     return entry;
@@ -210,12 +220,14 @@ function worstSeverityRank(report: AuditReport): number {
   return Math.max(0, ...report.findings.map((finding) => ranks[finding.severity]));
 }
 
-function buildBatchIndexEntry(result: BatchReportResult): BatchIndexEntry {
+function buildBatchIndexEntry(result: BatchReportResult, profile?: AuditProfile): BatchIndexEntry {
+  const resultProfile = result.profile ?? profile;
   if (result.status === "failed") {
     return {
       url: result.url,
       label: result.label,
       segment: result.segment,
+      profile: resultProfile,
       status: result.status,
       slug: result.slug,
       error: result.error
@@ -226,6 +238,7 @@ function buildBatchIndexEntry(result: BatchReportResult): BatchIndexEntry {
     url: result.url,
     label: result.label,
     segment: result.segment,
+    profile: resultProfile ?? result.report.profile,
     status: result.status,
     slug: result.slug,
     score: totalScore(result.report),
@@ -276,8 +289,12 @@ function applyBatchIndexOptions(results: BatchReportResult[], options: BatchInde
   return options.top === undefined ? sorted : sorted.slice(0, options.top);
 }
 
-function buildBatchIndex(results: BatchReportResult[], options?: BatchIndexOptions): BatchIndex {
-  const entries = applyBatchIndexOptions(results, options).map(buildBatchIndexEntry);
+function buildBatchIndex(
+  results: BatchReportResult[],
+  options?: BatchIndexOptions,
+  profile?: AuditProfile
+): BatchIndex {
+  const entries = applyBatchIndexOptions(results, options).map((result) => buildBatchIndexEntry(result, profile));
 
   return {
     summary: {
@@ -310,8 +327,8 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
     `- Succeeded: ${index.summary.succeeded}`,
     `- Failed: ${index.summary.failed}`,
     "",
-    "| Status | Label | URL | Segment | Score | Top issue | Error |",
-    "| --- | --- | --- | --- | ---: | --- | --- |"
+    "| Status | Label | URL | Segment | Profile | Score | Top issue | Error |",
+    "| --- | --- | --- | --- | --- | ---: | --- | --- |"
   ];
 
   for (const entry of index.entries) {
@@ -321,6 +338,7 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
         entry.label ?? "",
         entry.url,
         entry.segment ?? "",
+        entry.profile ?? "",
         entry.score?.toString() ?? "",
         entry.topFinding ?? "",
         entry.error ?? ""
@@ -340,7 +358,7 @@ function renderBatchIndexHtml(index: BatchIndex): string {
   const rows = index.entries
     .map(
       (entry) =>
-        `<tr><td>${entry.status}</td><td>${escapeHtml(entry.label ?? "")}</td><td>${escapeHtml(entry.url)}</td><td>${escapeHtml(entry.segment ?? "")}</td><td>${entry.score ?? ""}</td><td>${escapeHtml(entry.topFinding ?? "")}</td><td>${escapeHtml(entry.error ?? "")}</td></tr>`
+        `<tr><td>${entry.status}</td><td>${escapeHtml(entry.label ?? "")}</td><td>${escapeHtml(entry.url)}</td><td>${escapeHtml(entry.segment ?? "")}</td><td>${escapeHtml(entry.profile ?? "")}</td><td>${entry.score ?? ""}</td><td>${escapeHtml(entry.topFinding ?? "")}</td><td>${escapeHtml(entry.error ?? "")}</td></tr>`
     )
     .join("\n");
 
@@ -361,7 +379,7 @@ function renderBatchIndexHtml(index: BatchIndex): string {
     <h1>Open Local Audit Batch Index</h1>
     <p>Total: ${index.summary.total}<br>Succeeded: ${index.summary.succeeded}<br>Failed: ${index.summary.failed}</p>
     <table>
-      <thead><tr><th>Status</th><th>Label</th><th>URL</th><th>Segment</th><th>Score</th><th>Top issue</th><th>Error</th></tr></thead>
+      <thead><tr><th>Status</th><th>Label</th><th>URL</th><th>Segment</th><th>Profile</th><th>Score</th><th>Top issue</th><th>Error</th></tr></thead>
       <tbody>
 ${rows}
       </tbody>
@@ -373,7 +391,7 @@ ${rows}
 
 async function writeBatchIndex(results: BatchReportResult[], options: BatchReportOptions): Promise<void> {
   await mkdir(options.outDir, { recursive: true });
-  const index = buildBatchIndex(results, options.index);
+  const index = buildBatchIndex(results, options.index, options.profile);
   const writers = {
     json: () => JSON.stringify(index, null, options.pretty ? 2 : 0) + "\n",
     markdown: () => renderBatchIndexMarkdown(index),
@@ -390,25 +408,59 @@ async function writeBatchIndex(results: BatchReportResult[], options: BatchRepor
   }
 }
 
+function escapeCsvCell(value: string): string {
+  if (!/[",\r\n]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function renderProspectCsv(results: BatchReportResult[]): string {
+  const header = ["url", "label", "segment", "profile", "status", "score", "topFinding", "report paths", "error"];
+  const rows = results.map((result) => {
+    const reports = result.status === "success" ? outputReports(result.slug, result.outputs) : {};
+    const reportPaths = Object.values(reports).join("; ");
+    const values = [
+      result.url,
+      result.label ?? "",
+      result.segment ?? "",
+      result.profile ?? (result.status === "success" ? result.report.profile : ""),
+      result.status,
+      result.status === "success" ? totalScore(result.report).toString() : "",
+      result.status === "success" ? (result.report.findings[0]?.title ?? "") : "",
+      reportPaths,
+      result.status === "failed" ? result.error : ""
+    ];
+
+    return values.map(escapeCsvCell).join(",");
+  });
+
+  return `${[header.join(","), ...rows].join("\n")}\n`;
+}
+
 export async function runBatchReports(
   urls: Array<string | BatchInputEntry>,
   options: BatchReportOptions
 ): Promise<BatchReportResult[]> {
   const usedSlugs = new Map<string, number>();
-  const audit = options.audit ?? ((url: string) => auditUrl(url, {} as Partial<AuditOptions>));
+  const audit = options.audit ?? ((url: string, context: BatchAuditContext) => auditUrl(url, { profile: context.profile } as Partial<AuditOptions>));
   const results: BatchReportResult[] = [];
 
   for (const rawEntry of urls) {
     const entry = normalizeEntry(rawEntry);
     const slug = uniqueSlug(safeReportSlug(entry.url), usedSlugs);
     const siteOutDir = join(options.outDir, slug);
+    const profile = entry.profile ?? options.profile ?? "generic";
 
     try {
       const report = await audit(entry.url, {
         slug,
-        outDir: siteOutDir
+        outDir: siteOutDir,
+        profile
       });
-      const outputs = await writeReportOutputs(report, {
+      const profiledReport = report.profile === profile ? report : { ...report, profile };
+      const outputs = await writeReportOutputs(profiledReport, {
         format: options.format,
         outDir: siteOutDir,
         pretty: options.pretty
@@ -416,14 +468,16 @@ export async function runBatchReports(
 
       results.push({
         ...entry,
+        profile,
         status: "success",
         slug,
-        report,
+        report: profiledReport,
         outputs
       });
     } catch (error) {
       results.push({
         ...entry,
+        profile,
         status: "failed",
         slug,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -433,6 +487,9 @@ export async function runBatchReports(
   }
 
   await writeBatchIndex(results, options);
+  if (options.exportCsv) {
+    await writeFile(options.exportCsv, renderProspectCsv(results), "utf8");
+  }
 
   return results;
 }

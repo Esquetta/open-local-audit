@@ -1,4 +1,5 @@
 import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, Score } from "./types.js";
+import { applyProfileAdjustments } from "./profiles.js";
 import { runRules } from "./rules.js";
 import { load } from "cheerio";
 import { renderPageSnapshot } from "./render.js";
@@ -8,6 +9,7 @@ const defaultOptions: AuditOptions = {
   maxRedirects: 5,
   checkLinks: false,
   maxPages: 10,
+  profile: "generic",
   render: false,
   screenshot: false
 };
@@ -162,8 +164,13 @@ function scoreCategories(reportFindings: ReturnType<typeof runRules>): Record<Fi
   ) as Record<FindingCategory, Score>;
 }
 
-export function auditSnapshot(snapshot: PageSnapshot, scannedAt = new Date().toISOString()): AuditReport {
-  const findings = runRules(snapshot);
+export function auditSnapshot(
+  snapshot: PageSnapshot,
+  scannedAt = new Date().toISOString(),
+  options: Pick<Partial<AuditOptions>, "profile"> = {}
+): AuditReport {
+  const profile = options.profile ?? "generic";
+  const findings = applyProfileAdjustments(runRules(snapshot), profile);
   const recommendations = findings.map((finding) => finding.recommendation);
 
   const report: AuditReport = {
@@ -171,6 +178,7 @@ export function auditSnapshot(snapshot: PageSnapshot, scannedAt = new Date().toI
     finalUrl: snapshot.finalUrl,
     scannedAt,
     statusCode: snapshot.statusCode,
+    profile,
     summary: summarize(findings),
     scores: scoreCategories(findings),
     findings,
@@ -233,5 +241,7 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
     );
   }
 
-  return auditSnapshot(snapshot);
+  return auditSnapshot(snapshot, new Date().toISOString(), {
+    profile: effectiveOptions.profile
+  });
 }
