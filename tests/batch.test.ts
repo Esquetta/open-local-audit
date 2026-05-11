@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
 import { readBatchInput, readInputUrls, runBatchReports, safeReportSlug, type BatchInputEntry } from "../src/batch.js";
-import type { AuditReport, Finding, Severity } from "../src/types.js";
+import type { AuditProfile, AuditReport, Finding, Severity } from "../src/types.js";
 
-function reportFor(url: string): AuditReport {
+function reportFor(url: string, profile: AuditProfile = "generic"): AuditReport {
   return auditSnapshot(
     {
       url,
@@ -17,7 +17,8 @@ function reportFor(url: string): AuditReport {
       },
       html: "<html><head><title>Example</title></head><body><h1>Example</h1></body></html>"
     },
-    "2026-05-09T00:00:00.000Z"
+    "2026-05-09T00:00:00.000Z",
+    { profile }
   );
 }
 
@@ -80,8 +81,13 @@ function reportWithVisualEvidenceFor(url: string): AuditReport {
   };
 }
 
-function scoredReportFor(url: string, score: number, severities: Severity[]): AuditReport {
-  const report = reportFor(url);
+function scoredReportFor(
+  url: string,
+  score: number,
+  severities: Severity[],
+  profile: AuditProfile = "generic"
+): AuditReport {
+  const report = reportFor(url, profile);
   return {
     ...report,
     scores: Object.fromEntries(
@@ -299,7 +305,7 @@ describe("batch reports", () => {
           format: "json",
           outDir: dir,
           pretty: true,
-          audit: async (url) => reportFor(url)
+          audit: async (url, context) => reportFor(url, context.profile)
         }
       );
 
@@ -319,9 +325,43 @@ describe("batch reports", () => {
     }
   });
 
+  it("does not relabel custom audit reports when the hook ignores the requested profile", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      const results = await runBatchReports(
+        [
+          {
+            url: "https://good.test",
+            label: "Good Dental",
+            segment: "dental",
+            profile: "dental"
+          }
+        ] satisfies BatchInputEntry[],
+        {
+          format: "json",
+          outDir: dir,
+          pretty: true,
+          audit: async (url) => reportFor(url, "generic")
+        }
+      );
+
+      expect(results[0]).toMatchObject({
+        status: "success",
+        profile: "generic"
+      });
+
+      const report = JSON.parse(await readFile(join(dir, "good-test", "open-local-audit-report.json"), "utf8"));
+      const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(report.profile).toBe("generic");
+      expect(index.entries[0].profile).toBe("generic");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("writes a prospect CSV export with profile, score, topFinding, report paths, and error columns", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
-    const csvPath = join(dir, "prospects.csv");
+    const csvPath = join(dir, "nested", "prospects.csv");
 
     try {
       await runBatchReports(
@@ -344,12 +384,12 @@ describe("batch reports", () => {
           outDir: dir,
           pretty: true,
           exportCsv: csvPath,
-          audit: async (url) => {
+          audit: async (url, context) => {
             if (url === "https://bad.test") {
               throw new Error("timeout");
             }
 
-            return scoredReportFor(url, 93, ["high"]);
+            return scoredReportFor(url, 93, ["high"], context.profile);
           }
         }
       );

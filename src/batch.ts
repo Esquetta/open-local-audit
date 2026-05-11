@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
@@ -221,7 +221,7 @@ function worstSeverityRank(report: AuditReport): number {
 }
 
 function buildBatchIndexEntry(result: BatchReportResult, profile?: AuditProfile): BatchIndexEntry {
-  const resultProfile = result.profile ?? profile;
+  const resultProfile = result.profile ?? profile ?? "generic";
   if (result.status === "failed") {
     return {
       url: result.url,
@@ -238,7 +238,7 @@ function buildBatchIndexEntry(result: BatchReportResult, profile?: AuditProfile)
     url: result.url,
     label: result.label,
     segment: result.segment,
-    profile: resultProfile ?? result.report.profile,
+    profile: result.report.profile ?? resultProfile,
     status: result.status,
     slug: result.slug,
     score: totalScore(result.report),
@@ -425,7 +425,7 @@ function renderProspectCsv(results: BatchReportResult[]): string {
       result.url,
       result.label ?? "",
       result.segment ?? "",
-      result.profile ?? (result.status === "success" ? result.report.profile : ""),
+      result.status === "success" ? (result.report.profile ?? result.profile ?? "generic") : (result.profile ?? ""),
       result.status,
       result.status === "success" ? totalScore(result.report).toString() : "",
       result.status === "success" ? (result.report.findings[0]?.title ?? "") : "",
@@ -459,8 +459,8 @@ export async function runBatchReports(
         outDir: siteOutDir,
         profile
       });
-      const profiledReport = report.profile === profile ? report : { ...report, profile };
-      const outputs = await writeReportOutputs(profiledReport, {
+      const reportProfile = report.profile ?? "generic";
+      const outputs = await writeReportOutputs(report, {
         format: options.format,
         outDir: siteOutDir,
         pretty: options.pretty
@@ -468,10 +468,10 @@ export async function runBatchReports(
 
       results.push({
         ...entry,
-        profile,
+        profile: reportProfile,
         status: "success",
         slug,
-        report: profiledReport,
+        report,
         outputs
       });
     } catch (error) {
@@ -488,6 +488,7 @@ export async function runBatchReports(
 
   await writeBatchIndex(results, options);
   if (options.exportCsv) {
+    await mkdir(dirname(options.exportCsv), { recursive: true });
     await writeFile(options.exportCsv, renderProspectCsv(results), "utf8");
   }
 

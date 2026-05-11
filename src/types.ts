@@ -42,7 +42,7 @@ export interface AuditReport {
   finalUrl: string;
   scannedAt: string;
   statusCode: number;
-  profile: AuditProfile;
+  profile?: AuditProfile;
   summary: AuditSummary;
   scores: Record<FindingCategory, Score>;
   findings: Finding[];
@@ -70,7 +70,7 @@ export interface AuditOptions {
   maxRedirects: number;
   checkLinks: boolean;
   maxPages: number;
-  profile: AuditProfile;
+  profile?: AuditProfile;
   render: boolean;
   screenshot: boolean;
   screenshotPath?: string;
