@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a filterable top-level batch index for prospect triage.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a filterable top-level batch index and optional prospect CSV export for triage.
 
 ## Business purpose
 
@@ -72,6 +72,12 @@ Run the published package:
 npx open-local-audit https://example.com --format markdown
 ```
 
+Run with an industry profile:
+
+```bash
+open-local-audit https://example.com --profile dental --format markdown
+```
+
 Render the page before auditing when static HTML is not enough:
 
 ```bash
@@ -114,6 +120,12 @@ Run a labeled CSV batch audit:
 open-local-audit --input sites.csv --format all --out-dir reports
 ```
 
+Run a profile-aware batch audit and write a prospect CSV export:
+
+```bash
+open-local-audit --input sites.csv --profile dental --export-csv prospects.csv --format all --out-dir reports
+```
+
 Run a focused batch triage index:
 
 ```bash
@@ -126,14 +138,14 @@ Capture screenshots during batch audits:
 open-local-audit --input sites.csv --screenshot --format all --out-dir reports
 ```
 
-Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, and `--sort score-asc|severity-desc`.
+Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, and `--sort score-asc|severity-desc`. Batch runs can also write `--export-csv <path>` for prospect triage.
 
 Supported CSV columns:
 
 ```csv
-url,label,segment
-example.com,Example Clinic,dental
-https://example.org/path,Example Salon,beauty
+url,label,segment,profile
+example.com,Example Clinic,dental,dental
+https://example.org/path,Example Salon,beauty,beauty
 ```
 
 Check same-origin links and fail CI when high-severity issues are found:
@@ -154,6 +166,8 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - CSV batch input with optional labels and segments.
 - Aggregate batch index reports for prospect triage.
 - Batch index filtering, sorting, and top-N triage controls.
+- Industry profiles for generic, dental, beauty, restaurant, and contractor audits.
+- Prospect CSV export with profile, score, top finding, report path, and error columns.
 - Optional rendered DOM audits with `--render`.
 - Optional rendered screenshot evidence with `--screenshot`.
 - Score summary.
@@ -178,7 +192,9 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--render` requires Playwright in the calling project and a working browser runtime.
 - `--screenshot` uses the rendered audit path, requires `--out-dir`, and also requires Playwright.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
+- `--export-csv` is only supported for batch audits.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
+- Industry profiles are deterministic severity and recommendation adjustments, not full vertical-specific rule packs.
 - Rule checks are deterministic heuristics, so they can miss or over-flag site-specific markup.
 
 ## GitHub and npm release intent

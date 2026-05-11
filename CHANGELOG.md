@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.7.0 - 2026-05-11
+
+- Added industry profiles with `--profile generic|dental|beauty|restaurant|contractor`.
+- Added optional `profile` CSV input column for batch audits.
+- Added profile metadata to JSON, Markdown, HTML, and batch index outputs.
+- Added `--export-csv` for batch prospect exports with score, top finding, report path, and error columns.
+
 ## v0.6.0 - 2026-05-10
 
 - Added `--screenshot` for rendered homepage screenshot capture.

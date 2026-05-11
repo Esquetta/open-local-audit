@@ -1,8 +1,9 @@
 {
   "url": "https://example.test",
   "finalUrl": "https://example.test",
-  "scannedAt": "2026-05-09T00:00:00.000Z",
+  "scannedAt": "2026-05-11T00:00:00.000Z",
   "statusCode": 200,
+  "profile": "generic",
   "summary": {
     "totalFindings": 13,
     "high": 0,

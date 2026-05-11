@@ -96,7 +96,8 @@ Exit criteria:
 ## Deferred work
 
 - Web UI.
-- CSV batch mode.
+- Parallel batch execution.
+- Deeper profile-specific rule packs.
 - Lighthouse integration.
 - Branded PDF reports.
 - SaaS dashboard.
