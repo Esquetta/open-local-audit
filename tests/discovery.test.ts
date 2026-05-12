@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildProspectRows,
+  fetchGooglePlacesCandidates,
   readManualDiscoveryCsv,
   renderProspectRowsCsv,
   resolveCandidateWebsite
@@ -56,6 +57,74 @@ describe("lead discovery", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("requires an API key for Google Places discovery", async () => {
+    await expect(fetchGooglePlacesCandidates("dentist Kadikoy", { apiKey: "" })).rejects.toThrow(
+      "GOOGLE_MAPS_API_KEY is required when --provider google-places is used"
+    );
+  });
+
+  it("requests Google Places Text Search with strict field masks", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchLike: typeof fetch = async (url, init) => {
+      calls.push({ url: url.toString(), init });
+      return new Response(
+        JSON.stringify({
+          places: [
+            {
+              id: "place-1",
+              displayName: { text: "Example Dental" },
+              websiteUri: "https://example-dental.test"
+            },
+            {
+              id: "place-2",
+              displayName: { text: "No Site Clinic" }
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      );
+    };
+
+    await expect(
+      fetchGooglePlacesCandidates("dentist Kadikoy", {
+        apiKey: "test-key",
+        defaultProfile: "dental",
+        fetch: fetchLike
+      })
+    ).resolves.toEqual([
+      {
+        source: "google-places",
+        sourceId: "place-1",
+        query: "dentist Kadikoy",
+        label: "Example Dental",
+        profile: "dental",
+        websiteUri: "https://example-dental.test"
+      },
+      {
+        source: "google-places",
+        sourceId: "place-2",
+        query: "dentist Kadikoy",
+        label: "No Site Clinic",
+        profile: "dental"
+      }
+    ]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://places.googleapis.com/v1/places:searchText");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.headers).toEqual({
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": "test-key",
+      "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri"
+    });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      textQuery: "dentist Kadikoy"
+    });
   });
 
   it("resolves website presence without accepting invalid or non-http URLs", () => {

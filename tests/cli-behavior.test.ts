@@ -346,7 +346,7 @@ describe("CLI behavior helpers", () => {
     }
   });
 
-  it("rejects deferred discovery providers", () => {
+  it("requires an API key for Google Places discovery", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-provider-"));
     try {
       const result = spawnSync(
@@ -370,7 +370,7 @@ describe("CLI behavior helpers", () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("Only --provider manual-csv is supported in this release");
+      expect(result.stderr).toContain("GOOGLE_MAPS_API_KEY is required when --provider google-places is used");
     } finally {
       removeTempDir(tmp);
     }

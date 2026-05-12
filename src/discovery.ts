@@ -58,6 +58,28 @@ export interface ReadManualDiscoveryCsvOptions {
   defaultProfile?: AuditProfile;
 }
 
+export interface FetchGooglePlacesCandidatesOptions {
+  apiKey?: string;
+  defaultProfile?: AuditProfile;
+  fetch?: typeof fetch;
+}
+
+interface GooglePlacesTextSearchResponse {
+  places?: Array<{
+    id?: string;
+    displayName?: {
+      text?: string;
+    };
+    websiteUri?: string;
+  }>;
+  error?: {
+    message?: string;
+  };
+}
+
+const googlePlacesTextSearchUrl = "https://places.googleapis.com/v1/places:searchText";
+const googlePlacesFieldMask = "places.id,places.displayName,places.websiteUri";
+
 function firstCell(cells: string[], headers: string[], names: string[]): string | undefined {
   for (const name of names) {
     const index = headers.indexOf(name);
@@ -121,6 +143,48 @@ export async function readManualDiscoveryCsv(
       websiteUri: normalizeOptionalUrl(firstCell(cells, headers, ["website", "websiteuri", "website_uri", "url"]))
     };
   });
+}
+
+export async function fetchGooglePlacesCandidates(
+  query: string,
+  options: FetchGooglePlacesCandidatesOptions = {}
+): Promise<PlaceCandidate[]> {
+  const apiKey = options.apiKey?.trim();
+  if (!apiKey) {
+    throw new Error("GOOGLE_MAPS_API_KEY is required when --provider google-places is used");
+  }
+
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    throw new Error("A search query is required when --provider google-places is used");
+  }
+
+  const fetchImpl = options.fetch ?? fetch;
+  const response = await fetchImpl(googlePlacesTextSearchUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": googlePlacesFieldMask
+    },
+    body: JSON.stringify({
+      textQuery: normalizedQuery
+    })
+  });
+  const payload = (await response.json()) as GooglePlacesTextSearchResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? `Google Places Text Search failed with HTTP ${response.status}`);
+  }
+
+  return (payload.places ?? []).map((place) => ({
+    source: "google-places",
+    sourceId: place.id,
+    query: normalizedQuery,
+    label: place.displayName?.text,
+    profile: options.defaultProfile,
+    websiteUri: normalizeOptionalUrl(place.websiteUri)
+  }));
 }
 
 export function resolveCandidateWebsite(candidate: Pick<PlaceCandidate, "websiteUri">): WebsiteResolution {

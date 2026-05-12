@@ -6,6 +6,7 @@ import { auditUrl } from "./audit.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
 import {
   buildProspectRows,
+  fetchGooglePlacesCandidates,
   readManualDiscoveryCsv,
   renderProspectRowsCsv,
   resolveCandidateWebsite,
@@ -23,7 +24,7 @@ const discoveryProgram = program
   .description("Discover local lead candidates from an operator-provided source and prepare prospect triage output.")
   .argument("[query]", "provider-specific discovery query")
   .option("--input <path>", "read candidate businesses from a manual CSV file")
-  .option("--provider <provider>", "discovery provider: manual-csv", "manual-csv")
+  .option("--provider <provider>", "discovery provider: manual-csv or google-places", "manual-csv")
   .option("--profile <profile>", "default industry profile for candidates", "generic")
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--export-csv <path>", "write lead discovery CSV output")
@@ -33,8 +34,8 @@ const discoveryProgram = program
     "after",
     `
 Discovery boundaries:
-  Only --provider manual-csv is supported in this release.
-  Google Maps scraping, google-places provider calls, and outreach sending are not supported.
+  --provider google-places requires GOOGLE_MAPS_API_KEY and uses the official Places Text Search API.
+  Google Maps scraping, reviews/photos collection, and outreach sending are not supported.
 `
   );
 
@@ -64,18 +65,6 @@ discoveryProgram.action(async (query?: string) => {
       })
       .parse(rawDiscoveryOptions);
 
-    if (options.provider !== "manual-csv") {
-      throw new Error("Only --provider manual-csv is supported in this release");
-    }
-
-    if (query?.trim()) {
-      throw new Error("Manual CSV discovery does not accept a positional query; use --input instead");
-    }
-
-    if (!options.input) {
-      throw new Error("--input is required when --provider manual-csv is used");
-    }
-
     if (!options.exportCsv) {
       throw new Error("--export-csv is required for discover output");
     }
@@ -84,9 +73,30 @@ discoveryProgram.action(async (query?: string) => {
       throw new Error("--out-dir is required unless --dry-run is used");
     }
 
-    const candidates = await readManualDiscoveryCsv(options.input, {
-      defaultProfile: options.profile
-    });
+    if (options.provider === "manual-csv") {
+      if (query?.trim()) {
+        throw new Error("Manual CSV discovery does not accept a positional query; use --input instead");
+      }
+
+      if (!options.input) {
+        throw new Error("--input is required when --provider manual-csv is used");
+      }
+    }
+
+    if (options.provider === "google-places" && options.input) {
+      throw new Error("--input is only supported when --provider manual-csv is used");
+    }
+
+    const candidates =
+      options.provider === "manual-csv"
+        ? await readManualDiscoveryCsv(options.input ?? "", {
+            defaultProfile: options.profile
+          })
+        : await fetchGooglePlacesCandidates(query ?? "", {
+            apiKey: process.env.GOOGLE_MAPS_API_KEY,
+            defaultProfile: options.profile
+          });
+
     const resolutions = candidates.map(resolveCandidateWebsite);
     let prospectInputs: ProspectRowInput[] = candidates.map((candidate, index) => ({
       candidate,
