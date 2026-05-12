@@ -117,7 +117,9 @@ describe("CLI behavior helpers", () => {
           "--top",
           "5",
           "--sort",
-          "severity-desc"
+          "severity-desc",
+          "--concurrency",
+          "3"
         ],
         {
           cwd: process.cwd(),

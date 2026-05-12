@@ -30,6 +30,7 @@ export const cliOptionsSchema = z.object({
   minScore: z.coerce.number().min(0).max(100).optional(),
   top: z.coerce.number().int().positive().optional(),
   sort: batchIndexSortSchema.optional(),
+  concurrency: z.coerce.number().int().positive().default(1),
   profile: auditProfileSchema.default("generic"),
   exportCsv: z.string().optional(),
   timeout: z.coerce.number().int().positive().max(60000).default(10000),

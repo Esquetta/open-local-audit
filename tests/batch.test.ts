@@ -251,7 +251,7 @@ describe("batch reports", () => {
       );
 
       const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
-      expect(index.summary).toEqual({
+      expect(index.summary).toMatchObject({
         total: 3,
         succeeded: 2,
         failed: 1
@@ -279,6 +279,47 @@ describe("batch reports", () => {
       expect(await readFile(join(dir, "open-local-audit-batch-index.md"), "utf8")).toContain("| failed | Bad Site |");
       expect(await readFile(join(dir, "open-local-audit-batch-index.html"), "utf8")).toContain("Bad Site");
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("limits concurrent audits while preserving result order", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    const releaseAudit: Array<() => void> = [];
+    let active = 0;
+    let maxActive = 0;
+
+    try {
+      const run = runBatchReports(["https://one.test", "https://two.test", "https://three.test"], {
+        format: "json",
+        outDir: dir,
+        concurrency: 2,
+        audit: async (url) => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          await new Promise<void>((resolve) => releaseAudit.push(resolve));
+          active -= 1;
+          return reportFor(url);
+        }
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(active).toBe(2);
+      releaseAudit.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(active).toBe(2);
+      releaseAudit.splice(0).forEach((release) => release());
+
+      const results = await run;
+      expect(maxActive).toBe(2);
+      expect(results.map((result) => result.url)).toEqual([
+        "https://one.test",
+        "https://two.test",
+        "https://three.test"
+      ]);
+      expect(results.map((result) => result.slug)).toEqual(["one-test", "two-test", "three-test"]);
+    } finally {
+      releaseAudit.splice(0).forEach((release) => release());
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -354,6 +395,73 @@ describe("batch reports", () => {
       const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
       expect(report.profile).toBe("generic");
       expect(index.entries[0].profile).toBe("generic");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds aggregate batch insights to JSON, Markdown, and HTML indexes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      await runBatchReports(
+        [
+          {
+            url: "https://dental.test",
+            segment: "dental",
+            profile: "dental"
+          },
+          {
+            url: "https://beauty.test",
+            segment: "beauty",
+            profile: "beauty"
+          },
+          {
+            url: "https://failed.test",
+            segment: "beauty",
+            profile: "beauty"
+          }
+        ] satisfies BatchInputEntry[],
+        {
+          format: "all",
+          outDir: dir,
+          pretty: true,
+          audit: async (url, context) => {
+            if (url === "https://failed.test") {
+              throw new Error("offline");
+            }
+
+            return scoredReportFor(
+              url,
+              url === "https://dental.test" ? 60 : 80,
+              url === "https://dental.test" ? ["high", "medium"] : ["high"],
+              context.profile
+            );
+          }
+        }
+      );
+
+      const json = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(json.summary.averageScore).toBe(70);
+      expect(json.summary.profiles).toEqual({
+        dental: { total: 1, succeeded: 1, failed: 0, averageScore: 60 },
+        beauty: { total: 2, succeeded: 1, failed: 1, averageScore: 80 }
+      });
+      expect(json.summary.segments).toEqual({
+        dental: { total: 1, succeeded: 1, failed: 0, averageScore: 60 },
+        beauty: { total: 2, succeeded: 1, failed: 1, averageScore: 80 }
+      });
+      expect(json.summary.topFindings).toEqual([{ title: "high issue", count: 2 }]);
+
+      const markdown = await readFile(join(dir, "open-local-audit-batch-index.md"), "utf8");
+      expect(markdown).toContain("- Average score: 70");
+      expect(markdown).toContain("## Profile Breakdown");
+      expect(markdown).toContain("| dental | 1 | 1 | 0 | 60 |");
+      expect(markdown).toContain("## Frequent Findings");
+
+      const html = await readFile(join(dir, "open-local-audit-batch-index.html"), "utf8");
+      expect(html).toContain("<h2>Profile Breakdown</h2>");
+      expect(html).toContain("<td>dental</td><td>1</td><td>1</td><td>0</td><td>60</td>");
+      expect(html).toContain("<h2>Frequent Findings</h2>");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -489,7 +597,7 @@ describe("batch reports", () => {
       );
 
       const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
-      expect(index.summary).toEqual({
+      expect(index.summary).toMatchObject({
         total: 1,
         succeeded: 1,
         failed: 0
@@ -522,7 +630,7 @@ describe("batch reports", () => {
       });
 
       const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
-      expect(index.summary).toEqual({
+      expect(index.summary).toMatchObject({
         total: 2,
         succeeded: 2,
         failed: 0

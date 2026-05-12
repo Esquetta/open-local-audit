@@ -19,6 +19,7 @@ export interface BatchReportOptions {
   audit?: (url: string, context: BatchAuditContext) => Promise<AuditReport>;
   index?: BatchIndexOptions;
   exportCsv?: string;
+  concurrency?: number;
   profile?: AuditProfile;
 }
 
@@ -69,14 +70,37 @@ type BatchIndexEntry = {
   error?: string;
 };
 
+type BatchBreakdownEntry = {
+  total: number;
+  succeeded: number;
+  failed: number;
+  averageScore?: number;
+};
+
+type BatchFindingFrequency = {
+  title: string;
+  count: number;
+};
+
 interface BatchIndex {
   summary: {
     total: number;
     succeeded: number;
     failed: number;
+    averageScore?: number;
+    profiles: Record<string, BatchBreakdownEntry>;
+    segments: Record<string, BatchBreakdownEntry>;
+    topFindings: BatchFindingFrequency[];
   };
   entries: BatchIndexEntry[];
 }
+
+type PreparedBatchEntry = {
+  entry: BatchInputEntry;
+  slug: string;
+  siteOutDir: string;
+  profile: AuditProfile;
+};
 
 function parseCsvLine(line: string): string[] {
   const cells: string[] = [];
@@ -289,6 +313,93 @@ function applyBatchIndexOptions(results: BatchReportResult[], options: BatchInde
   return options.top === undefined ? sorted : sorted.slice(0, options.top);
 }
 
+function averageScore(scores: number[]): number | undefined {
+  if (scores.length === 0) {
+    return undefined;
+  }
+
+  return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
+}
+
+function addBreakdownEntry(
+  breakdown: Record<string, BatchBreakdownEntry & { scores: number[] }>,
+  key: string,
+  entry: BatchIndexEntry
+): void {
+  const current = breakdown[key] ?? {
+    total: 0,
+    succeeded: 0,
+    failed: 0,
+    scores: []
+  };
+
+  current.total += 1;
+  if (entry.status === "success") {
+    current.succeeded += 1;
+    if (entry.score !== undefined) {
+      current.scores.push(entry.score);
+    }
+  } else {
+    current.failed += 1;
+  }
+
+  breakdown[key] = current;
+}
+
+function finalizeBreakdown(
+  breakdown: Record<string, BatchBreakdownEntry & { scores: number[] }>
+): Record<string, BatchBreakdownEntry> {
+  return Object.fromEntries(
+    Object.entries(breakdown).map(([key, value]) => [
+      key,
+      {
+        total: value.total,
+        succeeded: value.succeeded,
+        failed: value.failed,
+        averageScore: averageScore(value.scores)
+      }
+    ])
+  );
+}
+
+function buildBatchSummary(entries: BatchIndexEntry[]): BatchIndex["summary"] {
+  const scores = entries.flatMap((entry) => (entry.status === "success" && entry.score !== undefined ? [entry.score] : []));
+  const profileBreakdown: Record<string, BatchBreakdownEntry & { scores: number[] }> = {};
+  const segmentBreakdown: Record<string, BatchBreakdownEntry & { scores: number[] }> = {};
+  const findingCounts = new Map<string, number>();
+
+  for (const entry of entries) {
+    addBreakdownEntry(profileBreakdown, entry.profile ?? "generic", entry);
+    addBreakdownEntry(segmentBreakdown, entry.segment ?? "unsegmented", entry);
+
+    if (entry.topFinding) {
+      findingCounts.set(entry.topFinding, (findingCounts.get(entry.topFinding) ?? 0) + 1);
+    }
+  }
+
+  return {
+    total: entries.length,
+    succeeded: entries.filter((entry) => entry.status === "success").length,
+    failed: entries.filter((entry) => entry.status === "failed").length,
+    averageScore: averageScore(scores),
+    profiles: finalizeBreakdown(profileBreakdown),
+    segments: finalizeBreakdown(segmentBreakdown),
+    topFindings: Array.from(findingCounts.entries())
+      .map(([title, count]) => ({ title, count }))
+      .filter((entry) => entry.count > 1)
+      .sort((left, right) => right.count - left.count || left.title.localeCompare(right.title))
+      .slice(0, 5)
+  };
+}
+
+function normalizeConcurrency(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.floor(value));
+}
+
 function buildBatchIndex(
   results: BatchReportResult[],
   options?: BatchIndexOptions,
@@ -297,11 +408,7 @@ function buildBatchIndex(
   const entries = applyBatchIndexOptions(results, options).map((result) => buildBatchIndexEntry(result, profile));
 
   return {
-    summary: {
-      total: entries.length,
-      succeeded: entries.filter((entry) => entry.status === "success").length,
-      failed: entries.filter((entry) => entry.status === "failed").length
-    },
+    summary: buildBatchSummary(entries),
     entries
   };
 }
@@ -326,6 +433,35 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
     `- Total: ${index.summary.total}`,
     `- Succeeded: ${index.summary.succeeded}`,
     `- Failed: ${index.summary.failed}`,
+    `- Average score: ${index.summary.averageScore ?? "N/A"}`,
+    "",
+    "## Profile Breakdown",
+    "",
+    "| Profile | Total | Succeeded | Failed | Average score |",
+    "| --- | ---: | ---: | ---: | ---: |",
+    ...Object.entries(index.summary.profiles).map(
+      ([profile, entry]) =>
+        `| ${escapeMarkdownCell(profile)} | ${entry.total} | ${entry.succeeded} | ${entry.failed} | ${entry.averageScore ?? ""} |`
+    ),
+    "",
+    "## Segment Breakdown",
+    "",
+    "| Segment | Total | Succeeded | Failed | Average score |",
+    "| --- | ---: | ---: | ---: | ---: |",
+    ...Object.entries(index.summary.segments).map(
+      ([segment, entry]) =>
+        `| ${escapeMarkdownCell(segment)} | ${entry.total} | ${entry.succeeded} | ${entry.failed} | ${entry.averageScore ?? ""} |`
+    ),
+    "",
+    "## Frequent Findings",
+    "",
+    "| Finding | Count |",
+    "| --- | ---: |",
+    ...(index.summary.topFindings.length > 0
+      ? index.summary.topFindings.map((entry) => `| ${escapeMarkdownCell(entry.title)} | ${entry.count} |`)
+      : ["|  |  |"]),
+    "",
+    "## Entries",
     "",
     "| Status | Label | URL | Segment | Profile | Score | Top issue | Error |",
     "| --- | --- | --- | --- | --- | ---: | --- | --- |"
@@ -355,6 +491,19 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
 }
 
 function renderBatchIndexHtml(index: BatchIndex): string {
+  const renderBreakdownRows = (breakdown: Record<string, BatchBreakdownEntry>) =>
+    Object.entries(breakdown)
+      .map(
+        ([key, entry]) =>
+          `<tr><td>${escapeHtml(key)}</td><td>${entry.total}</td><td>${entry.succeeded}</td><td>${entry.failed}</td><td>${entry.averageScore ?? ""}</td></tr>`
+      )
+      .join("\n");
+  const findingRows =
+    index.summary.topFindings.length > 0
+      ? index.summary.topFindings
+          .map((entry) => `<tr><td>${escapeHtml(entry.title)}</td><td>${entry.count}</td></tr>`)
+          .join("\n")
+      : `<tr><td></td><td></td></tr>`;
   const rows = index.entries
     .map(
       (entry) =>
@@ -377,7 +526,29 @@ function renderBatchIndexHtml(index: BatchIndex): string {
   </head>
   <body>
     <h1>Open Local Audit Batch Index</h1>
-    <p>Total: ${index.summary.total}<br>Succeeded: ${index.summary.succeeded}<br>Failed: ${index.summary.failed}</p>
+    <p>Total: ${index.summary.total}<br>Succeeded: ${index.summary.succeeded}<br>Failed: ${index.summary.failed}<br>Average score: ${index.summary.averageScore ?? "N/A"}</p>
+    <h2>Profile Breakdown</h2>
+    <table>
+      <thead><tr><th>Profile</th><th>Total</th><th>Succeeded</th><th>Failed</th><th>Average score</th></tr></thead>
+      <tbody>
+${renderBreakdownRows(index.summary.profiles)}
+      </tbody>
+    </table>
+    <h2>Segment Breakdown</h2>
+    <table>
+      <thead><tr><th>Segment</th><th>Total</th><th>Succeeded</th><th>Failed</th><th>Average score</th></tr></thead>
+      <tbody>
+${renderBreakdownRows(index.summary.segments)}
+      </tbody>
+    </table>
+    <h2>Frequent Findings</h2>
+    <table>
+      <thead><tr><th>Finding</th><th>Count</th></tr></thead>
+      <tbody>
+${findingRows}
+      </tbody>
+    </table>
+    <h2>Entries</h2>
     <table>
       <thead><tr><th>Status</th><th>Label</th><th>URL</th><th>Segment</th><th>Profile</th><th>Score</th><th>Top issue</th><th>Error</th></tr></thead>
       <tbody>
@@ -445,47 +616,63 @@ export async function runBatchReports(
 ): Promise<BatchReportResult[]> {
   const usedSlugs = new Map<string, number>();
   const audit = options.audit ?? ((url: string, context: BatchAuditContext) => auditUrl(url, { profile: context.profile } as Partial<AuditOptions>));
-  const results: BatchReportResult[] = [];
-
-  for (const rawEntry of urls) {
+  const preparedEntries: PreparedBatchEntry[] = urls.map((rawEntry) => {
     const entry = normalizeEntry(rawEntry);
     const slug = uniqueSlug(safeReportSlug(entry.url), usedSlugs);
-    const siteOutDir = join(options.outDir, slug);
-    const profile = entry.profile ?? options.profile ?? "generic";
+    return {
+      entry,
+      slug,
+      siteOutDir: join(options.outDir, slug),
+      profile: entry.profile ?? options.profile ?? "generic"
+    };
+  });
+  const results = new Array<BatchReportResult>(preparedEntries.length);
+  const concurrency = normalizeConcurrency(options.concurrency);
+  let nextIndex = 0;
 
+  async function runOne(prepared: PreparedBatchEntry): Promise<BatchReportResult> {
     try {
-      const report = await audit(entry.url, {
-        slug,
-        outDir: siteOutDir,
-        profile
+      const report = await audit(prepared.entry.url, {
+        slug: prepared.slug,
+        outDir: prepared.siteOutDir,
+        profile: prepared.profile
       });
       const reportProfile = report.profile ?? "generic";
       const outputs = await writeReportOutputs(report, {
         format: options.format,
-        outDir: siteOutDir,
+        outDir: prepared.siteOutDir,
         pretty: options.pretty
       });
 
-      results.push({
-        ...entry,
+      return {
+        ...prepared.entry,
         profile: reportProfile,
         status: "success",
-        slug,
+        slug: prepared.slug,
         report,
         outputs
-      });
+      };
     } catch (error) {
-      results.push({
-        ...entry,
-        profile,
+      return {
+        ...prepared.entry,
+        profile: prepared.profile,
         status: "failed",
-        slug,
+        slug: prepared.slug,
         error: error instanceof Error ? error.message : "Unknown error",
         outputs: []
-      });
+      };
     }
   }
 
+  async function worker(): Promise<void> {
+    while (nextIndex < preparedEntries.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await runOne(preparedEntries[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, preparedEntries.length) }, () => worker()));
   await writeBatchIndex(results, options);
   if (options.exportCsv) {
     await mkdir(dirname(options.exportCsv), { recursive: true });
