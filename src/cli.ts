@@ -1,14 +1,160 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
+import {
+  buildProspectRows,
+  readManualDiscoveryCsv,
+  renderProspectRowsCsv,
+  resolveCandidateWebsite,
+  type ProspectRowInput
+} from "./discovery.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
 import { writeReportOutputs } from "./output.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { renderTerminalSummary } from "./summary.js";
 
 const program = new Command();
+
+const discoveryProgram = program
+  .command("discover")
+  .description("Discover local lead candidates from an operator-provided source and prepare prospect triage output.")
+  .argument("[query]", "provider-specific discovery query")
+  .option("--input <path>", "read candidate businesses from a manual CSV file")
+  .option("--provider <provider>", "discovery provider: manual-csv", "manual-csv")
+  .option("--profile <profile>", "default industry profile for candidates", "generic")
+  .option("--out-dir <path>", "write generated audit reports to a directory")
+  .option("--export-csv <path>", "write lead discovery CSV output")
+  .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
+  .option("--concurrency <count>", "maximum concurrent audits when dry-run is not used", "1")
+  .addHelpText(
+    "after",
+    `
+Discovery boundaries:
+  Only --provider manual-csv is supported in this release.
+  Google Maps scraping, google-places provider calls, and outreach sending are not supported.
+`
+  );
+
+function preferredReportPath(slug: string, outputs: Array<{ format: string; path?: string }>): string | undefined {
+  const preferred =
+    outputs.find((output) => output.format === "html") ??
+    outputs.find((output) => output.format === "markdown") ??
+    outputs[0];
+  return preferred?.path ? `${slug}/${preferred.path.split(/[\\/]/).pop()}` : undefined;
+}
+
+discoveryProgram.action(async (query?: string) => {
+  try {
+    const rawDiscoveryOptions = {
+      ...program.opts(),
+      ...discoveryProgram.opts()
+    };
+    const options = cliOptionsSchema
+      .pick({
+        input: true,
+        profile: true,
+        outDir: true,
+        exportCsv: true,
+        dryRun: true,
+        concurrency: true,
+        provider: true
+      })
+      .parse(rawDiscoveryOptions);
+
+    if (options.provider !== "manual-csv") {
+      throw new Error("Only --provider manual-csv is supported in this release");
+    }
+
+    if (query?.trim()) {
+      throw new Error("Manual CSV discovery does not accept a positional query; use --input instead");
+    }
+
+    if (!options.input) {
+      throw new Error("--input is required when --provider manual-csv is used");
+    }
+
+    if (!options.exportCsv) {
+      throw new Error("--export-csv is required for discover output");
+    }
+
+    if (!options.dryRun && !options.outDir) {
+      throw new Error("--out-dir is required unless --dry-run is used");
+    }
+
+    const candidates = await readManualDiscoveryCsv(options.input, {
+      defaultProfile: options.profile
+    });
+    const resolutions = candidates.map(resolveCandidateWebsite);
+    let prospectInputs: ProspectRowInput[] = candidates.map((candidate, index) => ({
+      candidate,
+      resolution: resolutions[index]
+    }));
+
+    if (!options.dryRun) {
+      const auditable = prospectInputs
+        .map((input, index) => ({ ...input, index }))
+        .filter((input) => input.resolution.status === "resolved" && input.resolution.websiteUrl);
+
+      const auditResults = await runBatchReports(
+        auditable.map((input) => ({
+          url: input.resolution.websiteUrl ?? "",
+          label: input.candidate.label,
+          segment: input.candidate.segment,
+          profile: input.candidate.profile
+        })),
+        {
+          format: "all",
+          outDir: options.outDir ?? "reports",
+          concurrency: options.concurrency,
+          profile: options.profile
+        }
+      );
+
+      prospectInputs = prospectInputs.map((input, index) => {
+        const auditableIndex = auditable.findIndex((candidate) => candidate.index === index);
+        if (auditableIndex < 0) {
+          return input;
+        }
+
+        const result = auditResults[auditableIndex];
+        if (result.status === "failed") {
+          return {
+            ...input,
+            audit: {
+              status: "failed",
+              error: result.error
+            }
+          };
+        }
+
+        const scores = Object.values(result.report.scores);
+        const score =
+          scores.length > 0 ? Math.round(scores.reduce((total, item) => total + item.score, 0) / scores.length) : undefined;
+        return {
+          ...input,
+          audit: {
+            status: "success",
+            score,
+            topFinding: result.report.findings[0]?.title,
+            reportPath: preferredReportPath(result.slug, result.outputs)
+          }
+        };
+      });
+    }
+
+    const rows = buildProspectRows(prospectInputs);
+    await mkdir(dirname(options.exportCsv), { recursive: true });
+    await writeFile(options.exportCsv, renderProspectRowsCsv(rows), "utf8");
+    process.stdout.write(`Discovered ${rows.length} lead${rows.length === 1 ? "" : "s"}\n`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    process.stderr.write(`open-local-audit: ${message}\n`);
+    process.exitCode = 1;
+  }
+});
 
 program
   .name("open-local-audit")

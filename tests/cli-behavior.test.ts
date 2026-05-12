@@ -1,5 +1,7 @@
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -39,6 +41,68 @@ function removeTempDir(path: string): void {
     maxRetries: 5,
     retryDelay: 100
   });
+}
+
+async function spawnCli(args: string[]): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, args, {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (status) => {
+      resolve({ status, stdout, stderr });
+    });
+  });
+}
+
+async function startLocalBusinessServer(): Promise<{ server: Server; url: string }> {
+  const server = createServer((request, response) => {
+    if (request.url === "/robots.txt" || request.url === "/sitemap.xml") {
+      response.writeHead(404);
+      response.end("");
+      return;
+    }
+
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+<html>
+  <head>
+    <title>Example Dental Clinic</title>
+    <meta name="description" content="Dental care in Istanbul with appointments and emergency support.">
+  </head>
+  <body>
+    <h1>Example Dental Clinic</h1>
+    <p>Call us for dental implants, orthodontics, and emergency dental appointments.</p>
+    <a href="tel:+902120000000">Call now</a>
+    <a href="https://wa.me/902120000000">WhatsApp</a>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"Dentist","name":"Example Dental Clinic","telephone":"+902120000000"}
+    </script>
+  </body>
+</html>`);
+  });
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  const address = server.address() as AddressInfo;
+  return {
+    server,
+    url: `http://127.0.0.1:${address.port}/`
+  };
 }
 
 describe("CLI behavior helpers", () => {
@@ -180,6 +244,168 @@ describe("CLI behavior helpers", () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("Use either a URL or --input, not both");
       expect(result.stderr).not.toContain("unknown option");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("runs manual CSV lead discovery in dry-run mode", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const outDir = join(tmp, "reports");
+      const exportCsv = join(tmp, "leads.csv");
+      writeFileSync(
+        inputPath,
+        "label,website,segment,profile\nExample Dental,https://example.test,dental,dental\nNo Site Clinic,,dental,dental\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--profile",
+          "dental",
+          "--out-dir",
+          outDir,
+          "--export-csv",
+          exportCsv,
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Discovered 2 lead");
+      expect(existsSync(exportCsv)).toBe(true);
+      const csv = readFileSync(exportCsv, "utf8");
+      expect(csv).toContain("Example Dental");
+      expect(csv).toContain("No Site Clinic");
+      expect(csv).toContain("not-audited");
+      expect(csv).toContain("Build a basic website");
+      expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("audits website-present manual CSV discovery rows", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-audit-"));
+    const { server, url } = await startLocalBusinessServer();
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const outDir = join(tmp, "reports");
+      const exportCsv = join(tmp, "leads.csv");
+      writeFileSync(inputPath, `label,website,segment,profile\nExample Dental,${url},dental,dental\n`, "utf8");
+
+      const result = await spawnCli(
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--profile",
+          "dental",
+          "--out-dir",
+          outDir,
+          "--export-csv",
+          exportCsv,
+          "--concurrency",
+          "1"
+        ]
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Discovered 1 lead");
+      const csv = readFileSync(exportCsv, "utf8");
+      expect(csv).toContain("Example Dental");
+      expect(csv).toContain("success");
+      expect(csv).toContain("127-0-0-1/open-local-audit-report.html");
+      expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(true);
+      expect(existsSync(join(outDir, "127-0-0-1"))).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects deferred discovery providers", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-provider-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "dental clinic",
+          "--provider",
+          "google-places",
+          "--export-csv",
+          join(tmp, "leads.csv"),
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Only --provider manual-csv is supported in this release");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects positional queries for manual CSV discovery", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-query-"));
+    try {
+      const inputPath = join(tmp, "places.csv");
+      writeFileSync(inputPath, "label,website\nExample Dental,https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "dental clinic",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--export-csv",
+          join(tmp, "leads.csv"),
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Manual CSV discovery does not accept a positional query");
     } finally {
       removeTempDir(tmp);
     }

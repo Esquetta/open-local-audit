@@ -20,6 +20,7 @@ export const outputFormatSchema = z.enum(["json", "markdown", "html", "all"]);
 export const failOnSchema = z.enum(["none", "high", "medium", "low"]);
 export const batchIndexSortSchema = z.enum(["score-asc", "severity-desc"]);
 export const auditProfileSchema = z.enum(["generic", "dental", "beauty", "restaurant", "contractor"]);
+export const discoveryProviderSchema = z.enum(["manual-csv", "google-places"]);
 
 export const cliOptionsSchema = z.object({
   format: outputFormatSchema.default("markdown"),
@@ -33,6 +34,8 @@ export const cliOptionsSchema = z.object({
   concurrency: z.coerce.number().int().positive().default(1),
   profile: auditProfileSchema.default("generic"),
   exportCsv: z.string().optional(),
+  provider: discoveryProviderSchema.default("manual-csv"),
+  dryRun: z.boolean().default(false),
   timeout: z.coerce.number().int().positive().max(60000).default(10000),
   maxRedirects: z.coerce.number().int().min(0).max(10).default(5),
   checkLinks: z.boolean().default(false),

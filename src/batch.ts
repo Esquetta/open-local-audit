@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
+import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditOptions, AuditProfile, AuditReport, Severity } from "./types.js";
@@ -101,46 +102,6 @@ type PreparedBatchEntry = {
   siteOutDir: string;
   profile: AuditProfile;
 };
-
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = "";
-  let quoted = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const next = line[index + 1];
-
-    if (char === '"' && quoted && next === '"') {
-      current += '"';
-      index += 1;
-      continue;
-    }
-
-    if (char === '"') {
-      quoted = !quoted;
-      continue;
-    }
-
-    if (char === "," && !quoted) {
-      cells.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  cells.push(current.trim());
-  return cells;
-}
-
-function cleanInputLines(content: string): string[] {
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"));
-}
 
 function isCsvInput(lines: string[]): boolean {
   return lines[0]?.split(",").some((cell) => cell.trim().toLowerCase() === "url") ?? false;
@@ -577,14 +538,6 @@ async function writeBatchIndex(results: BatchReportResult[], options: BatchRepor
   for (const format of formatsFor(options.format)) {
     await writeFile(join(options.outDir, fileNames[format]), writers[format](), "utf8");
   }
-}
-
-function escapeCsvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) {
-    return value;
-  }
-
-  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function renderProspectCsv(results: BatchReportResult[]): string {
