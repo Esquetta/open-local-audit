@@ -170,7 +170,7 @@ export function auditSnapshot(
   options: Pick<Partial<AuditOptions>, "profile"> = {}
 ): AuditReport {
   const profile = options.profile ?? "generic";
-  const findings = applyProfileAdjustments(runRules(snapshot), profile);
+  const findings = applyProfileAdjustments(runRules(snapshot), profile, snapshot);
   const recommendations = findings.map((finding) => finding.recommendation);
 
   const report: AuditReport = {
