@@ -160,7 +160,15 @@ Manual CSV lead discovery:
 open-local-audit discover --input places.csv --provider manual-csv --profile dental --out-dir reports/dental --export-csv leads.csv
 ```
 
-The first `discover` slice is local operator triage only. It reads an operator-prepared CSV, resolves supplied website URLs, audits website-present rows through the existing batch pipeline, and writes `leads.csv` with `hasWebsite`, `websiteUrl`, `priority`, and `nextAction`. Use `--dry-run` to create the prospect CSV without auditing websites. It does not scrape Google Maps, call a Google provider, or send outreach; a Google Places provider stays deferred until the manual CSV flow is proven.
+The `manual-csv` provider reads an operator-prepared CSV, resolves supplied website URLs, audits website-present rows through the existing batch pipeline, and writes `leads.csv` with `hasWebsite`, `websiteUrl`, `priority`, and `nextAction`. Use `--dry-run` to create the prospect CSV without auditing websites.
+
+Google Places lead discovery:
+
+```bash
+GOOGLE_MAPS_API_KEY=your-key open-local-audit discover "guzellik salonu Umraniye" --provider google-places --profile beauty --out-dir reports/umraniye-beauty --export-csv leads.csv
+```
+
+The `google-places` provider is opt-in, uses the official Places Text Search API, and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use.
 
 Check same-origin links and fail CI when high-severity issues are found:
 
@@ -210,6 +218,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--screenshot` uses the rendered audit path, requires `--out-dir`, and also requires Playwright.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - `--export-csv` is only supported for batch audits.
+- `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
 - Industry profiles are deterministic vertical heuristics, not a replacement for a human review of each business model.
 - Higher `--concurrency` values can increase network load against audited sites; use conservative values for prospect batches.

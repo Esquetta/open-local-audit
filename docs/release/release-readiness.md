@@ -58,6 +58,18 @@ Before releasing the first `discover` implementation:
 - [x] Docs and help state that the Google provider is deferred.
 - [x] Package review confirms no API keys, fixtures, or generated lead files are included accidentally.
 
+## Google Places discovery readiness
+
+Before releasing the first `google-places` provider:
+
+- [x] CLI requires `GOOGLE_MAPS_API_KEY` for `--provider google-places`.
+- [x] Google Places requests use a strict field mask for `places.id`, `places.displayName`, and `places.websiteUri`.
+- [x] Tests use mocked Google responses only; CI does not call Google APIs.
+- [x] Website-present Google candidates feed into the existing audit pipeline.
+- [x] Website-missing Google candidates stay in `leads.csv` with `hasWebsite=no`.
+- [x] Docs state no Google Maps scraping, no reviews/photos/ratings collection, no outreach sending, and no raw Places response storage.
+- [x] Package review confirms no API keys, fixtures, or generated lead files are included accidentally.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -66,12 +78,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.9.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.10.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.9.0` after:
+Use `v0.10.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -79,6 +91,7 @@ Use `v0.9.0` after:
 - profile-aware batch input, controlled concurrency, aggregate batch insights, and prospect CSV export are verified,
 - dental, beauty, restaurant, and contractor profile-specific findings are covered by regression tests,
 - manual CSV discovery, deferred-provider rejection, and local prospect CSV export are verified,
+- Google Places missing-key behavior, strict field masks, mocked candidate mapping, dry-run, and audit handoff are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

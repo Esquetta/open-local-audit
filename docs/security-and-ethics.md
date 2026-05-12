@@ -13,6 +13,8 @@ Open Local Audit must be useful without becoming a scraping or spam engine. The 
 - Run limited internal link checks when explicitly requested.
 - Import operator-prepared business CSVs for local `manual-csv` discovery triage.
 - Audit website URLs supplied by the operator or resolved from the local CSV.
+- Use the official Google Places Text Search API when the operator explicitly selects `--provider google-places`.
+- Request only Google Places discovery fields needed for website resolution: place ID, display name, and website URI.
 
 ## Disallowed behavior
 
@@ -26,9 +28,9 @@ Open Local Audit must be useful without becoming a scraping or spam engine. The 
 
 ## Discovery provider boundary
 
-The first discovery slice is `manual-csv` only. It should support local operator triage, produce local prospect CSV output, and leave contact decisions outside the tool.
+Discovery providers should support local operator triage, produce local prospect CSV output, and leave contact decisions outside the tool.
 
-A Google provider is deferred. If added later, it must be explicit, use official Google Places API endpoints only, read credentials from environment variables, request only necessary fields, avoid reviews and photos, keep raw place data storage minimal, and source-tag any derived CSV output. Google Maps scraping remains disallowed.
+The Google Places provider is explicit and opt-in. It uses official Google Places API endpoints only, reads credentials from `GOOGLE_MAPS_API_KEY`, requests only necessary fields, avoids reviews/photos/ratings, does not store raw place responses, and source-tags derived CSV output. Google Maps scraping remains disallowed.
 
 ## Data minimization
 
@@ -62,7 +64,7 @@ Reports can support manual outreach, but outreach should be:
 
 ## Secret handling
 
-The MVP should not require secrets. If later integrations need tokens:
+Most commands do not require secrets. If integrations need tokens:
 - use environment variables,
 - never write secrets into reports,
 - include secret scanning in release checks.
@@ -70,7 +72,7 @@ The MVP should not require secrets. If later integrations need tokens:
 ## Legal review triggers
 
 Pause and review before adding:
-- any Google provider beyond the deferred official-provider boundary above,
+- any Google provider behavior beyond the official Text Search website resolver boundary above,
 - Google Business Profile API automation,
 - email sending,
 - CRM sync,
