@@ -37,3 +37,15 @@ Reason:
 - Familiar for npm users.
 - Low friction for freelancers, agencies, and internal usage.
 - Can be reviewed before the first public release if maintainers want a different license.
+
+## 2026-05-12: Lead discovery should be a provider-based CLI layer
+
+Decision:
+- Add lead discovery as a future `discover` command inside Open Local Audit, not as a separate crawler project yet.
+- Use provider interfaces, starting with manual CSV and then official Google Places API support.
+- Do not implement browser scraping of Google Maps.
+
+Reason:
+- The existing CLI already has batch auditing, profile-aware scoring, report generation, and prospect CSV export.
+- Discovery is a feeder into the audit pipeline.
+- Google Places has useful official fields such as `websiteUri`, but Places content storage and caching restrictions require conservative design.
