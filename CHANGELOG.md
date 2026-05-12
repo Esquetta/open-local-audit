@@ -4,6 +4,14 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.9.0 - 2026-05-12
+
+- Added `discover --input places.csv --provider manual-csv` for operator-prepared lead discovery.
+- Added `leads.csv` prospect exports with website presence, audit status, priority, next action, report path, and error columns.
+- Reused the existing batch audit pipeline for website-present discovery rows.
+- Added `--dry-run` discovery mode for local prospect triage without website audits.
+- Documented the discovery boundary: no Google Maps scraping, no `google-places` provider calls, and no outreach sending in this release.
+
 ## v0.8.0 - 2026-05-12
 
 - Added `--concurrency` for controlled parallel batch audits.

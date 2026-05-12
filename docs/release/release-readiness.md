@@ -47,6 +47,17 @@ The preferred single command is:
 npm run release-check
 ```
 
+## Discovery slice readiness
+
+Before releasing the first `discover` implementation:
+
+- [x] README and CLI help document `discover --input places.csv --provider manual-csv`.
+- [x] Manual CSV parsing, website-present audit handoff, website-missing rows, and `leads.csv` columns are covered by tests.
+- [x] Output is local operator triage only and does not include outreach sending.
+- [x] Docs and help state that Google Maps scraping is not supported.
+- [x] Docs and help state that the Google provider is deferred.
+- [x] Package review confirms no API keys, fixtures, or generated lead files are included accidentally.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -55,18 +66,19 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.8.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.9.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.8.0` after:
+Use `v0.9.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
 - batch index filtering and sorting are verified,
 - profile-aware batch input, controlled concurrency, aggregate batch insights, and prospect CSV export are verified,
 - dental, beauty, restaurant, and contractor profile-specific findings are covered by regression tests,
+- manual CSV discovery, deferred-provider rejection, and local prospect CSV export are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
