@@ -55,10 +55,13 @@ Scanner checks:
 - Basic performance hints.
 - robots.txt and sitemap.xml presence.
 - Social links.
+- Vertical conversion and trust signals for dental, beauty, restaurant, and contractor profiles.
 
 Report output:
 - Markdown report.
 - JSON report.
+- HTML report.
+- Batch index reports with profile, segment, score, and frequent finding insights.
 - Simple score categories.
 - Owner-readable recommendations.
 - Evidence table with URLs and findings.
@@ -135,16 +138,16 @@ First 30 days:
 - Create 3 sample reports.
 - Use it manually for outreach.
 - Publish repo and launch article.
+- Add CSV batch, screenshots, industry profiles, parallel batch execution, and batch insight indexes.
 
 Days 31-60:
 - Add web UI for one-off scans.
-- Add vertical-specific scoring.
+- Broaden vertical-specific scoring.
 - Add report branding.
 - Collect first GitHub feedback.
 
 Days 61-90:
 - Add GitHub Action mode for agencies.
-- Add batch mode from CSV.
 - Add paid "audit to website refresh" workflow.
 
 ## Metrics
@@ -165,7 +168,7 @@ Days 61-90:
 
 ## Open decisions
 
-- CLI package name.
-- License.
-- Whether to publish to npm first or GitHub releases first.
+- Web UI delivery shape.
+- Branded PDF output approach.
+- GitHub Action mode scope.
 - Whether report language should default to Turkish, English, or both.

@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs write per-site reports plus a filterable top-level batch index and optional prospect CSV export for triage.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage.
 
 ## Business purpose
 
@@ -132,13 +132,19 @@ Run a focused batch triage index:
 open-local-audit --input sites.csv --format all --out-dir reports --segment dental --sort score-asc --top 25
 ```
 
+Run a controlled parallel batch audit:
+
+```bash
+open-local-audit --input sites.csv --format all --out-dir reports --concurrency 3
+```
+
 Capture screenshots during batch audits:
 
 ```bash
 open-local-audit --input sites.csv --screenshot --format all --out-dir reports
 ```
 
-Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, and `--sort score-asc|severity-desc`. Batch runs can also write `--export-csv <path>` for prospect triage.
+Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, and frequent finding sections.
 
 Supported CSV columns:
 
@@ -166,7 +172,10 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - CSV batch input with optional labels and segments.
 - Aggregate batch index reports for prospect triage.
 - Batch index filtering, sorting, and top-N triage controls.
+- Controlled parallel batch audits with `--concurrency`.
+- Batch index insights for average score, profile breakdown, segment breakdown, and frequent findings.
 - Industry profiles for generic, dental, beauty, restaurant, and contractor audits.
+- Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
 - Prospect CSV export with profile, score, top finding, report path, and error columns.
 - Optional rendered DOM audits with `--render`.
 - Optional rendered screenshot evidence with `--screenshot`.
@@ -194,7 +203,8 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - `--export-csv` is only supported for batch audits.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
-- Industry profiles are deterministic severity and recommendation adjustments, not full vertical-specific rule packs.
+- Industry profiles are deterministic vertical heuristics, not a replacement for a human review of each business model.
+- Higher `--concurrency` values can increase network load against audited sites; use conservative values for prospect batches.
 - Rule checks are deterministic heuristics, so they can miss or over-flag site-specific markup.
 
 ## GitHub and npm release intent

@@ -55,17 +55,18 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.7.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.8.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.7.0` after:
+Use `v0.8.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
 - batch index filtering and sorting are verified,
-- profile-aware batch input and prospect CSV export are verified,
+- profile-aware batch input, controlled concurrency, aggregate batch insights, and prospect CSV export are verified,
+- dental, beauty, restaurant, and contractor profile-specific findings are covered by regression tests,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

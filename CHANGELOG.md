@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.8.0 - 2026-05-12
+
+- Added `--concurrency` for controlled parallel batch audits.
+- Added batch index insights with average score, profile breakdown, segment breakdown, and frequent findings.
+- Added profile-specific findings for dental, beauty, restaurant, and contractor audits.
+- Expanded profile tests to cover missing and satisfied vertical conversion/trust signals.
+
 ## v0.7.0 - 2026-05-11
 
 - Added industry profiles with `--profile generic|dental|beauty|restaurant|contractor`.

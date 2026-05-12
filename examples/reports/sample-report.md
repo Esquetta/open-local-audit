@@ -2,7 +2,7 @@
 
 - URL: https://example.test
 - Final URL: https://example.test
-- Scanned at: 2026-05-11T00:00:00.000Z
+- Scanned at: 2026-05-12T00:00:00.000Z
 - Status code: 200
 - Profile: generic
 
