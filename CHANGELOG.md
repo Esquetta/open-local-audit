@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+- Planned next release target: `v0.10.0`.
+- Add an opt-in Google Places provider for `discover`.
+- Resolve official place website URLs through `websiteUri` where available.
+- Keep Google Places storage conservative: no Google Maps scraping, no reviews/photos collection, and no long-term raw Places data store.
+- Feed resolved websites into the existing audit pipeline and prospect CSV export.
+
 ## v0.9.0 - 2026-05-12
 
 - Added `discover --input places.csv --provider manual-csv` for operator-prepared lead discovery.

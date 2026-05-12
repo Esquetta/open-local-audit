@@ -107,6 +107,27 @@ Exit criteria:
 - Website-present and website-missing candidates both appear in the prospect CSV.
 - Discovery docs and CLI help state that Google Maps scraping, Google provider calls, and outreach sending are not part of this slice.
 
+## Milestone 6: Google Places website resolver
+
+Target release:
+- `v0.10.0`.
+
+Deliverables:
+- `discover "<query>" --provider google-places`.
+- `GOOGLE_MAPS_API_KEY` environment variable support.
+- Official Places Text Search integration with strict field masks.
+- Website resolution from `websiteUri` when available.
+- Conservative Google Places data handling: store only required source identifiers and derived audit fields by default.
+- Clear CLI help explaining API key, billing, provider limits, and no Google Maps scraping.
+- Tests using mocked Google Places responses only.
+
+Exit criteria:
+- Missing API key fails with a clear message.
+- Mocked Google Places candidate with `websiteUri` flows into the existing audit pipeline.
+- Mocked candidate without `websiteUri` appears in `leads.csv` with `hasWebsite=no`.
+- Prospect CSV identifies provider source and website resolution status.
+- Docs explain data retention and attribution boundaries before release.
+
 ## Deferred work
 
 - Web UI.
@@ -114,4 +135,4 @@ Exit criteria:
 - Lighthouse integration.
 - Branded PDF reports.
 - SaaS dashboard.
-- Google Places provider after the manual CSV discovery flow is proven.
+- Search API or manual enrichment provider beyond Google Places.
