@@ -11,15 +11,24 @@ Open Local Audit must be useful without becoming a scraping or spam engine. The 
 - Inspect public HTML, metadata, links, images, and structured data.
 - Generate local JSON and Markdown reports.
 - Run limited internal link checks when explicitly requested.
+- Import operator-prepared business CSVs for local `manual-csv` discovery triage.
+- Audit website URLs supplied by the operator or resolved from the local CSV.
 
 ## Disallowed behavior
 
 - Scraping Google Maps as a lead database.
+- Browser-automating Google Maps or copying Google Maps results into a local lead database.
 - Automating Google Business Profile changes.
 - Collecting review data at scale.
 - Collecting personal data that is not needed for the report.
 - Ignoring robots.txt for broad crawling.
 - Sending automated bulk outreach from the tool.
+
+## Discovery provider boundary
+
+The first discovery slice is `manual-csv` only. It should support local operator triage, produce local prospect CSV output, and leave contact decisions outside the tool.
+
+A Google provider is deferred. If added later, it must be explicit, use official Google Places API endpoints only, read credentials from environment variables, request only necessary fields, avoid reviews and photos, keep raw place data storage minimal, and source-tag any derived CSV output. Google Maps scraping remains disallowed.
 
 ## Data minimization
 
@@ -61,7 +70,7 @@ The MVP should not require secrets. If later integrations need tokens:
 ## Legal review triggers
 
 Pause and review before adding:
-- Google Maps data collection,
+- any Google provider beyond the deferred official-provider boundary above,
 - Google Business Profile API automation,
 - email sending,
 - CRM sync,

@@ -93,6 +93,20 @@ Exit criteria:
 - CLI runs through `npx`.
 - GitHub release and npm version match.
 
+## Milestone 5: Manual CSV discovery
+
+Deliverables:
+- `discover --input places.csv --provider manual-csv`.
+- Operator-prepared candidate CSV input.
+- Website-present rows reused by the existing audit pipeline.
+- `leads.csv` export with `hasWebsite`, `websiteUrl`, `priority`, and `nextAction`.
+- Local operator triage workflow before any outreach decision.
+
+Exit criteria:
+- Manual CSV parsing is covered by tests.
+- Website-present and website-missing candidates both appear in the prospect CSV.
+- Discovery docs and CLI help state that Google Maps scraping, Google provider calls, and outreach sending are not part of this slice.
+
 ## Deferred work
 
 - Web UI.
@@ -100,3 +114,4 @@ Exit criteria:
 - Lighthouse integration.
 - Branded PDF reports.
 - SaaS dashboard.
+- Google Places provider after the manual CSV discovery flow is proven.

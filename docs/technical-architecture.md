@@ -80,6 +80,31 @@ Responsibilities:
 - Emit Markdown for mini-audit handoff.
 - Keep report wording practical and non-alarmist.
 
+### Discovery command
+
+Implemented first slice:
+
+```text
+discover --input places.csv --provider manual-csv
+  -> Manual CSV discovery provider
+  -> Website resolver
+  -> Existing batch audit for website-present rows
+  -> Prospect CSV for local operator triage
+```
+
+Responsibilities:
+- Read operator-prepared CSV input.
+- Mark each candidate as website present, missing, invalid, skipped, or error.
+- Reuse the existing audit pipeline for website-present rows.
+- Export `leads.csv` with website status, priority, next action, and report path.
+- Support `--dry-run` for CSV-only triage without website audits.
+- Keep review and outreach decisions manual.
+
+Out of scope for this slice:
+- Google Maps scraping.
+- `google-places` provider calls.
+- Outreach sending.
+
 ## Data model
 
 Report fields:
@@ -125,6 +150,8 @@ Finding fields:
 ## Future extension points
 
 - Batch audit from CSV.
+- Manual CSV discovery via `discover --input places.csv --provider manual-csv`.
+- Deferred official Google Places provider with strict field and storage limits.
 - Screenshot capture.
 - Web UI using the same rule engine.
 - GitHub Action mode.

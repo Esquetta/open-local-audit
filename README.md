@@ -154,6 +154,14 @@ example.com,Example Clinic,dental,dental
 https://example.org/path,Example Salon,beauty,beauty
 ```
 
+Manual CSV lead discovery:
+
+```bash
+open-local-audit discover --input places.csv --provider manual-csv --profile dental --out-dir reports/dental --export-csv leads.csv
+```
+
+The first `discover` slice is local operator triage only. It reads an operator-prepared CSV, resolves supplied website URLs, audits website-present rows through the existing batch pipeline, and writes `leads.csv` with `hasWebsite`, `websiteUrl`, `priority`, and `nextAction`. Use `--dry-run` to create the prospect CSV without auditing websites. It does not scrape Google Maps, call a Google provider, or send outreach; a Google Places provider stays deferred until the manual CSV flow is proven.
+
 Check same-origin links and fail CI when high-severity issues are found:
 
 ```bash
