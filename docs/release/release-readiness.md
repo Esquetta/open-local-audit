@@ -67,6 +67,7 @@ Before releasing the first `google-places` provider:
 - [x] Tests use mocked Google responses only; CI does not call Google APIs.
 - [x] Website-present Google candidates feed into the existing audit pipeline.
 - [x] Website-missing Google candidates stay in `leads.csv` with `hasWebsite=no`.
+- [x] Local setup docs explain `GOOGLE_MAPS_API_KEY` usage.
 - [x] Docs state no Google Maps scraping, no reviews/photos/ratings collection, no outreach sending, and no raw Places response storage.
 - [x] Package review confirms no API keys, fixtures, or generated lead files are included accidentally.
 

@@ -168,7 +168,9 @@ Google Places lead discovery:
 GOOGLE_MAPS_API_KEY=your-key open-local-audit discover "guzellik salonu Umraniye" --provider google-places --profile beauty --out-dir reports/umraniye-beauty --export-csv leads.csv
 ```
 
-The `google-places` provider is opt-in, uses the official Places Text Search API, and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use.
+The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use.
+
+See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
 Check same-origin links and fail CI when high-severity issues are found:
 
