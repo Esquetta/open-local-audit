@@ -174,9 +174,15 @@ Control discovery cost and audit volume:
 GOOGLE_MAPS_API_KEY=your-key open-local-audit discover "dis klinigi Kadikoy" --provider google-places --limit 20 --max-audits 5 --summary-json discovery-summary.json --out-dir reports/kadikoy-dental --export-csv leads.csv
 ```
 
+Skip previously reviewed leads and keep only stronger opportunities:
+
+```bash
+open-local-audit discover --input places.csv --provider manual-csv --suppression-list reviewed-leads.csv --min-opportunity-score 90 --dry-run --export-csv leads.csv
+```
+
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
-Discovery CSV exports include `opportunityScore` for quick triage. Spreadsheet formula-like cell values are neutralized before export.
+Discovery CSV exports include `leadKey`, `opportunityScore`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. Spreadsheet formula-like cell values are neutralized before export.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -227,10 +233,11 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--render` requires Playwright in the calling project and a working browser runtime.
 - `--screenshot` uses the rendered audit path, requires `--out-dir`, and also requires Playwright.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
-- `--export-csv` is only supported for batch audits.
+- `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
 - `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.
 - `--max-audits` limits website audits only; all discovered candidates still appear in `leads.csv`.
+- `--suppression-list` uses exact lead identity matching; source IDs are preferred, then normalized website URLs, then normalized labels.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
 - Industry profiles are deterministic vertical heuristics, not a replacement for a human review of each business model.
 - Higher `--concurrency` values can increase network load against audited sites; use conservative values for prospect batches.

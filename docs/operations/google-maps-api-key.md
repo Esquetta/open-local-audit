@@ -48,6 +48,11 @@ Persist the key for future user sessions:
 
 Open a new terminal after setting a persistent user environment variable.
 
+On Windows, the CLI also falls back to the current user's persisted environment
+registry value when `GOOGLE_MAPS_API_KEY` is missing from the current process.
+This helps long-running shells or Codex sessions that were opened before the key
+was saved.
+
 ## macOS or Linux usage
 
 Set the key for the current terminal session:

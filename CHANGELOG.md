@@ -4,6 +4,11 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+- Added discovery suppression lists with `--suppression-list` to skip previously reviewed leads.
+- Added `leadKey`, `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns to discovery CSV exports for local review workflows.
+- Added `--min-opportunity-score` for filtering discovery exports to higher-value opportunities.
+- Added Windows user-environment fallback for `GOOGLE_MAPS_API_KEY`.
+
 ## v0.11.0 - 2026-05-13
 
 - Added discovery controls: `--limit`, `--max-audits`, and `--summary-json`.

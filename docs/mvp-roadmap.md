@@ -147,6 +147,24 @@ Exit criteria:
 - Summary JSON is covered by CLI tests.
 - Formula-like CSV cells are neutralized before export.
 
+## Milestone 8: Discovery review workflow
+
+Target release:
+- `v0.12.0`.
+
+Deliverables:
+- Stable `leadKey` values in discovery CSV exports.
+- Review columns for local operator decisions: `reviewStatus`, `reviewReason`, and `lastReviewedAt`.
+- `--suppression-list <path>` for skipping previously rejected, contacted, not-fit, do-not-contact, or suppressed leads.
+- `--min-opportunity-score <score>` for exporting only higher-value discovery candidates.
+- Suppression counts in terminal and summary JSON output.
+
+Exit criteria:
+- Suppression matching prefers provider source IDs, then normalized website URLs, then normalized labels.
+- Suppressed candidates are excluded before website audits run.
+- Rows with `reviewStatus=new` remain eligible for future discovery runs.
+- Opportunity-score filtering is covered by CLI tests.
+
 ## Deferred work
 
 - Web UI.

@@ -34,6 +34,8 @@ The Google Places provider is explicit and opt-in. It uses official Google Place
 
 Discovery operators should use `--limit` and `--max-audits` to control Google API usage and downstream site-audit volume. The CLI warns that Google Maps Platform billing may apply when `google-places` is selected.
 
+Operators should use `--suppression-list` to avoid repeatedly auditing or reviewing leads already marked as rejected, contacted, not-fit, do-not-contact, or suppressed. Suppression is local CSV state only; the tool does not send outreach or sync review decisions to a remote service.
+
 ## Data minimization
 
 Default behavior:
@@ -41,6 +43,7 @@ Default behavior:
 - Write reports only when the operator passes an output path.
 - Do not send scan data to maintainers or third-party services.
 - Neutralize formula-like CSV cells before export.
+- Keep discovery review and suppression state in operator-managed local CSV files.
 
 If future telemetry is added:
 - Make it opt-in.

@@ -84,6 +84,17 @@ Before releasing discovery cost and triage controls:
 - [x] Google Places runs warn that Google Maps Platform billing may apply.
 - [x] Tests cover mocked Google responses, audit caps, summary JSON, opportunity scoring, and CSV hardening.
 
+## Discovery review workflow readiness
+
+Before releasing suppression and review workflow controls:
+
+- [x] CLI help documents `--suppression-list` and `--min-opportunity-score`.
+- [x] Discovery exports include stable `leadKey` values and local review columns.
+- [x] Suppression-list parsing supports prior discovery CSVs and compact review CSVs.
+- [x] Suppressed candidates are filtered before website audits run.
+- [x] Summary output includes suppressed candidate counts.
+- [x] Opportunity-score filtering is covered by CLI tests.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
