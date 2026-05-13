@@ -55,7 +55,7 @@ Before releasing the first `discover` implementation:
 - [x] Manual CSV parsing, website-present audit handoff, website-missing rows, and `leads.csv` columns are covered by tests.
 - [x] Output is local operator triage only and does not include outreach sending.
 - [x] Docs and help state that Google Maps scraping is not supported.
-- [x] Docs and help state that the Google provider is deferred.
+- [x] Docs and help state that Google Places support uses the official API only.
 - [x] Package review confirms no API keys, fixtures, or generated lead files are included accidentally.
 
 ## Google Places discovery readiness
@@ -70,6 +70,19 @@ Before releasing the first `google-places` provider:
 - [x] Local setup docs explain `GOOGLE_MAPS_API_KEY` usage.
 - [x] Docs state no Google Maps scraping, no reviews/photos/ratings collection, no outreach sending, and no raw Places response storage.
 - [x] Package review confirms no API keys, fixtures, or generated lead files are included accidentally.
+
+## Discovery controls readiness
+
+Before releasing discovery cost and triage controls:
+
+- [x] CLI help documents `--limit`, `--max-audits`, and `--summary-json`.
+- [x] Google Places requests include the bounded `maxResultCount` value and clamp oversized limits.
+- [x] `--max-audits` limits website audits while preserving unaudited candidates in `leads.csv`.
+- [x] Terminal and JSON summaries include website status, audit status, average score, and priority counts.
+- [x] `leads.csv` includes `opportunityScore` for operator triage.
+- [x] CSV export neutralizes formula-like cells before local spreadsheet review.
+- [x] Google Places runs warn that Google Maps Platform billing may apply.
+- [x] Tests cover mocked Google responses, audit caps, summary JSON, opportunity scoring, and CSV hardening.
 
 Add project-specific commands once implementation starts.
 
@@ -91,8 +104,9 @@ Use `v0.10.0` after:
 - batch index filtering and sorting are verified,
 - profile-aware batch input, controlled concurrency, aggregate batch insights, and prospect CSV export are verified,
 - dental, beauty, restaurant, and contractor profile-specific findings are covered by regression tests,
-- manual CSV discovery, deferred-provider rejection, and local prospect CSV export are verified,
+- manual CSV discovery, official Google Places discovery, and local prospect CSV export are verified,
 - Google Places missing-key behavior, strict field masks, mocked candidate mapping, dry-run, and audit handoff are verified,
+- discovery limits, audit caps, summary JSON, opportunity scoring, and CSV formula hardening are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

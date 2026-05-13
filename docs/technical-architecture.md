@@ -92,17 +92,30 @@ discover --input places.csv --provider manual-csv
   -> Prospect CSV for local operator triage
 ```
 
+Implemented provider and control extensions:
+
+```text
+discover --provider google-places --query "dentists in Boston" --location "Boston, MA"
+  -> Official Google Places Text Search provider
+  -> Website-only candidate extraction
+  -> Operator-controlled candidate and audit caps
+  -> Optional summary JSON for release evidence
+```
+
 Responsibilities:
 - Read operator-prepared CSV input.
+- Fetch local candidates from the official Google Places API when `--provider google-places` is used.
+- Warn operators that Google Maps Platform billing may apply before Google Places calls.
 - Mark each candidate as website present, missing, invalid, skipped, or error.
 - Reuse the existing audit pipeline for website-present rows.
-- Export `leads.csv` with website status, priority, next action, and report path.
-- Support `--dry-run` for CSV-only triage without website audits.
+- Export `leads.csv` with website status, opportunity score, priority, next action, and report path.
+- Support `--limit`, `--max-audits`, `--dry-run`, and `--summary-json` for controlled local triage.
+- Neutralize formula-like CSV cells before export.
 - Keep review and outreach decisions manual.
 
 Out of scope for this slice:
 - Google Maps scraping.
-- `google-places` provider calls.
+- Raw Google Places response storage beyond the mapped candidate fields.
 - Outreach sending.
 
 ## Data model
@@ -151,7 +164,7 @@ Finding fields:
 
 - Batch audit from CSV.
 - Manual CSV discovery via `discover --input places.csv --provider manual-csv`.
-- Deferred official Google Places provider with strict field and storage limits.
+- Google Places pagination and richer operator review queues.
 - Screenshot capture.
 - Web UI using the same rule engine.
 - GitHub Action mode.
