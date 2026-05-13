@@ -130,6 +130,9 @@ Exit criteria:
 
 ## Milestone 7: Discovery controls and triage safety
 
+Target release:
+- `v0.11.0`.
+
 Deliverables:
 - `--limit <count>` for Google Places result control.
 - `--max-audits <count>` for limiting website audits while preserving all leads in CSV output.

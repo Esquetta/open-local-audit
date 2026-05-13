@@ -92,12 +92,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.10.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.11.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.10.0` after:
+Use `v0.11.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,

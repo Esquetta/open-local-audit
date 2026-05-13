@@ -4,6 +4,8 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.11.0 - 2026-05-13
+
 - Added discovery controls: `--limit`, `--max-audits`, and `--summary-json`.
 - Added terminal discovery summary output for website, audit, priority, and average-score counts.
 - Added `opportunityScore` to discovery prospect CSV exports.
