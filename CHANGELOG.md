@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+- Added discovery controls: `--limit`, `--max-audits`, and `--summary-json`.
+- Added terminal discovery summary output for website, audit, priority, and average-score counts.
+- Added `opportunityScore` to discovery prospect CSV exports.
+- Added CSV formula-injection hardening for exported CSV cells.
+- Added a Google Maps Platform billing warning when `--provider google-places` is used.
+
 ## v0.10.0 - 2026-05-12
 
 - Added an opt-in `google-places` provider for `discover`.

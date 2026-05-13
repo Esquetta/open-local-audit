@@ -128,6 +128,22 @@ Exit criteria:
 - Prospect CSV identifies provider source and website resolution status.
 - Docs explain data retention and attribution boundaries before release.
 
+## Milestone 7: Discovery controls and triage safety
+
+Deliverables:
+- `--limit <count>` for Google Places result control.
+- `--max-audits <count>` for limiting website audits while preserving all leads in CSV output.
+- Terminal discovery summary and optional `--summary-json`.
+- `opportunityScore` in `leads.csv`.
+- CSV formula-injection hardening.
+- Google Maps Platform billing warning for `google-places`.
+
+Exit criteria:
+- Google Places requests include `maxResultCount` and clamp to a documented maximum.
+- `--max-audits` leaves excess website-present leads as `not-audited`.
+- Summary JSON is covered by CLI tests.
+- Formula-like CSV cells are neutralized before export.
+
 ## Deferred work
 
 - Web UI.

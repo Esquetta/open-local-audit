@@ -32,12 +32,15 @@ Discovery providers should support local operator triage, produce local prospect
 
 The Google Places provider is explicit and opt-in. It uses official Google Places API endpoints only, reads credentials from `GOOGLE_MAPS_API_KEY`, requests only necessary fields, avoids reviews/photos/ratings, does not store raw place responses, and source-tags derived CSV output. Google Maps scraping remains disallowed.
 
+Discovery operators should use `--limit` and `--max-audits` to control Google API usage and downstream site-audit volume. The CLI warns that Google Maps Platform billing may apply when `google-places` is selected.
+
 ## Data minimization
 
 Default behavior:
 - Do not store scan history.
 - Write reports only when the operator passes an output path.
 - Do not send scan data to maintainers or third-party services.
+- Neutralize formula-like CSV cells before export.
 
 If future telemetry is added:
 - Make it opt-in.

@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, and write summary JSON.
 
 ## Business purpose
 
@@ -168,7 +168,15 @@ Google Places lead discovery:
 GOOGLE_MAPS_API_KEY=your-key open-local-audit discover "guzellik salonu Umraniye" --provider google-places --profile beauty --out-dir reports/umraniye-beauty --export-csv leads.csv
 ```
 
-The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use.
+Control discovery cost and audit volume:
+
+```bash
+GOOGLE_MAPS_API_KEY=your-key open-local-audit discover "dis klinigi Kadikoy" --provider google-places --limit 20 --max-audits 5 --summary-json discovery-summary.json --out-dir reports/kadikoy-dental --export-csv leads.csv
+```
+
+The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
+
+Discovery CSV exports include `opportunityScore` for quick triage. Spreadsheet formula-like cell values are neutralized before export.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -221,6 +229,8 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - `--export-csv` is only supported for batch audits.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
+- `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.
+- `--max-audits` limits website audits only; all discovered candidates still appear in `leads.csv`.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
 - Industry profiles are deterministic vertical heuristics, not a replacement for a human review of each business model.
 - Higher `--concurrency` values can increase network load against audited sites; use conservative values for prospect batches.
