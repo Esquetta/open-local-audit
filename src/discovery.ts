@@ -38,6 +38,7 @@ export interface ProspectRowInput {
 }
 
 export interface ProspectExportRow {
+  leadKey: string;
   source: string;
   sourceId?: string;
   label?: string;
@@ -51,8 +52,18 @@ export interface ProspectExportRow {
   opportunityScore: number;
   priority: "high" | "medium" | "low";
   nextAction: string;
+  reviewStatus: string;
+  reviewReason?: string;
+  lastReviewedAt?: string;
   reportPath?: string;
   error?: string;
+}
+
+export interface LeadSuppressionEntry {
+  leadKey: string;
+  reviewStatus?: string;
+  reviewReason?: string;
+  lastReviewedAt?: string;
 }
 
 export interface ReadManualDiscoveryCsvOptions {
@@ -68,6 +79,7 @@ export interface FetchGooglePlacesCandidatesOptions {
 
 export interface DiscoverySummary {
   totalCandidates: number;
+  suppressedCandidates: number;
   withWebsite: number;
   withoutWebsite: number;
   unknownWebsite: number;
@@ -95,6 +107,7 @@ const googlePlacesTextSearchUrl = "https://places.googleapis.com/v1/places:searc
 const googlePlacesFieldMask = "places.id,places.displayName,places.websiteUri";
 const defaultGooglePlacesLimit = 10;
 const maxGooglePlacesLimit = 50;
+const suppressedReviewStatuses = new Set(["rejected", "contacted", "not-fit", "not_a_fit", "do-not-contact", "suppressed"]);
 
 function firstCell(cells: string[], headers: string[], names: string[]): string | undefined {
   for (const name of names) {
@@ -122,6 +135,28 @@ function normalizeOptionalUrl(value: string | undefined): string | undefined {
   } catch {
     return value;
   }
+}
+
+function normalizeIdentityUrl(value: string | undefined): string | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(inputUrlSchema.parse(value));
+    parsed.hash = "";
+    parsed.protocol = parsed.protocol.toLowerCase();
+    parsed.hostname = parsed.hostname.toLowerCase();
+    const normalized = parsed.toString();
+    return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeLabel(value: string | undefined): string | undefined {
+  const normalized = value?.trim().replace(/\s+/g, " ").toLowerCase();
+  return normalized || undefined;
 }
 
 function normalizeLimit(limit: number | undefined): number {
@@ -166,6 +201,43 @@ export async function readManualDiscoveryCsv(
       profile,
       websiteUri: normalizeOptionalUrl(firstCell(cells, headers, ["website", "websiteuri", "website_uri", "url"]))
     };
+  });
+}
+
+export async function readLeadSuppressionCsv(path: string): Promise<LeadSuppressionEntry[]> {
+  const content = await readFile(path, "utf8");
+  const lines = cleanInputLines(content);
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const [rawHeader, ...rows] = lines;
+  const headers = parseCsvLine(rawHeader).map((header) => header.trim().toLowerCase());
+  return rows.flatMap((row) => {
+    const cells = parseCsvLine(row);
+    const explicitLeadKey = firstCell(cells, headers, ["leadkey", "lead_key"]);
+    const source = firstCell(cells, headers, ["source"]) ?? "manual-csv";
+    const sourceId = firstCell(cells, headers, ["sourceid", "source_id", "placeid", "place_id"]);
+    const websiteUrl = normalizeIdentityUrl(firstCell(cells, headers, ["websiteurl", "website_url", "website", "url"]));
+    const label = normalizeLabel(firstCell(cells, headers, ["label", "name", "business"]));
+    const leadKey =
+      explicitLeadKey ??
+      (sourceId ? `${source}:${sourceId}` : undefined) ??
+      (websiteUrl ? `url:${websiteUrl}` : undefined) ??
+      (label ? `label:${source}:${label}` : undefined);
+
+    if (!leadKey) {
+      return [];
+    }
+
+    return [
+      {
+        leadKey,
+        reviewStatus: firstCell(cells, headers, ["reviewstatus", "review_status"]),
+        reviewReason: firstCell(cells, headers, ["reviewreason", "review_reason"]),
+        lastReviewedAt: firstCell(cells, headers, ["lastreviewedat", "last_reviewed_at"])
+      }
+    ];
   });
 }
 
@@ -244,6 +316,38 @@ export function resolveCandidateWebsite(candidate: Pick<PlaceCandidate, "website
       reason: error instanceof Error ? error.message : "Invalid website URL"
     };
   }
+}
+
+export function stableLeadKey(input: ProspectRowInput): string {
+  if (input.candidate.sourceId?.trim()) {
+    return `${input.candidate.source}:${input.candidate.sourceId.trim()}`;
+  }
+
+  const websiteUrl = normalizeIdentityUrl(input.resolution.websiteUrl ?? input.candidate.websiteUri);
+  if (websiteUrl) {
+    return `url:${websiteUrl}`;
+  }
+
+  const label = normalizeLabel(input.candidate.label);
+  return label ? `label:${input.candidate.source}:${label}` : `candidate:${input.candidate.source}:unknown`;
+}
+
+function isSuppressed(entry: LeadSuppressionEntry): boolean {
+  const status = entry.reviewStatus?.trim().toLowerCase();
+  return status ? suppressedReviewStatuses.has(status) : true;
+}
+
+export function filterSuppressedProspects(
+  inputs: ProspectRowInput[],
+  entries: LeadSuppressionEntry[]
+): { included: ProspectRowInput[]; suppressedCount: number } {
+  const suppressedKeys = new Set(entries.filter(isSuppressed).map((entry) => entry.leadKey));
+  const included = inputs.filter((input) => !suppressedKeys.has(stableLeadKey(input)));
+
+  return {
+    included,
+    suppressedCount: inputs.length - included.length
+  };
 }
 
 function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority" | "nextAction"> {
@@ -345,6 +449,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
     const priority = priorityFor(input);
 
     return {
+      leadKey: stableLeadKey(input),
       source: input.candidate.source,
       sourceId: input.candidate.sourceId,
       label: input.candidate.label,
@@ -357,17 +462,19 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       topFinding: audit.topFinding,
       opportunityScore: opportunityScoreFor(input),
       ...priority,
+      reviewStatus: "new",
       reportPath: audit.reportPath,
       error: audit.error ?? input.resolution.reason
     };
   });
 }
 
-export function buildDiscoverySummary(rows: ProspectExportRow[]): DiscoverySummary {
+export function buildDiscoverySummary(rows: ProspectExportRow[], suppressedCandidates = 0): DiscoverySummary {
   const scores = rows.flatMap((row) => (row.auditStatus === "success" && row.score !== undefined ? [row.score] : []));
 
   return {
     totalCandidates: rows.length,
+    suppressedCandidates,
     withWebsite: rows.filter((row) => row.hasWebsite === "yes").length,
     withoutWebsite: rows.filter((row) => row.hasWebsite === "no").length,
     unknownWebsite: rows.filter((row) => row.hasWebsite === "unknown").length,
@@ -386,6 +493,7 @@ export function buildDiscoverySummary(rows: ProspectExportRow[]): DiscoverySumma
 
 export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
   const header = [
+    "leadKey",
     "source",
     "sourceId",
     "label",
@@ -399,11 +507,15 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
     "opportunityScore",
     "priority",
     "nextAction",
+    "reviewStatus",
+    "reviewReason",
+    "lastReviewedAt",
     "reportPath",
     "error"
   ];
   const body = rows.map((row) =>
     [
+      row.leadKey,
       row.source,
       row.sourceId ?? "",
       row.label ?? "",
@@ -417,6 +529,9 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.opportunityScore.toString(),
       row.priority,
       row.nextAction,
+      row.reviewStatus,
+      row.reviewReason ?? "",
+      row.lastReviewedAt ?? "",
       row.reportPath ?? "",
       row.error ?? ""
     ]

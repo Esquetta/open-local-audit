@@ -4,9 +4,12 @@ export {
   buildDiscoverySummary,
   buildProspectRows,
   fetchGooglePlacesCandidates,
+  filterSuppressedProspects,
+  readLeadSuppressionCsv,
   readManualDiscoveryCsv,
   renderProspectRowsCsv,
-  resolveCandidateWebsite
+  resolveCandidateWebsite,
+  stableLeadKey
 } from "./discovery.js";
 export { shouldFailOnThreshold } from "./exit-policy.js";
 export { auditProfiles } from "./profiles.js";
@@ -27,6 +30,7 @@ export type {
   DiscoveryProviderName,
   DiscoverySummary,
   FetchGooglePlacesCandidatesOptions,
+  LeadSuppressionEntry,
   PlaceCandidate,
   ProspectExportRow,
   ProspectRowInput,

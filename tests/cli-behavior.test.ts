@@ -293,6 +293,8 @@ describe("CLI behavior helpers", () => {
       expect(result.stdout).toContain("Discovered 2 lead");
       expect(existsSync(exportCsv)).toBe(true);
       const csv = readFileSync(exportCsv, "utf8");
+      expect(csv).toContain("leadKey");
+      expect(csv).toContain("reviewStatus");
       expect(csv).toContain("Example Dental");
       expect(csv).toContain("No Site Clinic");
       expect(csv).toContain("not-audited");
@@ -300,13 +302,117 @@ describe("CLI behavior helpers", () => {
       expect(csv).toContain("Build a basic website");
       expect(result.stdout).toContain("With website: 1");
       expect(result.stdout).toContain("Without website: 1");
+      expect(result.stdout).toContain("Suppressed: 0");
       expect(JSON.parse(readFileSync(summaryJson, "utf8"))).toMatchObject({
         totalCandidates: 2,
+        suppressedCandidates: 0,
         withWebsite: 1,
         withoutWebsite: 1,
         notAudited: 2
       });
       expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("suppresses previously reviewed discovery leads before audit and export", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-suppression-"));
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const suppressionPath = join(tmp, "suppression.csv");
+      const exportCsv = join(tmp, "leads.csv");
+      const summaryJson = join(tmp, "summary.json");
+      writeFileSync(
+        inputPath,
+        "label,website,segment,profile\nOld Dental,https://old.example,dental,dental\nFresh Dental,,dental,dental\n",
+        "utf8"
+      );
+      writeFileSync(
+        suppressionPath,
+        "websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nhttps://old.example/,rejected,Not a fit,2026-05-13\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--export-csv",
+          exportCsv,
+          "--summary-json",
+          summaryJson,
+          "--suppression-list",
+          suppressionPath,
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Discovered 1 lead");
+      expect(result.stdout).toContain("Suppressed: 1");
+      const csv = readFileSync(exportCsv, "utf8");
+      expect(csv).not.toContain("Old Dental");
+      expect(csv).toContain("Fresh Dental");
+      expect(JSON.parse(readFileSync(summaryJson, "utf8"))).toMatchObject({
+        totalCandidates: 1,
+        suppressedCandidates: 1
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("filters exported discovery leads by minimum opportunity score", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-min-opportunity-"));
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const exportCsv = join(tmp, "leads.csv");
+      writeFileSync(
+        inputPath,
+        "label,website,segment,profile\nWebsite Dental,https://website.example,dental,dental\nNo Site Dental,,dental,dental\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--export-csv",
+          exportCsv,
+          "--min-opportunity-score",
+          "90",
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Discovered 1 lead");
+      const csv = readFileSync(exportCsv, "utf8");
+      expect(csv).toContain("No Site Dental");
+      expect(csv).not.toContain("Website Dental");
     } finally {
       removeTempDir(tmp);
     }
@@ -423,6 +529,11 @@ describe("CLI behavior helpers", () => {
         ],
         {
           cwd: process.cwd(),
+          env: {
+            ...process.env,
+            GOOGLE_MAPS_API_KEY: "",
+            OPEN_LOCAL_AUDIT_DISABLE_WINDOWS_ENV_FALLBACK: "1"
+          },
           encoding: "utf8"
         }
       );

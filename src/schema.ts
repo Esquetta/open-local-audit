@@ -39,6 +39,8 @@ export const cliOptionsSchema = z.object({
   limit: z.coerce.number().int().positive().default(10),
   maxAudits: z.coerce.number().int().min(0).optional(),
   summaryJson: z.string().optional(),
+  suppressionList: z.string().optional(),
+  minOpportunityScore: z.coerce.number().int().min(0).max(100).optional(),
   timeout: z.coerce.number().int().positive().max(60000).default(10000),
   maxRedirects: z.coerce.number().int().min(0).max(10).default(5),
   checkLinks: z.boolean().default(false),

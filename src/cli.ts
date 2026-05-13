@@ -8,6 +8,8 @@ import {
   buildDiscoverySummary,
   buildProspectRows,
   fetchGooglePlacesCandidates,
+  filterSuppressedProspects,
+  readLeadSuppressionCsv,
   readManualDiscoveryCsv,
   renderProspectRowsCsv,
   resolveCandidateWebsite,
@@ -16,6 +18,7 @@ import {
 import { shouldFailOnThreshold } from "./exit-policy.js";
 import { writeReportOutputs } from "./output.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
+import { resolveGoogleMapsApiKey } from "./secrets.js";
 import { renderTerminalSummary } from "./summary.js";
 
 const program = new Command();
@@ -30,9 +33,11 @@ const discoveryProgram = program
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--export-csv <path>", "write lead discovery CSV output")
   .option("--summary-json <path>", "write discovery summary JSON output")
+  .option("--suppression-list <path>", "read reviewed or suppressed lead identities from a CSV file")
   .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
   .option("--limit <count>", "maximum Google Places candidates to request", "10")
   .option("--max-audits <count>", "maximum website-present candidates to audit")
+  .option("--min-opportunity-score <score>", "export only leads at or above an opportunity score")
   .option("--concurrency <count>", "maximum concurrent audits when dry-run is not used", "1")
   .addHelpText(
     "after",
@@ -59,6 +64,7 @@ function renderDiscoverySummary(summary: ReturnType<typeof buildDiscoverySummary
     `Audited: ${summary.audited}`,
     `Audit failed: ${summary.auditFailed}`,
     `Not audited: ${summary.notAudited}`,
+    `Suppressed: ${summary.suppressedCandidates}`,
     `Average score: ${summary.averageScore ?? "N/A"}`
   ].join("\n");
 }
@@ -80,7 +86,9 @@ discoveryProgram.action(async (query?: string) => {
         provider: true,
         limit: true,
         maxAudits: true,
-        summaryJson: true
+        summaryJson: true,
+        suppressionList: true,
+        minOpportunityScore: true
       })
       .parse(rawDiscoveryOptions);
 
@@ -116,7 +124,7 @@ discoveryProgram.action(async (query?: string) => {
             defaultProfile: options.profile
           })
         : await fetchGooglePlacesCandidates(query ?? "", {
-            apiKey: process.env.GOOGLE_MAPS_API_KEY,
+            apiKey: resolveGoogleMapsApiKey(),
             defaultProfile: options.profile,
             limit: options.limit
           });
@@ -126,6 +134,9 @@ discoveryProgram.action(async (query?: string) => {
       candidate,
       resolution: resolutions[index]
     }));
+    const suppressionEntries = options.suppressionList ? await readLeadSuppressionCsv(options.suppressionList) : [];
+    const suppressionResult = filterSuppressedProspects(prospectInputs, suppressionEntries);
+    prospectInputs = suppressionResult.included;
 
     if (!options.dryRun) {
       const auditable = prospectInputs
@@ -180,10 +191,12 @@ discoveryProgram.action(async (query?: string) => {
       });
     }
 
-    const rows = buildProspectRows(prospectInputs);
+    const rows = buildProspectRows(prospectInputs).filter((row) =>
+      options.minOpportunityScore === undefined ? true : row.opportunityScore >= options.minOpportunityScore
+    );
     await mkdir(dirname(options.exportCsv), { recursive: true });
     await writeFile(options.exportCsv, renderProspectRowsCsv(rows), "utf8");
-    const summary = buildDiscoverySummary(rows);
+    const summary = buildDiscoverySummary(rows, suppressionResult.suppressedCount);
     if (options.summaryJson) {
       await mkdir(dirname(options.summaryJson), { recursive: true });
       await writeFile(options.summaryJson, `${JSON.stringify(summary, null, 2)}\n`, "utf8");

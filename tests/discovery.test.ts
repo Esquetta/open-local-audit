@@ -6,9 +6,12 @@ import {
   buildDiscoverySummary,
   buildProspectRows,
   fetchGooglePlacesCandidates,
+  filterSuppressedProspects,
+  readLeadSuppressionCsv,
   readManualDiscoveryCsv,
   renderProspectRowsCsv,
-  resolveCandidateWebsite
+  resolveCandidateWebsite,
+  stableLeadKey
 } from "../src/discovery.js";
 
 describe("lead discovery", () => {
@@ -169,6 +172,115 @@ describe("lead discovery", () => {
     });
   });
 
+  it("builds stable lead keys from source id, website, or label", () => {
+    expect(
+      stableLeadKey({
+        candidate: {
+          source: "google-places",
+          sourceId: "Place-123",
+          label: "Example Dental",
+          websiteUri: "https://example.test"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://example.test/",
+          status: "resolved"
+        }
+      })
+    ).toBe("google-places:Place-123");
+
+    expect(
+      stableLeadKey({
+        candidate: {
+          source: "manual-csv",
+          label: "Example Dental",
+          websiteUri: "HTTPS://Example.test/path/"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://Example.test/path/",
+          status: "resolved"
+        }
+      })
+    ).toBe("url:https://example.test/path");
+
+    expect(
+      stableLeadKey({
+        candidate: {
+          source: "manual-csv",
+          label: "  Example   Dental  "
+        },
+        resolution: {
+          hasWebsite: false,
+          status: "missing"
+        }
+      })
+    ).toBe("label:manual-csv:example dental");
+  });
+
+  it("reads suppression entries and filters matching reviewed leads", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-suppression-"));
+    try {
+      const input = join(dir, "suppression.csv");
+      await writeFile(
+        input,
+        "source,sourceId,label,websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nmanual-csv,,Old Clinic,https://old.example/,rejected,Not a fit,2026-05-13\ngoogle-places,place-2,New Clinic,,new,,\nmanual-csv,,Contacted Clinic,https://contacted.example,contacted,Already emailed,2026-05-13\n",
+        "utf8"
+      );
+
+      const entries = await readLeadSuppressionCsv(input);
+      expect(entries.map((entry) => [entry.leadKey, entry.reviewStatus, entry.reviewReason])).toEqual([
+        ["url:https://old.example", "rejected", "Not a fit"],
+        ["google-places:place-2", "new", undefined],
+        ["url:https://contacted.example", "contacted", "Already emailed"]
+      ]);
+
+      const result = filterSuppressedProspects(
+        [
+          {
+            candidate: {
+              source: "manual-csv",
+              label: "Old Clinic",
+              websiteUri: "https://old.example"
+            },
+            resolution: {
+              hasWebsite: true,
+              websiteUrl: "https://old.example/",
+              status: "resolved"
+            }
+          },
+          {
+            candidate: {
+              source: "google-places",
+              sourceId: "place-2",
+              label: "New Clinic"
+            },
+            resolution: {
+              hasWebsite: false,
+              status: "missing"
+            }
+          },
+          {
+            candidate: {
+              source: "manual-csv",
+              label: "Fresh Clinic"
+            },
+            resolution: {
+              hasWebsite: false,
+              status: "missing"
+            }
+          }
+        ],
+        entries
+      );
+
+      expect(result.suppressedCount).toBe(1);
+      expect(result.included.map((input) => input.candidate.label)).toEqual(["New Clinic", "Fresh Clinic"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("builds prospect rows with priority and next action guidance", () => {
     const rows = buildProspectRows([
       {
@@ -226,10 +338,20 @@ describe("lead discovery", () => {
       }
     ]);
 
-    expect(rows.map((row) => [row.label, row.hasWebsite, row.auditStatus, row.priority, row.opportunityScore])).toEqual([
-      ["No Site Clinic", "no", "not-audited", "high", 95],
-      ["Weak Site", "yes", "success", "high", 90],
-      ["Strong Site", "yes", "success", "low", 30]
+    expect(
+      rows.map((row) => [
+        row.label,
+        row.leadKey,
+        row.hasWebsite,
+        row.auditStatus,
+        row.priority,
+        row.opportunityScore,
+        row.reviewStatus
+      ])
+    ).toEqual([
+      ["No Site Clinic", "label:manual-csv:no site clinic", "no", "not-audited", "high", 95, "new"],
+      ["Weak Site", "url:https://weak.test", "yes", "success", "high", 90, "new"],
+      ["Strong Site", "url:https://strong.test", "yes", "success", "low", 30, "new"]
     ]);
     expect(rows[0].nextAction).toContain("Build a basic website");
     expect(rows[1].nextAction).toContain("Prioritize outreach");
@@ -240,16 +362,19 @@ describe("lead discovery", () => {
     const summary = buildDiscoverySummary([
       {
         source: "manual-csv",
+        leadKey: "label:manual-csv:no site clinic",
         label: "No Site Clinic",
         profile: "dental",
         hasWebsite: "no",
         auditStatus: "not-audited",
         priority: "high",
         opportunityScore: 95,
+        reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
       },
       {
         source: "manual-csv",
+        leadKey: "url:https://weak.test",
         label: "Weak Site",
         profile: "dental",
         hasWebsite: "yes",
@@ -257,22 +382,26 @@ describe("lead discovery", () => {
         score: 45,
         priority: "high",
         opportunityScore: 90,
+        reviewStatus: "new",
         nextAction: "Prioritize outreach with the top audit issue."
       },
       {
         source: "manual-csv",
+        leadKey: "url:https://failed.test",
         label: "Failed Site",
         profile: "dental",
         hasWebsite: "yes",
         auditStatus: "failed",
         priority: "medium",
         opportunityScore: 60,
+        reviewStatus: "new",
         nextAction: "Review the site manually because the audit failed."
       }
     ]);
 
     expect(summary).toEqual({
       totalCandidates: 3,
+      suppressedCandidates: 0,
       withWebsite: 2,
       withoutWebsite: 1,
       unknownWebsite: 0,
@@ -291,6 +420,7 @@ describe("lead discovery", () => {
   it("renders prospect rows as escaped CSV", () => {
     const csv = renderProspectRowsCsv([
       {
+        leadKey: "label:manual-csv:clinic a",
         source: "manual-csv",
         label: "Clinic, A",
         profile: "dental",
@@ -298,12 +428,13 @@ describe("lead discovery", () => {
         auditStatus: "not-audited",
         opportunityScore: 95,
         priority: "high",
+        reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
       }
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,priority,nextAction,reportPath,error"
+      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
     );
     expect(csv).toContain('"Clinic, A"');
   });
@@ -311,6 +442,7 @@ describe("lead discovery", () => {
   it("neutralizes spreadsheet formulas in prospect CSV cells", () => {
     const csv = renderProspectRowsCsv([
       {
+        leadKey: "label:manual-csv:formula",
         source: "manual-csv",
         label: "=cmd|' /C calc'!A0",
         profile: "generic",
@@ -318,6 +450,7 @@ describe("lead discovery", () => {
         auditStatus: "not-audited",
         opportunityScore: 95,
         priority: "high",
+        reviewStatus: "new",
         nextAction: "+call this lead"
       }
     ]);
