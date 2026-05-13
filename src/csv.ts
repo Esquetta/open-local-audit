@@ -39,9 +39,10 @@ export function cleanInputLines(content: string): string[] {
 }
 
 export function escapeCsvCell(value: string): string {
-  if (!/[",\r\n]/.test(value)) {
-    return value;
+  const safeValue = /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
+  if (!/[",\r\n]/.test(safeValue)) {
+    return safeValue;
   }
 
-  return `"${value.replace(/"/g, '""')}"`;
+  return `"${safeValue.replace(/"/g, '""')}"`;
 }

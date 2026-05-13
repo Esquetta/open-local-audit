@@ -255,6 +255,7 @@ describe("CLI behavior helpers", () => {
       const inputPath = join(tmp, "places.csv");
       const outDir = join(tmp, "reports");
       const exportCsv = join(tmp, "leads.csv");
+      const summaryJson = join(tmp, "discovery-summary.json");
       writeFileSync(
         inputPath,
         "label,website,segment,profile\nExample Dental,https://example.test,dental,dental\nNo Site Clinic,,dental,dental\n",
@@ -278,6 +279,8 @@ describe("CLI behavior helpers", () => {
           outDir,
           "--export-csv",
           exportCsv,
+          "--summary-json",
+          summaryJson,
           "--dry-run"
         ],
         {
@@ -293,7 +296,16 @@ describe("CLI behavior helpers", () => {
       expect(csv).toContain("Example Dental");
       expect(csv).toContain("No Site Clinic");
       expect(csv).toContain("not-audited");
+      expect(csv).toContain("opportunityScore");
       expect(csv).toContain("Build a basic website");
+      expect(result.stdout).toContain("With website: 1");
+      expect(result.stdout).toContain("Without website: 1");
+      expect(JSON.parse(readFileSync(summaryJson, "utf8"))).toMatchObject({
+        totalCandidates: 2,
+        withWebsite: 1,
+        withoutWebsite: 1,
+        notAudited: 2
+      });
       expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(false);
     } finally {
       removeTempDir(tmp);
@@ -346,6 +358,52 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("limits discovery audits while preserving unaudited website-present leads", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-max-audits-"));
+    const { server, url } = await startLocalBusinessServer();
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const outDir = join(tmp, "reports");
+      const exportCsv = join(tmp, "leads.csv");
+      writeFileSync(
+        inputPath,
+        `label,website,segment,profile\nFirst Dental,${url},dental,dental\nSecond Dental,${url},dental,dental\n`,
+        "utf8"
+      );
+
+      const result = await spawnCli([
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "discover",
+        "--input",
+        inputPath,
+        "--provider",
+        "manual-csv",
+        "--profile",
+        "dental",
+        "--out-dir",
+        outDir,
+        "--export-csv",
+        exportCsv,
+        "--max-audits",
+        "1"
+      ]);
+
+      expect(result.status).toBe(0);
+      const csv = readFileSync(exportCsv, "utf8");
+      expect(csv.match(/,success,/g)).toHaveLength(1);
+      expect(csv.match(/,not-audited,/g)).toHaveLength(1);
+      expect(result.stdout).toContain("Audited: 1");
+      expect(result.stdout).toContain("Not audited: 1");
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+      removeTempDir(tmp);
+    }
+  });
+
   it("requires an API key for Google Places discovery", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-provider-"));
     try {
@@ -370,6 +428,7 @@ describe("CLI behavior helpers", () => {
       );
 
       expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Google Maps Platform billing may apply");
       expect(result.stderr).toContain("GOOGLE_MAPS_API_KEY is required when --provider google-places is used");
     } finally {
       removeTempDir(tmp);

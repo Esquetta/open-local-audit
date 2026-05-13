@@ -1,6 +1,7 @@
 export { auditUrl, auditSnapshot } from "./audit.js";
 export { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "./batch.js";
 export {
+  buildDiscoverySummary,
   buildProspectRows,
   fetchGooglePlacesCandidates,
   readManualDiscoveryCsv,
@@ -24,6 +25,7 @@ export type {
 export type {
   DiscoveryAuditResult,
   DiscoveryProviderName,
+  DiscoverySummary,
   FetchGooglePlacesCandidatesOptions,
   PlaceCandidate,
   ProspectExportRow,

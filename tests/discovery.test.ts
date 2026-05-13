@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  buildDiscoverySummary,
   buildProspectRows,
   fetchGooglePlacesCandidates,
   readManualDiscoveryCsv,
@@ -94,6 +95,7 @@ describe("lead discovery", () => {
       fetchGooglePlacesCandidates("dentist Kadikoy", {
         apiKey: "test-key",
         defaultProfile: "dental",
+        limit: 5,
         fetch: fetchLike
       })
     ).resolves.toEqual([
@@ -123,7 +125,30 @@ describe("lead discovery", () => {
       "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri"
     });
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({
-      textQuery: "dentist Kadikoy"
+      textQuery: "dentist Kadikoy",
+      maxResultCount: 5
+    });
+  });
+
+  it("clamps Google Places discovery limit to the supported range", async () => {
+    const calls: Array<RequestInit | undefined> = [];
+    const fetchLike: typeof fetch = async (_url, init) => {
+      calls.push(init);
+      return new Response(JSON.stringify({ places: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    await fetchGooglePlacesCandidates("dentist Kadikoy", {
+      apiKey: "test-key",
+      limit: 500,
+      fetch: fetchLike
+    });
+
+    expect(JSON.parse(String(calls[0]?.body))).toEqual({
+      textQuery: "dentist Kadikoy",
+      maxResultCount: 50
     });
   });
 
@@ -201,14 +226,66 @@ describe("lead discovery", () => {
       }
     ]);
 
-    expect(rows.map((row) => [row.label, row.hasWebsite, row.auditStatus, row.priority])).toEqual([
-      ["No Site Clinic", "no", "not-audited", "high"],
-      ["Weak Site", "yes", "success", "high"],
-      ["Strong Site", "yes", "success", "low"]
+    expect(rows.map((row) => [row.label, row.hasWebsite, row.auditStatus, row.priority, row.opportunityScore])).toEqual([
+      ["No Site Clinic", "no", "not-audited", "high", 95],
+      ["Weak Site", "yes", "success", "high", 90],
+      ["Strong Site", "yes", "success", "low", 30]
     ]);
     expect(rows[0].nextAction).toContain("Build a basic website");
     expect(rows[1].nextAction).toContain("Prioritize outreach");
     expect(rows[2].nextAction).toContain("Monitor");
+  });
+
+  it("builds discovery summary metrics from prospect rows", () => {
+    const summary = buildDiscoverySummary([
+      {
+        source: "manual-csv",
+        label: "No Site Clinic",
+        profile: "dental",
+        hasWebsite: "no",
+        auditStatus: "not-audited",
+        priority: "high",
+        opportunityScore: 95,
+        nextAction: "Build a basic website before deeper audit."
+      },
+      {
+        source: "manual-csv",
+        label: "Weak Site",
+        profile: "dental",
+        hasWebsite: "yes",
+        auditStatus: "success",
+        score: 45,
+        priority: "high",
+        opportunityScore: 90,
+        nextAction: "Prioritize outreach with the top audit issue."
+      },
+      {
+        source: "manual-csv",
+        label: "Failed Site",
+        profile: "dental",
+        hasWebsite: "yes",
+        auditStatus: "failed",
+        priority: "medium",
+        opportunityScore: 60,
+        nextAction: "Review the site manually because the audit failed."
+      }
+    ]);
+
+    expect(summary).toEqual({
+      totalCandidates: 3,
+      withWebsite: 2,
+      withoutWebsite: 1,
+      unknownWebsite: 0,
+      audited: 1,
+      auditFailed: 1,
+      notAudited: 1,
+      averageScore: 45,
+      priority: {
+        high: 2,
+        medium: 1,
+        low: 0
+      }
+    });
   });
 
   it("renders prospect rows as escaped CSV", () => {
@@ -219,14 +296,33 @@ describe("lead discovery", () => {
         profile: "dental",
         hasWebsite: "no",
         auditStatus: "not-audited",
+        opportunityScore: 95,
         priority: "high",
         nextAction: "Build a basic website before deeper audit."
       }
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,priority,nextAction,reportPath,error"
+      "source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,priority,nextAction,reportPath,error"
     );
     expect(csv).toContain('"Clinic, A"');
+  });
+
+  it("neutralizes spreadsheet formulas in prospect CSV cells", () => {
+    const csv = renderProspectRowsCsv([
+      {
+        source: "manual-csv",
+        label: "=cmd|' /C calc'!A0",
+        profile: "generic",
+        hasWebsite: "no",
+        auditStatus: "not-audited",
+        opportunityScore: 95,
+        priority: "high",
+        nextAction: "+call this lead"
+      }
+    ]);
+
+    expect(csv).toContain("'=cmd|' /C calc'!A0");
+    expect(csv).toContain("'+call this lead");
   });
 });

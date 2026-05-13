@@ -48,6 +48,7 @@ export interface ProspectExportRow {
   auditStatus?: "success" | "failed" | "not-audited";
   score?: number;
   topFinding?: string;
+  opportunityScore: number;
   priority: "high" | "medium" | "low";
   nextAction: string;
   reportPath?: string;
@@ -61,7 +62,20 @@ export interface ReadManualDiscoveryCsvOptions {
 export interface FetchGooglePlacesCandidatesOptions {
   apiKey?: string;
   defaultProfile?: AuditProfile;
+  limit?: number;
   fetch?: typeof fetch;
+}
+
+export interface DiscoverySummary {
+  totalCandidates: number;
+  withWebsite: number;
+  withoutWebsite: number;
+  unknownWebsite: number;
+  audited: number;
+  auditFailed: number;
+  notAudited: number;
+  averageScore?: number;
+  priority: Record<ProspectExportRow["priority"], number>;
 }
 
 interface GooglePlacesTextSearchResponse {
@@ -79,6 +93,8 @@ interface GooglePlacesTextSearchResponse {
 
 const googlePlacesTextSearchUrl = "https://places.googleapis.com/v1/places:searchText";
 const googlePlacesFieldMask = "places.id,places.displayName,places.websiteUri";
+const defaultGooglePlacesLimit = 10;
+const maxGooglePlacesLimit = 50;
 
 function firstCell(cells: string[], headers: string[], names: string[]): string | undefined {
   for (const name of names) {
@@ -106,6 +122,14 @@ function normalizeOptionalUrl(value: string | undefined): string | undefined {
   } catch {
     return value;
   }
+}
+
+function normalizeLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return defaultGooglePlacesLimit;
+  }
+
+  return Math.min(maxGooglePlacesLimit, Math.max(1, Math.floor(limit)));
 }
 
 export async function readManualDiscoveryCsv(
@@ -160,6 +184,7 @@ export async function fetchGooglePlacesCandidates(
   }
 
   const fetchImpl = options.fetch ?? fetch;
+  const limit = normalizeLimit(options.limit);
   const response = await fetchImpl(googlePlacesTextSearchUrl, {
     method: "POST",
     headers: {
@@ -168,7 +193,8 @@ export async function fetchGooglePlacesCandidates(
       "X-Goog-FieldMask": googlePlacesFieldMask
     },
     body: JSON.stringify({
-      textQuery: normalizedQuery
+      textQuery: normalizedQuery,
+      maxResultCount: limit
     })
   });
   const payload = (await response.json()) as GooglePlacesTextSearchResponse;
@@ -177,7 +203,7 @@ export async function fetchGooglePlacesCandidates(
     throw new Error(payload.error?.message ?? `Google Places Text Search failed with HTTP ${response.status}`);
   }
 
-  return (payload.places ?? []).map((place) => ({
+  return (payload.places ?? []).slice(0, limit).map((place) => ({
     source: "google-places",
     sourceId: place.id,
     query: normalizedQuery,
@@ -272,6 +298,35 @@ function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority
   };
 }
 
+function opportunityScoreFor(input: ProspectRowInput): number {
+  if (input.resolution.status === "missing") {
+    return 95;
+  }
+
+  if (input.resolution.status === "invalid") {
+    return 70;
+  }
+
+  if (input.audit?.status === "failed") {
+    return 60;
+  }
+
+  if (input.audit?.status === "success") {
+    const score = input.audit.score ?? 0;
+    if (score < 60) {
+      return 90;
+    }
+
+    if (score < 80) {
+      return 65;
+    }
+
+    return 30;
+  }
+
+  return input.resolution.hasWebsite ? 55 : 95;
+}
+
 function hasWebsiteValue(resolution: WebsiteResolution): ProspectExportRow["hasWebsite"] {
   if (resolution.status === "resolved") {
     return "yes";
@@ -300,11 +355,33 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       auditStatus: audit.status,
       score: audit.score,
       topFinding: audit.topFinding,
+      opportunityScore: opportunityScoreFor(input),
       ...priority,
       reportPath: audit.reportPath,
       error: audit.error ?? input.resolution.reason
     };
   });
+}
+
+export function buildDiscoverySummary(rows: ProspectExportRow[]): DiscoverySummary {
+  const scores = rows.flatMap((row) => (row.auditStatus === "success" && row.score !== undefined ? [row.score] : []));
+
+  return {
+    totalCandidates: rows.length,
+    withWebsite: rows.filter((row) => row.hasWebsite === "yes").length,
+    withoutWebsite: rows.filter((row) => row.hasWebsite === "no").length,
+    unknownWebsite: rows.filter((row) => row.hasWebsite === "unknown").length,
+    audited: rows.filter((row) => row.auditStatus === "success").length,
+    auditFailed: rows.filter((row) => row.auditStatus === "failed").length,
+    notAudited: rows.filter((row) => row.auditStatus === "not-audited").length,
+    averageScore:
+      scores.length > 0 ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : undefined,
+    priority: {
+      high: rows.filter((row) => row.priority === "high").length,
+      medium: rows.filter((row) => row.priority === "medium").length,
+      low: rows.filter((row) => row.priority === "low").length
+    }
+  };
 }
 
 export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
@@ -319,6 +396,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
     "auditStatus",
     "score",
     "topFinding",
+    "opportunityScore",
     "priority",
     "nextAction",
     "reportPath",
@@ -336,6 +414,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.auditStatus ?? "",
       row.score?.toString() ?? "",
       row.topFinding ?? "",
+      row.opportunityScore.toString(),
       row.priority,
       row.nextAction,
       row.reportPath ?? "",

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
 import {
+  buildDiscoverySummary,
   buildProspectRows,
   fetchGooglePlacesCandidates,
   readManualDiscoveryCsv,
@@ -28,7 +29,10 @@ const discoveryProgram = program
   .option("--profile <profile>", "default industry profile for candidates", "generic")
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--export-csv <path>", "write lead discovery CSV output")
+  .option("--summary-json <path>", "write discovery summary JSON output")
   .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
+  .option("--limit <count>", "maximum Google Places candidates to request", "10")
+  .option("--max-audits <count>", "maximum website-present candidates to audit")
   .option("--concurrency <count>", "maximum concurrent audits when dry-run is not used", "1")
   .addHelpText(
     "after",
@@ -47,6 +51,18 @@ function preferredReportPath(slug: string, outputs: Array<{ format: string; path
   return preferred?.path ? `${slug}/${preferred.path.split(/[\\/]/).pop()}` : undefined;
 }
 
+function renderDiscoverySummary(summary: ReturnType<typeof buildDiscoverySummary>): string {
+  return [
+    `With website: ${summary.withWebsite}`,
+    `Without website: ${summary.withoutWebsite}`,
+    `Unknown website: ${summary.unknownWebsite}`,
+    `Audited: ${summary.audited}`,
+    `Audit failed: ${summary.auditFailed}`,
+    `Not audited: ${summary.notAudited}`,
+    `Average score: ${summary.averageScore ?? "N/A"}`
+  ].join("\n");
+}
+
 discoveryProgram.action(async (query?: string) => {
   try {
     const rawDiscoveryOptions = {
@@ -61,7 +77,10 @@ discoveryProgram.action(async (query?: string) => {
         exportCsv: true,
         dryRun: true,
         concurrency: true,
-        provider: true
+        provider: true,
+        limit: true,
+        maxAudits: true,
+        summaryJson: true
       })
       .parse(rawDiscoveryOptions);
 
@@ -87,6 +106,10 @@ discoveryProgram.action(async (query?: string) => {
       throw new Error("--input is only supported when --provider manual-csv is used");
     }
 
+    if (options.provider === "google-places") {
+      process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
+    }
+
     const candidates =
       options.provider === "manual-csv"
         ? await readManualDiscoveryCsv(options.input ?? "", {
@@ -94,7 +117,8 @@ discoveryProgram.action(async (query?: string) => {
           })
         : await fetchGooglePlacesCandidates(query ?? "", {
             apiKey: process.env.GOOGLE_MAPS_API_KEY,
-            defaultProfile: options.profile
+            defaultProfile: options.profile,
+            limit: options.limit
           });
 
     const resolutions = candidates.map(resolveCandidateWebsite);
@@ -106,7 +130,8 @@ discoveryProgram.action(async (query?: string) => {
     if (!options.dryRun) {
       const auditable = prospectInputs
         .map((input, index) => ({ ...input, index }))
-        .filter((input) => input.resolution.status === "resolved" && input.resolution.websiteUrl);
+        .filter((input) => input.resolution.status === "resolved" && input.resolution.websiteUrl)
+        .slice(0, options.maxAudits);
 
       const auditResults = await runBatchReports(
         auditable.map((input) => ({
@@ -158,7 +183,13 @@ discoveryProgram.action(async (query?: string) => {
     const rows = buildProspectRows(prospectInputs);
     await mkdir(dirname(options.exportCsv), { recursive: true });
     await writeFile(options.exportCsv, renderProspectRowsCsv(rows), "utf8");
+    const summary = buildDiscoverySummary(rows);
+    if (options.summaryJson) {
+      await mkdir(dirname(options.summaryJson), { recursive: true });
+      await writeFile(options.summaryJson, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    }
     process.stdout.write(`Discovered ${rows.length} lead${rows.length === 1 ? "" : "s"}\n`);
+    process.stdout.write(`${renderDiscoverySummary(summary)}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     process.stderr.write(`open-local-audit: ${message}\n`);
