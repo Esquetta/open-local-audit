@@ -157,6 +157,10 @@ Deliverables:
 - Review columns for local operator decisions: `reviewStatus`, `reviewReason`, and `lastReviewedAt`.
 - `--suppression-list <path>` for skipping previously rejected, contacted, not-fit, do-not-contact, or suppressed leads.
 - `--min-opportunity-score <score>` for exporting only higher-value discovery candidates.
+- `--review-csv <path>` for merging local operator review state across discovery reruns.
+- `--duplicates-json <path>` for reporting exact duplicate lead groups.
+- Lawyer, clinic, gym, hotel, and auto-service industry profiles.
+- Polished standalone HTML reports with branded summary cards.
 - Suppression counts in terminal and summary JSON output.
 
 Exit criteria:
@@ -164,11 +168,12 @@ Exit criteria:
 - Suppressed candidates are excluded before website audits run.
 - Rows with `reviewStatus=new` remain eligible for future discovery runs.
 - Opportunity-score filtering is covered by CLI tests.
+- Existing review decisions survive reruns in the review CSV.
+- Duplicate reports group exact stable lead-key matches.
 
 ## Deferred work
 
 - Web UI.
-- Broader profile-specific rule packs.
 - Lighthouse integration.
 - Branded PDF reports.
 - SaaS dashboard.

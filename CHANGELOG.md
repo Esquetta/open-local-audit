@@ -4,9 +4,15 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.12.0 - 2026-05-14
+
 - Added discovery suppression lists with `--suppression-list` to skip previously reviewed leads.
 - Added `leadKey`, `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns to discovery CSV exports for local review workflows.
 - Added `--min-opportunity-score` for filtering discovery exports to higher-value opportunities.
+- Added `--review-csv` for merging local operator review decisions across discovery reruns.
+- Added `--duplicates-json` for reporting duplicate lead groups.
+- Added lawyer, clinic, gym, hotel, and auto-service industry profiles.
+- Polished HTML reports with a branded shell, summary cards, and stronger visual hierarchy.
 - Added Windows user-environment fallback for `GOOGLE_MAPS_API_KEY`.
 
 ## v0.11.0 - 2026-05-13

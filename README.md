@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, and write summary JSON.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, and report duplicate lead groups.
 
 ## Business purpose
 
@@ -77,6 +77,8 @@ Run with an industry profile:
 ```bash
 open-local-audit https://example.com --profile dental --format markdown
 ```
+
+Supported profiles are `generic`, `dental`, `beauty`, `restaurant`, `contractor`, `lawyer`, `clinic`, `gym`, `hotel`, and `auto-service`.
 
 Render the page before auditing when static HTML is not enough:
 
@@ -180,9 +182,15 @@ Skip previously reviewed leads and keep only stronger opportunities:
 open-local-audit discover --input places.csv --provider manual-csv --suppression-list reviewed-leads.csv --min-opportunity-score 90 --dry-run --export-csv leads.csv
 ```
 
+Maintain a review queue and duplicate report across reruns:
+
+```bash
+open-local-audit discover --input places.csv --provider manual-csv --review-csv review.csv --duplicates-json duplicates.json --dry-run --export-csv leads.csv
+```
+
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
-Discovery CSV exports include `leadKey`, `opportunityScore`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. Spreadsheet formula-like cell values are neutralized before export.
+Discovery CSV exports include `leadKey`, `opportunityScore`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -206,7 +214,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Batch index filtering, sorting, and top-N triage controls.
 - Controlled parallel batch audits with `--concurrency`.
 - Batch index insights for average score, profile breakdown, segment breakdown, and frequent findings.
-- Industry profiles for generic, dental, beauty, restaurant, and contractor audits.
+- Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
 - Prospect CSV export with profile, score, top finding, report path, and error columns.
 - Optional rendered DOM audits with `--render`.
@@ -238,6 +246,8 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.
 - `--max-audits` limits website audits only; all discovered candidates still appear in `leads.csv`.
 - `--suppression-list` uses exact lead identity matching; source IDs are preferred, then normalized website URLs, then normalized labels.
+- `--review-csv` is local operator state only; it does not send outreach or sync to a CRM.
+- `--duplicates-json` reports exact lead-key duplicates, not fuzzy business-name matches.
 - Batch input requires `--out-dir` and cannot be combined with a positional URL.
 - Industry profiles are deterministic vertical heuristics, not a replacement for a human review of each business model.
 - Higher `--concurrency` values can increase network load against audited sites; use conservative values for prospect batches.

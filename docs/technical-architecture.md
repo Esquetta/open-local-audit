@@ -101,6 +101,7 @@ discover "dentists in Boston" --provider google-places
   -> Operator-controlled candidate and audit caps
   -> Optional summary JSON for release evidence
   -> Local suppression and review-state fields
+  -> Optional review CSV and duplicate JSON outputs
 ```
 
 Responsibilities:
@@ -110,8 +111,10 @@ Responsibilities:
 - Mark each candidate as website present, missing, invalid, skipped, or error.
 - Reuse the existing audit pipeline for website-present rows.
 - Export `leads.csv` with lead identity, website status, opportunity score, review status, priority, next action, and report path.
-- Support `--limit`, `--max-audits`, `--min-opportunity-score`, `--suppression-list`, `--dry-run`, and `--summary-json` for controlled local triage.
+- Support `--limit`, `--max-audits`, `--min-opportunity-score`, `--suppression-list`, `--review-csv`, `--duplicates-json`, `--dry-run`, and `--summary-json` for controlled local triage.
 - Filter suppressed candidates before running website audits.
+- Preserve operator review decisions across reruns in a separate review CSV.
+- Report exact stable lead-key duplicate groups when requested.
 - Neutralize formula-like CSV cells before export.
 - Keep review and outreach decisions manual.
 

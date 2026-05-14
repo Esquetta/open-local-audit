@@ -94,6 +94,10 @@ Before releasing suppression and review workflow controls:
 - [x] Suppressed candidates are filtered before website audits run.
 - [x] Summary output includes suppressed candidate counts.
 - [x] Opportunity-score filtering is covered by CLI tests.
+- [x] Review CSV output preserves prior operator decisions and adds new leads as pending.
+- [x] Duplicate JSON output groups exact stable lead-key matches.
+- [x] Expanded industry profiles are covered by profile regression tests.
+- [x] HTML report polish is covered by renderer tests.
 
 Add project-specific commands once implementation starts.
 
@@ -103,21 +107,22 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.11.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.12.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.11.0` after:
+Use `v0.12.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
 - batch index filtering and sorting are verified,
 - profile-aware batch input, controlled concurrency, aggregate batch insights, and prospect CSV export are verified,
-- dental, beauty, restaurant, and contractor profile-specific findings are covered by regression tests,
+- dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service profile-specific findings are covered by regression tests,
 - manual CSV discovery, official Google Places discovery, and local prospect CSV export are verified,
 - Google Places missing-key behavior, strict field masks, mocked candidate mapping, dry-run, and audit handoff are verified,
 - discovery limits, audit caps, summary JSON, opportunity scoring, and CSV formula hardening are verified,
+- discovery review CSV, duplicate JSON, suppression, and opportunity filters are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
