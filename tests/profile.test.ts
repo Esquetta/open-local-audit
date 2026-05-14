@@ -45,11 +45,32 @@ describe("industry profile support", () => {
     "restaurant-menu-signal",
     "restaurant-reservation-order-signal",
     "contractor-estimate-cta",
-    "contractor-license-insured-service-area-cue"
+    "contractor-license-insured-service-area-cue",
+    "lawyer-consultation-cta",
+    "lawyer-practice-area-cue",
+    "clinic-appointment-cta",
+    "clinic-insurance-patient-cue",
+    "gym-trial-membership-cta",
+    "gym-class-schedule-cue",
+    "hotel-booking-availability-cta",
+    "hotel-amenities-location-cue",
+    "auto-service-appointment-cta",
+    "auto-service-repair-trust-cue"
   ];
 
   it("supports all released profiles in CLI options", () => {
-    for (const profile of ["generic", "dental", "beauty", "restaurant", "contractor"]) {
+    for (const profile of [
+      "generic",
+      "dental",
+      "beauty",
+      "restaurant",
+      "contractor",
+      "lawyer",
+      "clinic",
+      "gym",
+      "hotel",
+      "auto-service"
+    ]) {
       expect((cliOptionsSchema.parse({ profile } as any) as any).profile).toBe(profile);
     }
   });
@@ -91,6 +112,26 @@ describe("industry profile support", () => {
       {
         profile: "contractor",
         expectedIds: ["contractor-estimate-cta", "contractor-license-insured-service-area-cue"]
+      },
+      {
+        profile: "lawyer",
+        expectedIds: ["lawyer-consultation-cta", "lawyer-practice-area-cue"]
+      },
+      {
+        profile: "clinic",
+        expectedIds: ["clinic-appointment-cta", "clinic-insurance-patient-cue"]
+      },
+      {
+        profile: "gym",
+        expectedIds: ["gym-trial-membership-cta", "gym-class-schedule-cue"]
+      },
+      {
+        profile: "hotel",
+        expectedIds: ["hotel-booking-availability-cta", "hotel-amenities-location-cue"]
+      },
+      {
+        profile: "auto-service",
+        expectedIds: ["auto-service-appointment-cta", "auto-service-repair-trust-cue"]
       }
     ];
 
@@ -170,6 +211,56 @@ describe("industry profile support", () => {
           <p>Licensed and insured contractor serving the Kadikoy service area.</p>
         `,
         expectedAbsentIds: ["contractor-estimate-cta", "contractor-license-insured-service-area-cue"]
+      },
+      {
+        profile: "lawyer",
+        marker: "Lawyer profile example",
+        body: `
+          <h1>Lawyer profile example</h1>
+          <a href="/consultation">Book a consultation</a>
+          <p>Practice areas include family law, immigration, and business law.</p>
+        `,
+        expectedAbsentIds: ["lawyer-consultation-cta", "lawyer-practice-area-cue"]
+      },
+      {
+        profile: "clinic",
+        marker: "Clinic profile example",
+        body: `
+          <h1>Clinic profile example</h1>
+          <a href="/appointments">Schedule an appointment</a>
+          <p>New patients can use insurance and patient forms before the visit.</p>
+        `,
+        expectedAbsentIds: ["clinic-appointment-cta", "clinic-insurance-patient-cue"]
+      },
+      {
+        profile: "gym",
+        marker: "Gym profile example",
+        body: `
+          <h1>Gym profile example</h1>
+          <a href="/trial">Start a free trial membership</a>
+          <p>See our class schedule for yoga, strength, and personal training.</p>
+        `,
+        expectedAbsentIds: ["gym-trial-membership-cta", "gym-class-schedule-cue"]
+      },
+      {
+        profile: "hotel",
+        marker: "Hotel profile example",
+        body: `
+          <h1>Hotel profile example</h1>
+          <a href="/book">Check availability and book a room</a>
+          <p>Amenities include breakfast, parking, Wi-Fi, and easy airport access.</p>
+        `,
+        expectedAbsentIds: ["hotel-booking-availability-cta", "hotel-amenities-location-cue"]
+      },
+      {
+        profile: "auto-service",
+        marker: "Auto service profile example",
+        body: `
+          <h1>Auto service profile example</h1>
+          <a href="/service">Schedule service</a>
+          <p>Certified mechanics handle brake repair, oil changes, diagnostics, and warranty work.</p>
+        `,
+        expectedAbsentIds: ["auto-service-appointment-cta", "auto-service-repair-trust-cue"]
       }
     ];
 

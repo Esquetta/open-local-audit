@@ -116,6 +116,9 @@ export function renderMarkdownReport(report: AuditReport): string {
 
 export function renderHtmlReport(report: AuditReport): string {
   const findings = [...report.findings].sort((left, right) => severityRank(left) - severityRank(right));
+  const overallScore = Math.round(
+    Object.values(report.scores).reduce((total, score) => total + score.score, 0) / Object.values(report.scores).length
+  );
   const scoreRows = Object.values(report.scores)
     .map((score) => `<tr><td>${escapeHtml(score.label)}</td><td>${score.score}/${score.max}</td></tr>`)
     .join("\n");
@@ -140,16 +143,36 @@ export function renderHtmlReport(report: AuditReport): string {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Open Local Audit Report - ${escapeHtml(report.finalUrl)}</title>
     <style>
-      body { color: #172026; font-family: Arial, sans-serif; line-height: 1.5; margin: 2rem; }
+      :root { color-scheme: light; --ink: #172026; --muted: #5f6b75; --line: #d8dee5; --panel: #f6f8fa; --brand: #145a73; --accent: #2f7d5f; }
+      * { box-sizing: border-box; }
+      body { background: #eef2f5; color: var(--ink); font-family: Arial, sans-serif; line-height: 1.5; margin: 0; }
+      .report-shell { max-width: 1120px; margin: 0 auto; padding: 2rem; }
+      .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; }
+      .eyebrow { color: var(--brand); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      .meta { color: var(--muted); }
+      .score-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 1rem 0; }
+      .score-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1rem; }
+      .score-card strong { display: block; font-size: 1.8rem; }
+      section { background: #ffffff; border: 1px solid var(--line); border-radius: 8px; margin-top: 1rem; padding: 1.25rem; }
       table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #d4d9dd; padding: 0.5rem; text-align: left; vertical-align: top; }
-      th { background: #f3f5f7; }
-      .meta { color: #51606a; }
+      th, td { border-bottom: 1px solid var(--line); padding: 0.65rem; text-align: left; vertical-align: top; }
+      th { background: var(--panel); color: var(--muted); font-size: 0.82rem; text-transform: uppercase; }
+      tr:last-child td { border-bottom: 0; }
     </style>
   </head>
   <body>
-    <h1>Open Local Audit Report</h1>
-    <p class="meta">URL: ${escapeHtml(report.url)}<br>Final URL: ${escapeHtml(report.finalUrl)}<br>Scanned at: ${escapeHtml(report.scannedAt)}<br>Status code: ${report.statusCode}<br>Profile: ${escapeHtml(report.profile ?? "generic")}</p>
+    <main class="report-shell">
+    <header class="hero">
+      <div class="eyebrow">Open Local Audit</div>
+      <h1>Open Local Audit Report</h1>
+      <p class="meta">URL: ${escapeHtml(report.url)}<br>Final URL: ${escapeHtml(report.finalUrl)}<br>Scanned at: ${escapeHtml(report.scannedAt)}<br>Status code: ${report.statusCode}<br>Profile: ${escapeHtml(report.profile ?? "generic")}</p>
+      <div class="score-grid" aria-label="Overall Health">
+        <div class="score-card"><span>Overall Health</span><strong>${overallScore}/100</strong></div>
+        <div class="score-card"><span>Priority Findings</span><strong>${report.summary.high + report.summary.medium}</strong></div>
+        <div class="score-card"><span>Total Findings</span><strong>${report.summary.totalFindings}</strong></div>
+      </div>
+    </header>
+    <section>
     <h2>Score Summary</h2>
     <table>
       <thead><tr><th>Category</th><th>Score</th></tr></thead>
@@ -157,17 +180,23 @@ export function renderHtmlReport(report: AuditReport): string {
 ${scoreRows}
       </tbody>
     </table>
-${visualEvidence}    <h2>Findings</h2>
+    </section>
+${visualEvidence}    <section>
+    <h2>Findings</h2>
     <table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>
       <tbody>
 ${findingRows}
       </tbody>
     </table>
+    </section>
+    <section>
     <h2>Recommendations</h2>
     <ul>
 ${recommendations}
     </ul>
+    </section>
+    </main>
   </body>
 </html>
 `;

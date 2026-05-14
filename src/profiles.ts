@@ -1,7 +1,18 @@
 import { load, type CheerioAPI } from "cheerio";
 import type { AuditProfile, Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
-export const auditProfiles: AuditProfile[] = ["generic", "dental", "beauty", "restaurant", "contractor"];
+export const auditProfiles: AuditProfile[] = [
+  "generic",
+  "dental",
+  "beauty",
+  "restaurant",
+  "contractor",
+  "lawyer",
+  "clinic",
+  "gym",
+  "hotel",
+  "auto-service"
+];
 
 type FindingOverride = {
   severity?: Finding["severity"];
@@ -48,7 +59,12 @@ const profileOverrides: Record<Exclude<AuditProfile, "generic">, Record<string, 
       severity: "high",
       recommendation: "List concrete services, project types, and service-area coverage so contractor leads can qualify quickly."
     }
-  }
+  },
+  lawyer: {},
+  clinic: {},
+  gym: {},
+  hotel: {},
+  "auto-service": {}
 };
 
 function hasAction($: CheerioAPI, pattern: RegExp): boolean {
@@ -188,6 +204,119 @@ const profileFindingRules: Record<Exclude<AuditProfile, "generic">, ProfileFindi
         /\b(licensed|license|insured|insurance|bonded)\b/i.test(text) &&
         /\b(service area|serving|serves|coverage area|available in)\b/i.test(text),
       evidence: "No combined license, insurance, and service-area cue found"
+    }
+  ],
+  lawyer: [
+    {
+      id: "lawyer-consultation-cta",
+      title: "Legal consultation CTA is missing",
+      category: "trust-contact",
+      severity: "high",
+      source: "lawyer profile",
+      recommendation: "Add a consultation CTA so legal prospects know how to request an initial review.",
+      isPresent: ({ $ }) => hasAction($, /\b(consultation|case review|book|schedule|contact attorney|speak with)\b/i),
+      evidence: "No legal consultation or case-review CTA found"
+    },
+    {
+      id: "lawyer-practice-area-cue",
+      title: "Practice-area cue is missing",
+      category: "trust-contact",
+      severity: "medium",
+      source: "lawyer profile",
+      recommendation: "List practice areas so visitors can quickly confirm whether the firm handles their legal need.",
+      isPresent: ({ text }) =>
+        /\b(practice areas?|family law|immigration|criminal defense|business law|estate|injury|litigation)\b/i.test(text),
+      evidence: "No clear legal practice-area cue found"
+    }
+  ],
+  clinic: [
+    {
+      id: "clinic-appointment-cta",
+      title: "Clinic appointment CTA is missing",
+      category: "trust-contact",
+      severity: "high",
+      source: "clinic profile",
+      recommendation: "Add an appointment CTA so patients can schedule care without searching for the next step.",
+      isPresent: ({ $ }) => hasAction($, /\b(appointment|schedule|book|visit|new patient)\b/i),
+      evidence: "No clinic appointment or scheduling CTA found"
+    },
+    {
+      id: "clinic-insurance-patient-cue",
+      title: "Clinic insurance or patient cue is missing",
+      category: "trust-contact",
+      severity: "medium",
+      source: "clinic profile",
+      recommendation: "Mention insurance, new patient forms, or patient intake details so visitors can prepare before booking.",
+      isPresent: ({ text }) => /\b(insurance|new patients?|patient forms?|intake|accepted plans?)\b/i.test(text),
+      evidence: "No clinic insurance, patient form, or intake cue found"
+    }
+  ],
+  gym: [
+    {
+      id: "gym-trial-membership-cta",
+      title: "Gym trial or membership CTA is missing",
+      category: "trust-contact",
+      severity: "high",
+      source: "gym profile",
+      recommendation: "Add a trial, membership, or signup CTA so fitness prospects can start quickly.",
+      isPresent: ({ $ }) => hasAction($, /\b(trial|membership|join|sign up|signup|start)\b/i),
+      evidence: "No gym trial, membership, or signup CTA found"
+    },
+    {
+      id: "gym-class-schedule-cue",
+      title: "Gym class schedule cue is missing",
+      category: "trust-contact",
+      severity: "medium",
+      source: "gym profile",
+      recommendation: "Show class schedules, training options, or program details so visitors can evaluate fit.",
+      isPresent: ({ text }) => /\b(class schedule|classes|personal training|programs?|yoga|strength|training)\b/i.test(text),
+      evidence: "No class schedule, training, or program cue found"
+    }
+  ],
+  hotel: [
+    {
+      id: "hotel-booking-availability-cta",
+      title: "Hotel booking or availability CTA is missing",
+      category: "trust-contact",
+      severity: "high",
+      source: "hotel profile",
+      recommendation: "Add a booking or availability CTA so guests can check rooms without extra friction.",
+      isPresent: ({ $ }) => hasAction($, /\b(book|booking|availability|reserve|rooms?|check in)\b/i),
+      evidence: "No hotel booking, room, or availability CTA found"
+    },
+    {
+      id: "hotel-amenities-location-cue",
+      title: "Hotel amenities or location cue is missing",
+      category: "trust-contact",
+      severity: "medium",
+      source: "hotel profile",
+      recommendation: "Mention amenities and location advantages so guests can compare the property quickly.",
+      isPresent: ({ text }) =>
+        /\b(amenities|breakfast|parking|wi-?fi|pool|airport|city center|nearby|location)\b/i.test(text),
+      evidence: "No amenities or location advantage cue found"
+    }
+  ],
+  "auto-service": [
+    {
+      id: "auto-service-appointment-cta",
+      title: "Auto service appointment CTA is missing",
+      category: "trust-contact",
+      severity: "high",
+      source: "auto-service profile",
+      recommendation: "Add a service appointment CTA so vehicle owners can book repair or maintenance.",
+      isPresent: ({ $ }) => hasAction($, /\b(schedule|appointment|service|book|repair|maintenance)\b/i),
+      evidence: "No auto service appointment or repair CTA found"
+    },
+    {
+      id: "auto-service-repair-trust-cue",
+      title: "Auto service repair trust cue is missing",
+      category: "trust-contact",
+      severity: "medium",
+      source: "auto-service profile",
+      recommendation: "Mention repairs, certified mechanics, warranty, diagnostics, or maintenance services to build trust.",
+      isPresent: ({ text }) =>
+        /\b(certified|mechanic|warranty|diagnostics?|brake|oil change|repair|maintenance)\b/i.test(text),
+      evidence: "No repair, certification, warranty, or maintenance cue found"
     }
   ]
 };

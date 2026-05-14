@@ -54,6 +54,9 @@ describe("report renderers", () => {
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("<title>Open Local Audit Report");
+    expect(html).toContain('class="report-shell"');
+    expect(html).toContain("Overall Health");
+    expect(html).toContain("Priority Findings");
     expect(html).toContain("Profile: generic");
     expect(html).toContain("Score Summary");
     expect(html).toContain("Findings");

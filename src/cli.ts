@@ -7,12 +7,17 @@ import { readBatchInput, runBatchReports } from "./batch.js";
 import {
   buildDiscoverySummary,
   buildProspectRows,
+  findDuplicateProspectGroups,
   fetchGooglePlacesCandidates,
   filterSuppressedProspects,
+  mergeDiscoveryReviewRows,
   readLeadSuppressionCsv,
+  readLeadReviewCsv,
   readManualDiscoveryCsv,
+  renderDiscoveryReviewCsv,
   renderProspectRowsCsv,
   resolveCandidateWebsite,
+  type LeadReviewRow,
   type ProspectRowInput
 } from "./discovery.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
@@ -34,6 +39,8 @@ const discoveryProgram = program
   .option("--export-csv <path>", "write lead discovery CSV output")
   .option("--summary-json <path>", "write discovery summary JSON output")
   .option("--suppression-list <path>", "read reviewed or suppressed lead identities from a CSV file")
+  .option("--review-csv <path>", "write or merge a local discovery review queue CSV")
+  .option("--duplicates-json <path>", "write duplicate lead groups as JSON")
   .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
   .option("--limit <count>", "maximum Google Places candidates to request", "10")
   .option("--max-audits <count>", "maximum website-present candidates to audit")
@@ -69,6 +76,22 @@ function renderDiscoverySummary(summary: ReturnType<typeof buildDiscoverySummary
   ].join("\n");
 }
 
+async function readOptionalReviewCsv(path: string | undefined): Promise<LeadReviewRow[]> {
+  if (!path) {
+    return [];
+  }
+
+  try {
+    return await readLeadReviewCsv(path);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
 discoveryProgram.action(async (query?: string) => {
   try {
     const rawDiscoveryOptions = {
@@ -88,6 +111,8 @@ discoveryProgram.action(async (query?: string) => {
         maxAudits: true,
         summaryJson: true,
         suppressionList: true,
+        reviewCsv: true,
+        duplicatesJson: true,
         minOpportunityScore: true
       })
       .parse(rawDiscoveryOptions);
@@ -134,7 +159,11 @@ discoveryProgram.action(async (query?: string) => {
       candidate,
       resolution: resolutions[index]
     }));
-    const suppressionEntries = options.suppressionList ? await readLeadSuppressionCsv(options.suppressionList) : [];
+    const existingReviewRows = await readOptionalReviewCsv(options.reviewCsv);
+    const suppressionEntries = [
+      ...(options.suppressionList ? await readLeadSuppressionCsv(options.suppressionList) : []),
+      ...existingReviewRows
+    ];
     const suppressionResult = filterSuppressedProspects(prospectInputs, suppressionEntries);
     prospectInputs = suppressionResult.included;
 
@@ -196,6 +225,18 @@ discoveryProgram.action(async (query?: string) => {
     );
     await mkdir(dirname(options.exportCsv), { recursive: true });
     await writeFile(options.exportCsv, renderProspectRowsCsv(rows), "utf8");
+    if (options.reviewCsv) {
+      await mkdir(dirname(options.reviewCsv), { recursive: true });
+      await writeFile(options.reviewCsv, renderDiscoveryReviewCsv(mergeDiscoveryReviewRows(rows, existingReviewRows)), "utf8");
+    }
+    if (options.duplicatesJson) {
+      await mkdir(dirname(options.duplicatesJson), { recursive: true });
+      await writeFile(
+        options.duplicatesJson,
+        `${JSON.stringify({ duplicateGroups: findDuplicateProspectGroups(rows) }, null, 2)}\n`,
+        "utf8"
+      );
+    }
     const summary = buildDiscoverySummary(rows, suppressionResult.suppressedCount);
     if (options.summaryJson) {
       await mkdir(dirname(options.summaryJson), { recursive: true });
@@ -223,7 +264,7 @@ program
   .option("--top <count>", "limit the batch index to the top N entries after filtering and sorting")
   .option("--sort <sort>", "batch index sort: score-asc or severity-desc")
   .option("--concurrency <count>", "maximum concurrent batch audits", "1")
-  .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, or contractor", "generic")
+  .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, or auto-service", "generic")
   .option("--export-csv <path>", "write a batch prospect CSV export")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--max-redirects <count>", "maximum redirects to follow", "5")

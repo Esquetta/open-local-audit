@@ -66,6 +66,27 @@ export interface LeadSuppressionEntry {
   lastReviewedAt?: string;
 }
 
+export interface LeadReviewRow {
+  leadKey: string;
+  source: string;
+  sourceId?: string;
+  label?: string;
+  websiteUrl?: string;
+  reviewStatus: string;
+  reviewReason?: string;
+  lastReviewedAt?: string;
+  opportunityScore?: number;
+  priority?: ProspectExportRow["priority"];
+  nextAction?: string;
+}
+
+export interface DuplicateProspectGroup {
+  leadKey: string;
+  count: number;
+  labels: string[];
+  sources: string[];
+}
+
 export interface ReadManualDiscoveryCsvOptions {
   defaultProfile?: AuditProfile;
 }
@@ -241,6 +262,50 @@ export async function readLeadSuppressionCsv(path: string): Promise<LeadSuppress
   });
 }
 
+export async function readLeadReviewCsv(path: string): Promise<LeadReviewRow[]> {
+  const content = await readFile(path, "utf8");
+  const lines = cleanInputLines(content);
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const [rawHeader, ...rows] = lines;
+  const headers = parseCsvLine(rawHeader).map((header) => header.trim().toLowerCase());
+  return rows.flatMap((row) => {
+    const cells = parseCsvLine(row);
+    const explicitLeadKey = firstCell(cells, headers, ["leadkey", "lead_key"]);
+    const source = firstCell(cells, headers, ["source"]) ?? "manual-csv";
+    const sourceId = firstCell(cells, headers, ["sourceid", "source_id", "placeid", "place_id"]);
+    const websiteUrl = normalizeIdentityUrl(firstCell(cells, headers, ["websiteurl", "website_url", "website", "url"]));
+    const label = normalizeLabel(firstCell(cells, headers, ["label", "name", "business"]));
+    const leadKey =
+      explicitLeadKey ??
+      (sourceId ? `${source}:${sourceId}` : undefined) ??
+      (websiteUrl ? `url:${websiteUrl}` : undefined) ??
+      (label ? `label:${source}:${label}` : undefined);
+
+    if (!leadKey) {
+      return [];
+    }
+
+    return [
+      {
+        leadKey,
+        source,
+        sourceId,
+        label: firstCell(cells, headers, ["label", "name", "business"]),
+        websiteUrl: firstCell(cells, headers, ["websiteurl", "website_url", "website", "url"]),
+        reviewStatus: firstCell(cells, headers, ["reviewstatus", "review_status"]) ?? "pending",
+        reviewReason: firstCell(cells, headers, ["reviewreason", "review_reason"]),
+        lastReviewedAt: firstCell(cells, headers, ["lastreviewedat", "last_reviewed_at"]),
+        opportunityScore: Number(firstCell(cells, headers, ["opportunityscore", "opportunity_score"])) || undefined,
+        priority: firstCell(cells, headers, ["priority"]) as ProspectExportRow["priority"] | undefined,
+        nextAction: firstCell(cells, headers, ["nextaction", "next_action"])
+      }
+    ];
+  });
+}
+
 export async function fetchGooglePlacesCandidates(
   query: string,
   options: FetchGooglePlacesCandidatesOptions = {}
@@ -348,6 +413,57 @@ export function filterSuppressedProspects(
     included,
     suppressedCount: inputs.length - included.length
   };
+}
+
+function reviewRowForProspect(row: ProspectExportRow, existing?: LeadReviewRow): LeadReviewRow {
+  return {
+    leadKey: row.leadKey,
+    source: row.source,
+    sourceId: row.sourceId,
+    label: row.label,
+    websiteUrl: row.websiteUrl,
+    reviewStatus: existing?.reviewStatus ?? "pending",
+    reviewReason: existing?.reviewReason,
+    lastReviewedAt: existing?.lastReviewedAt,
+    opportunityScore: row.opportunityScore,
+    priority: row.priority,
+    nextAction: row.nextAction
+  };
+}
+
+export function mergeDiscoveryReviewRows(rows: ProspectExportRow[], existingRows: LeadReviewRow[] = []): LeadReviewRow[] {
+  const currentByKey = new Map(rows.map((row) => [row.leadKey, row]));
+  const existingByKey = new Map(existingRows.map((row) => [row.leadKey, row]));
+  const merged = existingRows.map((existing) => {
+    const current = currentByKey.get(existing.leadKey);
+    return current ? reviewRowForProspect(current, existing) : existing;
+  });
+
+  for (const row of rows) {
+    if (!existingByKey.has(row.leadKey)) {
+      merged.push(reviewRowForProspect(row));
+    }
+  }
+
+  return merged;
+}
+
+export function findDuplicateProspectGroups(rows: ProspectExportRow[]): DuplicateProspectGroup[] {
+  const groups = new Map<string, ProspectExportRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.leadKey) ?? [];
+    group.push(row);
+    groups.set(row.leadKey, group);
+  }
+
+  return [...groups.entries()]
+    .filter(([, group]) => group.length > 1)
+    .map(([leadKey, group]) => ({
+      leadKey,
+      count: group.length,
+      labels: [...new Set(group.flatMap((row) => (row.label ? [row.label] : [])))],
+      sources: [...new Set(group.map((row) => row.source))]
+    }));
 }
 
 function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority" | "nextAction"> {
@@ -534,6 +650,41 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.lastReviewedAt ?? "",
       row.reportPath ?? "",
       row.error ?? ""
+    ]
+      .map(escapeCsvCell)
+      .join(",")
+  );
+
+  return `${[header.join(","), ...body].join("\n")}\n`;
+}
+
+export function renderDiscoveryReviewCsv(rows: LeadReviewRow[]): string {
+  const header = [
+    "leadKey",
+    "source",
+    "sourceId",
+    "label",
+    "websiteUrl",
+    "reviewStatus",
+    "reviewReason",
+    "lastReviewedAt",
+    "opportunityScore",
+    "priority",
+    "nextAction"
+  ];
+  const body = rows.map((row) =>
+    [
+      row.leadKey,
+      row.source,
+      row.sourceId ?? "",
+      row.label ?? "",
+      row.websiteUrl ?? "",
+      row.reviewStatus,
+      row.reviewReason ?? "",
+      row.lastReviewedAt ?? "",
+      row.opportunityScore?.toString() ?? "",
+      row.priority ?? "",
+      row.nextAction ?? ""
     ]
       .map(escapeCsvCell)
       .join(",")

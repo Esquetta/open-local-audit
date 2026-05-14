@@ -374,6 +374,70 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("writes a review CSV and duplicate JSON for discovery reruns", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-review-"));
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const exportCsv = join(tmp, "leads.csv");
+      const reviewCsv = join(tmp, "review.csv");
+      const duplicatesJson = join(tmp, "duplicates.json");
+      writeFileSync(
+        inputPath,
+        "label,website,segment,profile\nFirst Dental,https://dup.example,dental,dental\nSecond Dental,https://dup.example/,dental,dental\nFresh Dental,,dental,dental\n",
+        "utf8"
+      );
+      writeFileSync(
+        reviewCsv,
+        "leadKey,source,sourceId,label,websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nurl:https://old.example,manual-csv,,Old Dental,https://old.example,rejected,Not a fit,2026-05-13\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--export-csv",
+          exportCsv,
+          "--review-csv",
+          reviewCsv,
+          "--duplicates-json",
+          duplicatesJson,
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      const review = readFileSync(reviewCsv, "utf8");
+      expect(review).toContain("Old Dental");
+      expect(review).toContain("Fresh Dental");
+      expect(review).toContain("pending");
+      const duplicates = JSON.parse(readFileSync(duplicatesJson, "utf8"));
+      expect(duplicates).toEqual({
+        duplicateGroups: [
+          {
+            leadKey: "url:https://dup.example",
+            count: 2,
+            labels: ["First Dental", "Second Dental"],
+            sources: ["manual-csv"]
+          }
+        ]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("filters exported discovery leads by minimum opportunity score", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-min-opportunity-"));
     try {

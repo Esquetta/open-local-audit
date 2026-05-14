@@ -5,10 +5,14 @@ import { describe, expect, it } from "vitest";
 import {
   buildDiscoverySummary,
   buildProspectRows,
+  findDuplicateProspectGroups,
   fetchGooglePlacesCandidates,
   filterSuppressedProspects,
+  mergeDiscoveryReviewRows,
   readLeadSuppressionCsv,
+  readLeadReviewCsv,
   readManualDiscoveryCsv,
+  renderDiscoveryReviewCsv,
   renderProspectRowsCsv,
   resolveCandidateWebsite,
   stableLeadKey
@@ -224,7 +228,7 @@ describe("lead discovery", () => {
       const input = join(dir, "suppression.csv");
       await writeFile(
         input,
-        "source,sourceId,label,websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nmanual-csv,,Old Clinic,https://old.example/,rejected,Not a fit,2026-05-13\ngoogle-places,place-2,New Clinic,,new,,\nmanual-csv,,Contacted Clinic,https://contacted.example,contacted,Already emailed,2026-05-13\n",
+        "source,sourceId,label,websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nmanual-csv,,Old Clinic,https://old.example/,rejected,Not a fit,2026-05-13\ngoogle-places,place-2,New Clinic,,new,,\nmanual-csv,,Contacted Clinic,https://contacted.example,contacted,Already emailed,2026-05-13\nmanual-csv,,Key Only Clinic,https://keyonly.example,,,\n",
         "utf8"
       );
 
@@ -232,7 +236,8 @@ describe("lead discovery", () => {
       expect(entries.map((entry) => [entry.leadKey, entry.reviewStatus, entry.reviewReason])).toEqual([
         ["url:https://old.example", "rejected", "Not a fit"],
         ["google-places:place-2", "new", undefined],
-        ["url:https://contacted.example", "contacted", "Already emailed"]
+        ["url:https://contacted.example", "contacted", "Already emailed"],
+        ["url:https://keyonly.example", undefined, undefined]
       ]);
 
       const result = filterSuppressedProspects(
@@ -279,6 +284,94 @@ describe("lead discovery", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("merges existing review decisions into the review CSV queue", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-review-"));
+    try {
+      const input = join(dir, "review.csv");
+      await writeFile(
+        input,
+        "leadKey,source,sourceId,label,websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nurl:https://old.example,manual-csv,,Old Dental,https://old.example,rejected,Not a fit,2026-05-13\n",
+        "utf8"
+      );
+
+      const existing = await readLeadReviewCsv(input);
+      const rows = buildProspectRows([
+        {
+          candidate: {
+            source: "manual-csv",
+            label: "Fresh Dental"
+          },
+          resolution: {
+            hasWebsite: false,
+            status: "missing"
+          }
+        }
+      ]);
+      const merged = mergeDiscoveryReviewRows(rows, existing);
+
+      expect(merged.map((row) => [row.leadKey, row.reviewStatus, row.reviewReason])).toEqual([
+        ["url:https://old.example", "rejected", "Not a fit"],
+        ["label:manual-csv:fresh dental", "pending", undefined]
+      ]);
+      const csv = renderDiscoveryReviewCsv(merged);
+      expect(csv.split(/\r?\n/)[0]).toBe(
+        "leadKey,source,sourceId,label,websiteUrl,reviewStatus,reviewReason,lastReviewedAt,opportunityScore,priority,nextAction"
+      );
+      expect(csv).toContain("Fresh Dental");
+      expect(csv).toContain("rejected");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("groups duplicate prospects by stable lead key", () => {
+    const rows = buildProspectRows([
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "First",
+          websiteUri: "https://duplicate.example/"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://duplicate.example/",
+          status: "resolved"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Second",
+          websiteUri: "https://duplicate.example"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://duplicate.example",
+          status: "resolved"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Unique"
+        },
+        resolution: {
+          hasWebsite: false,
+          status: "missing"
+        }
+      }
+    ]);
+
+    expect(findDuplicateProspectGroups(rows)).toEqual([
+      {
+        leadKey: "url:https://duplicate.example",
+        count: 2,
+        labels: ["First", "Second"],
+        sources: ["manual-csv"]
+      }
+    ]);
   });
 
   it("builds prospect rows with priority and next action guidance", () => {

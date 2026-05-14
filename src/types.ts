@@ -1,6 +1,16 @@
 export type Severity = "high" | "medium" | "low" | "info";
 
-export type AuditProfile = "generic" | "dental" | "beauty" | "restaurant" | "contractor";
+export type AuditProfile =
+  | "generic"
+  | "dental"
+  | "beauty"
+  | "restaurant"
+  | "contractor"
+  | "lawyer"
+  | "clinic"
+  | "gym"
+  | "hotel"
+  | "auto-service";
 
 export type FindingCategory =
   | "technical-health"
