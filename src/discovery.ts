@@ -50,6 +50,7 @@ export interface ProspectExportRow {
   score?: number;
   topFinding?: string;
   opportunityScore: number;
+  opportunityReasons: string[];
   priority: "high" | "medium" | "low";
   nextAction: string;
   reviewStatus: string;
@@ -547,6 +548,40 @@ function opportunityScoreFor(input: ProspectRowInput): number {
   return input.resolution.hasWebsite ? 55 : 95;
 }
 
+function opportunityReasonsFor(input: ProspectRowInput): string[] {
+  if (input.resolution.status === "missing") {
+    return ["No website URL found", "Website-build opportunity"];
+  }
+
+  if (input.resolution.status === "invalid") {
+    return ["Website URL is invalid", "Manual cleanup needed before audit"];
+  }
+
+  if (input.audit?.status === "failed") {
+    return ["Audit failed and needs manual review"];
+  }
+
+  if (input.audit?.status === "success") {
+    const score = input.audit.score ?? 0;
+    const reasons: string[] = [];
+    if (score < 60) {
+      reasons.push("Audit score is below 60");
+    } else if (score < 80) {
+      reasons.push("Audit score is below 80");
+    } else {
+      reasons.push("Audit score is 80 or higher");
+    }
+
+    if (input.audit.topFinding) {
+      reasons.push(`Top finding: ${input.audit.topFinding}`);
+    }
+
+    return reasons;
+  }
+
+  return input.resolution.hasWebsite ? ["Website found but not audited yet"] : ["No website URL found"];
+}
+
 function hasWebsiteValue(resolution: WebsiteResolution): ProspectExportRow["hasWebsite"] {
   if (resolution.status === "resolved") {
     return "yes";
@@ -577,6 +612,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       score: audit.score,
       topFinding: audit.topFinding,
       opportunityScore: opportunityScoreFor(input),
+      opportunityReasons: opportunityReasonsFor(input),
       ...priority,
       reviewStatus: "new",
       reportPath: audit.reportPath,
@@ -621,6 +657,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
     "score",
     "topFinding",
     "opportunityScore",
+    "opportunityReasons",
     "priority",
     "nextAction",
     "reviewStatus",
@@ -643,6 +680,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.score?.toString() ?? "",
       row.topFinding ?? "",
       row.opportunityScore.toString(),
+      row.opportunityReasons.join("; "),
       row.priority,
       row.nextAction,
       row.reviewStatus,

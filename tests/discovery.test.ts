@@ -447,8 +447,12 @@ describe("lead discovery", () => {
       ["Strong Site", "url:https://strong.test", "yes", "success", "low", 30, "new"]
     ]);
     expect(rows[0].nextAction).toContain("Build a basic website");
+    expect(rows[0].opportunityReasons).toContain("No website URL found");
     expect(rows[1].nextAction).toContain("Prioritize outreach");
+    expect(rows[1].opportunityReasons).toContain("Audit score is below 60");
+    expect(rows[1].opportunityReasons).toContain("Top finding: Phone action is missing");
     expect(rows[2].nextAction).toContain("Monitor");
+    expect(rows[2].opportunityReasons).toContain("Audit score is 80 or higher");
   });
 
   it("builds discovery summary metrics from prospect rows", () => {
@@ -462,6 +466,7 @@ describe("lead discovery", () => {
         auditStatus: "not-audited",
         priority: "high",
         opportunityScore: 95,
+        opportunityReasons: ["No website URL found", "Website-build opportunity"],
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
       },
@@ -475,6 +480,7 @@ describe("lead discovery", () => {
         score: 45,
         priority: "high",
         opportunityScore: 90,
+        opportunityReasons: ["Audit score is below 60", "Top finding: Phone action is missing"],
         reviewStatus: "new",
         nextAction: "Prioritize outreach with the top audit issue."
       },
@@ -487,6 +493,7 @@ describe("lead discovery", () => {
         auditStatus: "failed",
         priority: "medium",
         opportunityScore: 60,
+        opportunityReasons: ["Audit failed and needs manual review"],
         reviewStatus: "new",
         nextAction: "Review the site manually because the audit failed."
       }
@@ -520,6 +527,7 @@ describe("lead discovery", () => {
         hasWebsite: "no",
         auditStatus: "not-audited",
         opportunityScore: 95,
+        opportunityReasons: ["No website URL found", "Website-build opportunity"],
         priority: "high",
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
@@ -527,9 +535,10 @@ describe("lead discovery", () => {
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
+      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
     );
     expect(csv).toContain('"Clinic, A"');
+    expect(csv).toContain("No website URL found; Website-build opportunity");
   });
 
   it("neutralizes spreadsheet formulas in prospect CSV cells", () => {
@@ -542,6 +551,7 @@ describe("lead discovery", () => {
         hasWebsite: "no",
         auditStatus: "not-audited",
         opportunityScore: 95,
+        opportunityReasons: ["No website URL found", "Website-build opportunity"],
         priority: "high",
         reviewStatus: "new",
         nextAction: "+call this lead"
