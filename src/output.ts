@@ -1,9 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { renderPdfReport } from "./pdf.js";
 import { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 import type { AuditReport } from "./types.js";
 
-export type OutputFormat = "json" | "markdown" | "html" | "all";
+export type OutputFormat = "json" | "markdown" | "html" | "pdf" | "all";
 
 export interface ReportOutputOptions {
   format: OutputFormat;
@@ -14,20 +15,21 @@ export interface ReportOutputOptions {
 
 export interface ReportOutput {
   format: Exclude<OutputFormat, "all">;
-  content: string;
+  content: string | Buffer;
   path?: string;
 }
 
-function outputFor(report: AuditReport, format: Exclude<OutputFormat, "all">, pretty: boolean): ReportOutput {
-  const contentByFormat = {
-    json: renderJsonReport(report, pretty),
-    markdown: renderMarkdownReport(report),
-    html: renderHtmlReport(report)
-  };
-
+async function outputFor(report: AuditReport, format: Exclude<OutputFormat, "all">, pretty: boolean): Promise<ReportOutput> {
   return {
     format,
-    content: contentByFormat[format]
+    content:
+      format === "json"
+        ? renderJsonReport(report, pretty)
+        : format === "markdown"
+          ? renderMarkdownReport(report)
+          : format === "html"
+            ? renderHtmlReport(report)
+            : await renderPdfReport(report)
   };
 }
 
@@ -35,7 +37,8 @@ function defaultReportName(format: Exclude<OutputFormat, "all">): string {
   const extension = {
     json: "json",
     markdown: "md",
-    html: "html"
+    html: "html",
+    pdf: "pdf"
   }[format];
 
   return `open-local-audit-report.${extension}`;
@@ -45,13 +48,17 @@ export async function writeReportOutputs(report: AuditReport, options: ReportOut
   const pretty = options.pretty ?? false;
   const formats: Array<Exclude<OutputFormat, "all">> =
     options.format === "all" ? ["json", "markdown", "html"] : [options.format];
-  const outputs = formats.map((format) => outputFor(report, format, pretty));
+  const outputs = await Promise.all(formats.map((format) => outputFor(report, format, pretty)));
+
+  if (options.format === "pdf" && !options.outDir && !options.out) {
+    throw new Error("--out or --out-dir is required when --format pdf is used");
+  }
 
   if (options.outDir) {
     await mkdir(options.outDir, { recursive: true });
     for (const output of outputs) {
       output.path = join(options.outDir, defaultReportName(output.format));
-      await writeFile(output.path, output.content, "utf8");
+      await writeFile(output.path, output.content);
     }
     return outputs;
   }
@@ -62,7 +69,7 @@ export async function writeReportOutputs(report: AuditReport, options: ReportOut
 
   if (options.out) {
     outputs[0].path = options.out;
-    await writeFile(options.out, outputs[0].content, "utf8");
+    await writeFile(options.out, outputs[0].content);
   }
 
   return outputs;

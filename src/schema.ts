@@ -16,7 +16,7 @@ export const inputUrlSchema = z
     message: "Only HTTP and HTTPS URLs are supported"
   });
 
-export const outputFormatSchema = z.enum(["json", "markdown", "html", "all"]);
+export const outputFormatSchema = z.enum(["json", "markdown", "html", "pdf", "all"]);
 export const failOnSchema = z.enum(["none", "high", "medium", "low"]);
 export const batchIndexSortSchema = z.enum(["score-asc", "severity-desc"]);
 export const auditProfileSchema = z.enum([
@@ -60,6 +60,7 @@ export const cliOptionsSchema = z.object({
   maxPages: z.coerce.number().int().positive().max(100).default(10),
   render: z.boolean().default(false),
   screenshot: z.boolean().default(false),
+  lighthouse: z.boolean().default(false),
   failOn: failOnSchema.default("none"),
   pretty: z.boolean().default(false)
 });

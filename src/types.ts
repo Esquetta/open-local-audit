@@ -59,6 +59,7 @@ export interface AuditReport {
   recommendations: string[];
   evidence: Evidence[];
   visualEvidence?: VisualEvidence[];
+  lighthouse?: LighthouseSummary;
 }
 
 export interface PageSnapshot {
@@ -83,8 +84,10 @@ export interface AuditOptions {
   profile?: AuditProfile;
   render: boolean;
   screenshot: boolean;
+  lighthouse: boolean;
   screenshotPath?: string;
   screenshotReportPath?: string;
+  runLighthouse?: LighthouseRunner;
   renderPage?: (
     url: string,
     options: Pick<AuditOptions, "timeoutMs" | "screenshot" | "screenshotPath" | "screenshotReportPath">
@@ -102,3 +105,20 @@ export interface VisualEvidence {
   path: string;
   screenshotPath?: string;
 }
+
+export interface LighthouseCategoryScores {
+  performance?: number;
+  accessibility?: number;
+  bestPractices?: number;
+  seo?: number;
+}
+
+export interface LighthouseSummary {
+  requestedUrl: string;
+  finalUrl?: string;
+  fetchTime?: string;
+  categories: LighthouseCategoryScores;
+  warnings?: string[];
+}
+
+export type LighthouseRunner = (url: string, options: Pick<AuditOptions, "timeoutMs">) => Promise<LighthouseSummary>;

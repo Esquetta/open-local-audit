@@ -39,18 +39,46 @@ describe("report renderers", () => {
     expect(parsed.findings.length).toBeGreaterThan(0);
   });
 
-  it("renders Markdown with scores, findings, and recommendations", () => {
-    const markdown = renderMarkdownReport(report);
+  it("renders Markdown with scores, findings, Lighthouse summary, and recommendations", () => {
+    const markdown = renderMarkdownReport({
+      ...report,
+      lighthouse: {
+        requestedUrl: "https://example.test",
+        finalUrl: "https://example.test",
+        fetchTime: "2026-05-08T00:00:01.000Z",
+        categories: {
+          performance: 72,
+          accessibility: 91,
+          bestPractices: 86,
+          seo: 94
+        },
+        warnings: ["The page used a test Lighthouse runner."]
+      }
+    });
 
     expect(markdown).toContain("# Open Local Audit Report");
     expect(markdown).toContain("- Profile: generic");
     expect(markdown).toContain("## Score Summary");
+    expect(markdown).toContain("## Lighthouse Summary");
+    expect(markdown).toContain("| Performance | 72 |");
+    expect(markdown).toContain("The page used a test Lighthouse runner.");
     expect(markdown).toContain("## Findings");
     expect(markdown).toContain("## Recommendations");
   });
 
   it("renders standalone HTML with escaped report content", () => {
-    const html = renderHtmlReport(report);
+    const html = renderHtmlReport({
+      ...report,
+      lighthouse: {
+        requestedUrl: "https://example.test",
+        categories: {
+          performance: 72,
+          accessibility: 91,
+          bestPractices: 86,
+          seo: 94
+        }
+      }
+    });
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain("<title>Open Local Audit Report");
@@ -59,6 +87,9 @@ describe("report renderers", () => {
     expect(html).toContain("Priority Findings");
     expect(html).toContain("Profile: generic");
     expect(html).toContain("Score Summary");
+    expect(html).toContain("Lighthouse Summary");
+    expect(html).toContain("Performance");
+    expect(html).toContain("72");
     expect(html).toContain("Findings");
   });
 

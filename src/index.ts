@@ -18,6 +18,8 @@ export {
 export { shouldFailOnThreshold } from "./exit-policy.js";
 export { auditProfiles } from "./profiles.js";
 export { writeReportOutputs } from "./output.js";
+export { runLighthouseAudit } from "./lighthouse.js";
+export { renderPdfReport } from "./pdf.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
@@ -51,6 +53,9 @@ export type {
   Evidence,
   Finding,
   FindingCategory,
+  LighthouseCategoryScores,
+  LighthouseRunner,
+  LighthouseSummary,
   PageSnapshot,
   Score,
   Severity

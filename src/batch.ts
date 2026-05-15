@@ -177,8 +177,18 @@ function normalizeEntry(entry: string | BatchInputEntry): BatchInputEntry {
   return typeof entry === "string" ? { url: entry } : entry;
 }
 
-function formatsFor(format: OutputFormat): Array<Exclude<OutputFormat, "all">> {
-  return format === "all" ? ["json", "markdown", "html"] : [format];
+type BatchIndexFormat = "json" | "markdown" | "html";
+
+function formatsFor(format: OutputFormat): BatchIndexFormat[] {
+  if (format === "all") {
+    return ["json", "markdown", "html"];
+  }
+
+  if (format === "pdf") {
+    throw new Error("PDF batch indexes are not supported");
+  }
+
+  return [format];
 }
 
 function outputReports(slug: string, outputs: ReportOutput[]): Partial<Record<Exclude<OutputFormat, "all">, string>> {

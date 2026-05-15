@@ -256,7 +256,7 @@ program
   .description("Audit a public local-business website and generate an evidence-backed report.")
   .argument("[url]", "HTTP or HTTPS URL to audit")
   .option("--input <path>", "read URLs from a text file for batch audits")
-  .option("-f, --format <format>", "output format: json, markdown, html, or all", "markdown")
+  .option("-f, --format <format>", "output format: json, markdown, html, pdf, or all", "markdown")
   .option("-o, --out <path>", "write report to a file instead of stdout")
   .option("--out-dir <path>", "write generated report files to a directory")
   .option("--segment <segment>", "include only batch index entries matching a segment")
@@ -272,6 +272,7 @@ program
   .option("--max-pages <count>", "maximum same-origin links to check", "10")
   .option("--render", "use Playwright-rendered HTML instead of the static response", false)
   .option("--screenshot", "capture a rendered homepage screenshot into the report output directory", false)
+  .option("--lighthouse", "run Lighthouse performance, accessibility, best-practices, and SEO checks", false)
   .option("--fail-on <severity>", "exit with code 1 when findings meet severity: none, high, medium, or low", "none")
   .option("--pretty", "pretty-print JSON output", false)
   .action(async (rawUrl: string | undefined, rawOptions: unknown) => {
@@ -284,7 +285,8 @@ program
         maxPages: options.maxPages,
         profile: options.profile,
         render: options.render || options.screenshot,
-        screenshot: options.screenshot
+        screenshot: options.screenshot,
+        lighthouse: options.lighthouse
       };
 
       if (options.input) {
@@ -294,6 +296,10 @@ program
 
         if (!options.outDir) {
           throw new Error("--out-dir is required when --input is used");
+        }
+
+        if (options.format === "pdf") {
+          throw new Error("--format pdf is only supported for single URL audits");
         }
 
         const urls = await readBatchInput(options.input);
@@ -340,6 +346,10 @@ program
 
       if (options.screenshot && !options.outDir) {
         throw new Error("--out-dir is required when --screenshot is used");
+      }
+
+      if (options.format === "pdf" && !options.out && !options.outDir) {
+        throw new Error("--out or --out-dir is required when --format pdf is used");
       }
 
       const screenshotOutDir = options.screenshot ? options.outDir : undefined;

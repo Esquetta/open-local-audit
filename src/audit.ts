@@ -3,6 +3,7 @@ import { applyProfileAdjustments } from "./profiles.js";
 import { runRules } from "./rules.js";
 import { load } from "cheerio";
 import { renderPageSnapshot } from "./render.js";
+import { runLighthouseAudit } from "./lighthouse.js";
 
 const defaultOptions: AuditOptions = {
   timeoutMs: 10000,
@@ -11,7 +12,8 @@ const defaultOptions: AuditOptions = {
   maxPages: 10,
   profile: "generic",
   render: false,
-  screenshot: false
+  screenshot: false,
+  lighthouse: false
 };
 
 const categories: FindingCategory[] = [
@@ -241,7 +243,22 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
     );
   }
 
-  return auditSnapshot(snapshot, new Date().toISOString(), {
+  const report = auditSnapshot(snapshot, new Date().toISOString(), {
     profile: effectiveOptions.profile
   });
+
+  if (effectiveOptions.lighthouse) {
+    const lighthouseRunner = effectiveOptions.runLighthouse ?? runLighthouseAudit;
+    report.lighthouse = await lighthouseRunner(snapshot.finalUrl, {
+      timeoutMs: effectiveOptions.timeoutMs
+    });
+    if (report.lighthouse.categories.performance !== undefined) {
+      report.evidence.push({
+        label: "Lighthouse performance",
+        value: report.lighthouse.categories.performance.toString()
+      });
+    }
+  }
+
+  return report;
 }

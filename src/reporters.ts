@@ -39,6 +39,38 @@ function renderMarkdownVisualEvidence(report: AuditReport): string[] {
   ];
 }
 
+function lighthouseRows(report: AuditReport): Array<[string, string]> {
+  if (!report.lighthouse) {
+    return [];
+  }
+
+  const categories = report.lighthouse.categories;
+  return [
+    ["Performance", categories.performance?.toString() ?? "N/A"],
+    ["Accessibility", categories.accessibility?.toString() ?? "N/A"],
+    ["Best practices", categories.bestPractices?.toString() ?? "N/A"],
+    ["SEO", categories.seo?.toString() ?? "N/A"]
+  ];
+}
+
+function renderMarkdownLighthouse(report: AuditReport): string[] {
+  if (!report.lighthouse) {
+    return [];
+  }
+
+  return [
+    "## Lighthouse Summary",
+    "",
+    "| Category | Score |",
+    "| --- | ---: |",
+    ...lighthouseRows(report).map(([label, score]) => `| ${label} | ${score} |`),
+    "",
+    ...(report.lighthouse.warnings && report.lighthouse.warnings.length > 0
+      ? ["Warnings:", "", ...report.lighthouse.warnings.map((warning) => `- ${warning}`), ""]
+      : [])
+  ];
+}
+
 function renderHtmlVisualEvidence(report: AuditReport): string {
   if (!report.visualEvidence || report.visualEvidence.length === 0) {
     return "";
@@ -58,6 +90,32 @@ function renderHtmlVisualEvidence(report: AuditReport): string {
 ${rows}
       </tbody>
     </table>
+`;
+}
+
+function renderHtmlLighthouse(report: AuditReport): string {
+  if (!report.lighthouse) {
+    return "";
+  }
+
+  const rows = lighthouseRows(report)
+    .map(([label, score]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(score)}</td></tr>`)
+    .join("\n");
+  const warnings =
+    report.lighthouse.warnings && report.lighthouse.warnings.length > 0
+      ? `<p class="meta">${report.lighthouse.warnings.map(escapeHtml).join("<br>")}</p>`
+      : "";
+
+  return `    <section>
+    <h2>Lighthouse Summary</h2>
+    <table>
+      <thead><tr><th>Category</th><th>Score</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
+${warnings}
+    </section>
 `;
 }
 
@@ -87,6 +145,7 @@ export function renderMarkdownReport(report: AuditReport): string {
   ];
 
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownVisualEvidence(report));
+  lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownLighthouse(report));
 
   if (findings.length === 0) {
     lines.push("No findings were detected by the current rule set.", "");
@@ -135,6 +194,7 @@ export function renderHtmlReport(report: AuditReport): string {
       ? report.recommendations.map((recommendation) => `<li>${escapeHtml(recommendation)}</li>`).join("\n")
       : "<li>Keep monitoring the page as content and templates change.</li>";
   const visualEvidence = renderHtmlVisualEvidence(report);
+  const lighthouse = renderHtmlLighthouse(report);
 
   return `<!doctype html>
 <html lang="en">
@@ -181,7 +241,7 @@ ${scoreRows}
       </tbody>
     </table>
     </section>
-${visualEvidence}    <section>
+${lighthouse}${visualEvidence}    <section>
     <h2>Findings</h2>
     <table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -49,5 +49,58 @@ describe("report output writer", () => {
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
+  });
+
+  it("writes a branded PDF report when format is pdf", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "open-local-audit-pdf-"));
+    try {
+      const report = auditSnapshot(
+        {
+          url: "https://example.test",
+          finalUrl: "https://example.test",
+          statusCode: 200,
+          headers: {
+            "content-type": "text/html"
+          },
+          html: "<html><head><title>Example</title></head><body><h1>Example</h1></body></html>"
+        },
+        "2026-05-08T00:00:00.000Z"
+      );
+
+      const outputs = await writeReportOutputs(report, {
+        format: "pdf",
+        outDir,
+        pretty: true
+      });
+
+      expect(outputs.map((output) => output.format)).toEqual(["pdf"]);
+      const pdfPath = join(outDir, "open-local-audit-report.pdf");
+      expect((await readFile(pdfPath)).subarray(0, 4).toString("utf8")).toBe("%PDF");
+      expect((await stat(pdfPath)).size).toBeGreaterThan(500);
+    } finally {
+      await rm(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires a file destination when writing PDF output", async () => {
+    const report = auditSnapshot(
+      {
+        url: "https://example.test",
+        finalUrl: "https://example.test",
+        statusCode: 200,
+        headers: {
+          "content-type": "text/html"
+        },
+        html: "<html><head><title>Example</title></head><body><h1>Example</h1></body></html>"
+      },
+      "2026-05-08T00:00:00.000Z"
+    );
+
+    await expect(
+      writeReportOutputs(report, {
+        format: "pdf",
+        pretty: true
+      })
+    ).rejects.toThrow("--out or --out-dir is required when --format pdf is used");
   });
 });
