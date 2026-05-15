@@ -171,10 +171,26 @@ Exit criteria:
 - Existing review decisions survive reruns in the review CSV.
 - Duplicate reports group exact stable lead-key matches.
 
+## Milestone 9: Sales-ready report polish
+
+Target release:
+- `v0.13.0`.
+
+Deliverables:
+- `--lighthouse` for opt-in Lighthouse performance, accessibility, best-practices, and SEO category scoring.
+- Lighthouse scores in JSON, Markdown, HTML, and PDF reports.
+- `--format pdf` for branded single-site PDF reports.
+- `opportunityReasons` in discovery CSV exports to explain lead scores.
+- CLI and README guidance for local Chrome requirements and PDF destination requirements.
+
+Exit criteria:
+- Lighthouse behavior is covered by a runner-injection regression test.
+- PDF output is validated as a real PDF artifact in tests.
+- Discovery score explanations are covered in prospect-row and CSV tests.
+- Full release check passes before npm publish.
+
 ## Deferred work
 
 - Web UI.
-- Lighthouse integration.
-- Branded PDF reports.
 - SaaS dashboard.
 - Search API or manual enrichment provider beyond Google Places.

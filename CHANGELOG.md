@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.13.0 - 2026-05-15
+
+- Added opt-in Lighthouse category scoring with `--lighthouse`.
+- Added branded PDF report output with `--format pdf`.
+- Added `opportunityReasons` to discovery CSV exports so operators can explain lead scores.
+- Added Lighthouse sections to JSON, Markdown, HTML, and PDF reports.
+
 ## v0.12.0 - 2026-05-14
 
 - Added discovery suppression lists with `--suppression-list` to skip previously reviewed leads.

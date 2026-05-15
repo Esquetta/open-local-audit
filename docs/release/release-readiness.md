@@ -99,6 +99,17 @@ Before releasing suppression and review workflow controls:
 - [x] Expanded industry profiles are covered by profile regression tests.
 - [x] HTML report polish is covered by renderer tests.
 
+## Sales-ready reporting readiness
+
+Before releasing Lighthouse, PDF, and score explanation features:
+
+- [x] CLI help documents `--lighthouse` and `--format pdf`.
+- [x] Lighthouse execution is opt-in and does not slow normal CLI startup.
+- [x] Lighthouse category scores render in JSON, Markdown, HTML, and PDF reports.
+- [x] PDF output writes a real PDF artifact and requires `--out` or `--out-dir`.
+- [x] Discovery CSV exports include `opportunityReasons`.
+- [x] Score explanations are covered by prospect-row and CSV tests.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -107,12 +118,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.12.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.13.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.12.0` after:
+Use `v0.13.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -123,6 +134,7 @@ Use `v0.12.0` after:
 - Google Places missing-key behavior, strict field masks, mocked candidate mapping, dry-run, and audit handoff are verified,
 - discovery limits, audit caps, summary JSON, opportunity scoring, and CSV formula hardening are verified,
 - discovery review CSV, duplicate JSON, suppression, and opportunity filters are verified,
+- Lighthouse scoring, PDF output, and opportunity score explanations are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

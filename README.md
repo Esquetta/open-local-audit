@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, or all report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, and report duplicate lead groups.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, and report duplicate lead groups.
 
 ## Business purpose
 
@@ -98,7 +98,15 @@ open-local-audit https://example.com --screenshot --format all --out-dir reports
 npm install -D playwright
 ```
 
-Write both report formats to a directory:
+Run Lighthouse category scoring:
+
+```bash
+open-local-audit https://example.com --lighthouse --format html --out report.html
+```
+
+`--lighthouse` runs Chrome through Lighthouse and adds performance, accessibility, best-practices, and SEO category scores to the report. It requires a local Chrome or Chromium runtime that Lighthouse can launch.
+
+Write standard report formats to a directory:
 
 ```bash
 open-local-audit https://example.com --format all --out-dir reports
@@ -108,6 +116,12 @@ Write an HTML report:
 
 ```bash
 open-local-audit https://example.com --format html --out report.html
+```
+
+Write a branded PDF report:
+
+```bash
+open-local-audit https://example.com --format pdf --out report.pdf
 ```
 
 Run a batch audit from a text file:
@@ -190,7 +204,7 @@ open-local-audit discover --input places.csv --provider manual-csv --review-csv 
 
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
-Discovery CSV exports include `leadKey`, `opportunityScore`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
+Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -207,6 +221,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - JSON report.
 - Markdown report.
 - HTML report.
+- PDF report.
 - Combined JSON, Markdown, and HTML report output with `--format all --out-dir`.
 - Batch input files with per-site report folders.
 - CSV batch input with optional labels and segments.
@@ -219,6 +234,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Prospect CSV export with profile, score, top finding, report path, and error columns.
 - Optional rendered DOM audits with `--render`.
 - Optional rendered screenshot evidence with `--screenshot`.
+- Optional Lighthouse category scoring with `--lighthouse`.
 - Score summary.
 - Evidence table.
 - Optional same-origin link checks.
@@ -240,6 +256,8 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 
 - `--render` requires Playwright in the calling project and a working browser runtime.
 - `--screenshot` uses the rendered audit path, requires `--out-dir`, and also requires Playwright.
+- `--lighthouse` requires a local Chrome or Chromium runtime that Lighthouse can launch.
+- `--format pdf` is supported for single URL audits and requires `--out` or `--out-dir`.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
