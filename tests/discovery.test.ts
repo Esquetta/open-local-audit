@@ -451,6 +451,10 @@ describe("lead discovery", () => {
     expect(rows[1].nextAction).toContain("Prioritize outreach");
     expect(rows[1].opportunityReasons).toContain("Audit score is below 60");
     expect(rows[1].opportunityReasons).toContain("Top finding: Phone action is missing");
+    expect(rows[1].pitchAngle).toBe("Fix visible conversion blockers");
+    expect(rows[1].recommendedOffer).toBe("Conversion-focused website tune-up");
+    expect(rows[1].estimatedNeed).toBe("High");
+    expect(rows[1].outreachPriorityReason).toContain("Audit score is below 60");
     expect(rows[2].nextAction).toContain("Monitor");
     expect(rows[2].opportunityReasons).toContain("Audit score is 80 or higher");
   });
@@ -467,6 +471,10 @@ describe("lead discovery", () => {
         priority: "high",
         opportunityScore: 95,
         opportunityReasons: ["No website URL found", "Website-build opportunity"],
+        pitchAngle: "Launch a credible local website",
+        recommendedOffer: "Starter website build",
+        estimatedNeed: "High",
+        outreachPriorityReason: "No website URL found; Website-build opportunity",
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
       },
@@ -481,6 +489,10 @@ describe("lead discovery", () => {
         priority: "high",
         opportunityScore: 90,
         opportunityReasons: ["Audit score is below 60", "Top finding: Phone action is missing"],
+        pitchAngle: "Fix visible conversion blockers",
+        recommendedOffer: "Conversion-focused website tune-up",
+        estimatedNeed: "High",
+        outreachPriorityReason: "Audit score is below 60; Top finding: Phone action is missing",
         reviewStatus: "new",
         nextAction: "Prioritize outreach with the top audit issue."
       },
@@ -494,6 +506,10 @@ describe("lead discovery", () => {
         priority: "medium",
         opportunityScore: 60,
         opportunityReasons: ["Audit failed and needs manual review"],
+        pitchAngle: "Manually qualify technical blockers",
+        recommendedOffer: "Manual audit follow-up",
+        estimatedNeed: "Medium",
+        outreachPriorityReason: "Audit failed and needs manual review",
         reviewStatus: "new",
         nextAction: "Review the site manually because the audit failed."
       }
@@ -528,6 +544,10 @@ describe("lead discovery", () => {
         auditStatus: "not-audited",
         opportunityScore: 95,
         opportunityReasons: ["No website URL found", "Website-build opportunity"],
+        pitchAngle: "Launch a credible local website",
+        recommendedOffer: "Starter website build",
+        estimatedNeed: "High",
+        outreachPriorityReason: "No website URL found; Website-build opportunity",
         priority: "high",
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
@@ -535,10 +555,11 @@ describe("lead discovery", () => {
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
+      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
     );
     expect(csv).toContain('"Clinic, A"');
     expect(csv).toContain("No website URL found; Website-build opportunity");
+    expect(csv).toContain("Starter website build");
   });
 
   it("neutralizes spreadsheet formulas in prospect CSV cells", () => {
@@ -552,6 +573,10 @@ describe("lead discovery", () => {
         auditStatus: "not-audited",
         opportunityScore: 95,
         opportunityReasons: ["No website URL found", "Website-build opportunity"],
+        pitchAngle: "Launch a credible local website",
+        recommendedOffer: "Starter website build",
+        estimatedNeed: "High",
+        outreachPriorityReason: "No website URL found; Website-build opportunity",
         priority: "high",
         reviewStatus: "new",
         nextAction: "+call this lead"

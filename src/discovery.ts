@@ -51,6 +51,10 @@ export interface ProspectExportRow {
   topFinding?: string;
   opportunityScore: number;
   opportunityReasons: string[];
+  pitchAngle: string;
+  recommendedOffer: string;
+  estimatedNeed: "High" | "Medium" | "Low";
+  outreachPriorityReason: string;
   priority: "high" | "medium" | "low";
   nextAction: string;
   reviewStatus: string;
@@ -582,6 +586,65 @@ function opportunityReasonsFor(input: ProspectRowInput): string[] {
   return input.resolution.hasWebsite ? ["Website found but not audited yet"] : ["No website URL found"];
 }
 
+function enrichmentFor(input: ProspectRowInput): Pick<
+  ProspectExportRow,
+  "pitchAngle" | "recommendedOffer" | "estimatedNeed" | "outreachPriorityReason"
+> {
+  const reasons = opportunityReasonsFor(input);
+  if (input.resolution.status === "missing") {
+    return {
+      pitchAngle: "Launch a credible local website",
+      recommendedOffer: "Starter website build",
+      estimatedNeed: "High",
+      outreachPriorityReason: reasons.join("; ")
+    };
+  }
+
+  if (input.audit?.status === "success") {
+    const score = input.audit.score ?? 0;
+    if (score < 60) {
+      return {
+        pitchAngle: "Fix visible conversion blockers",
+        recommendedOffer: "Conversion-focused website tune-up",
+        estimatedNeed: "High",
+        outreachPriorityReason: reasons.join("; ")
+      };
+    }
+
+    if (score < 80) {
+      return {
+        pitchAngle: "Improve local trust signals",
+        recommendedOffer: "Local SEO and trust cleanup",
+        estimatedNeed: "Medium",
+        outreachPriorityReason: reasons.join("; ")
+      };
+    }
+
+    return {
+      pitchAngle: "Maintain a healthy local presence",
+      recommendedOffer: "Monitoring and periodic audit",
+      estimatedNeed: "Low",
+      outreachPriorityReason: reasons.join("; ")
+    };
+  }
+
+  if (input.audit?.status === "failed") {
+    return {
+      pitchAngle: "Manually qualify technical blockers",
+      recommendedOffer: "Manual audit follow-up",
+      estimatedNeed: "Medium",
+      outreachPriorityReason: reasons.join("; ")
+    };
+  }
+
+  return {
+    pitchAngle: input.resolution.hasWebsite ? "Qualify website improvement potential" : "Launch a credible local website",
+    recommendedOffer: input.resolution.hasWebsite ? "Website audit follow-up" : "Starter website build",
+    estimatedNeed: input.resolution.hasWebsite ? "Medium" : "High",
+    outreachPriorityReason: reasons.join("; ")
+  };
+}
+
 function hasWebsiteValue(resolution: WebsiteResolution): ProspectExportRow["hasWebsite"] {
   if (resolution.status === "resolved") {
     return "yes";
@@ -598,6 +661,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
   return inputs.map((input) => {
     const audit = input.audit ?? { status: "not-audited" as const };
     const priority = priorityFor(input);
+    const enrichment = enrichmentFor(input);
 
     return {
       leadKey: stableLeadKey(input),
@@ -613,6 +677,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       topFinding: audit.topFinding,
       opportunityScore: opportunityScoreFor(input),
       opportunityReasons: opportunityReasonsFor(input),
+      ...enrichment,
       ...priority,
       reviewStatus: "new",
       reportPath: audit.reportPath,
@@ -658,6 +723,10 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
     "topFinding",
     "opportunityScore",
     "opportunityReasons",
+    "pitchAngle",
+    "recommendedOffer",
+    "estimatedNeed",
+    "outreachPriorityReason",
     "priority",
     "nextAction",
     "reviewStatus",
@@ -681,6 +750,10 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.topFinding ?? "",
       row.opportunityScore.toString(),
       row.opportunityReasons.join("; "),
+      row.pitchAngle,
+      row.recommendedOffer,
+      row.estimatedNeed,
+      row.outreachPriorityReason,
       row.priority,
       row.nextAction,
       row.reviewStatus,
