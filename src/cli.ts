@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
+import { readBrandConfig } from "./brand.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
 import {
   buildDiscoverySummary,
@@ -36,6 +37,7 @@ const discoveryProgram = program
   .option("--provider <provider>", "discovery provider: manual-csv or google-places", "manual-csv")
   .option("--profile <profile>", "default industry profile for candidates", "generic")
   .option("--out-dir <path>", "write generated audit reports to a directory")
+  .option("--brand-config <path>", "read report branding from a JSON file")
   .option("--export-csv <path>", "write lead discovery CSV output")
   .option("--summary-json <path>", "write discovery summary JSON output")
   .option("--suppression-list <path>", "read reviewed or suppressed lead identities from a CSV file")
@@ -103,6 +105,7 @@ discoveryProgram.action(async (query?: string) => {
         input: true,
         profile: true,
         outDir: true,
+        brandConfig: true,
         exportCsv: true,
         dryRun: true,
         concurrency: true,
@@ -116,6 +119,7 @@ discoveryProgram.action(async (query?: string) => {
         minOpportunityScore: true
       })
       .parse(rawDiscoveryOptions);
+    const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
 
     if (!options.exportCsv) {
       throw new Error("--export-csv is required for discover output");
@@ -184,7 +188,8 @@ discoveryProgram.action(async (query?: string) => {
           format: "all",
           outDir: options.outDir ?? "reports",
           concurrency: options.concurrency,
-          profile: options.profile
+          profile: options.profile,
+          brand
         }
       );
 
@@ -259,6 +264,7 @@ program
   .option("-f, --format <format>", "output format: json, markdown, html, pdf, or all", "markdown")
   .option("-o, --out <path>", "write report to a file instead of stdout")
   .option("--out-dir <path>", "write generated report files to a directory")
+  .option("--brand-config <path>", "read report branding from a JSON file")
   .option("--segment <segment>", "include only batch index entries matching a segment")
   .option("--min-score <score>", "include only successful batch index entries at or above a score")
   .option("--top <count>", "limit the batch index to the top N entries after filtering and sorting")
@@ -278,6 +284,7 @@ program
   .action(async (rawUrl: string | undefined, rawOptions: unknown) => {
     try {
       const options = cliOptionsSchema.parse(rawOptions);
+      const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
       const auditOptions = {
         timeoutMs: options.timeout,
         maxRedirects: options.maxRedirects,
@@ -310,6 +317,7 @@ program
           exportCsv: options.exportCsv,
           concurrency: options.concurrency,
           profile: options.profile,
+          brand,
           index: {
             segment: options.segment,
             minScore: options.minScore,
@@ -364,7 +372,8 @@ program
         format: options.format,
         out: options.out,
         outDir: options.outDir,
-        pretty: options.pretty
+        pretty: options.pretty,
+        brand
       });
 
       for (const output of outputs) {

@@ -37,6 +37,7 @@ export const cliOptionsSchema = z.object({
   format: outputFormatSchema.default("markdown"),
   out: z.string().optional(),
   outDir: z.string().optional(),
+  brandConfig: z.string().optional(),
   input: z.string().optional(),
   segment: z.string().trim().min(1).optional(),
   minScore: z.coerce.number().min(0).max(100).optional(),

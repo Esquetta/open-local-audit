@@ -70,13 +70,18 @@ describe("report output writer", () => {
       const outputs = await writeReportOutputs(report, {
         format: "pdf",
         outDir,
-        pretty: true
+        pretty: true,
+        brand: {
+          name: "TORUT Audit Studio",
+          footerText: "Prepared for outreach review"
+        }
       });
 
       expect(outputs.map((output) => output.format)).toEqual(["pdf"]);
       const pdfPath = join(outDir, "open-local-audit-report.pdf");
       expect((await readFile(pdfPath)).subarray(0, 4).toString("utf8")).toBe("%PDF");
       expect((await stat(pdfPath)).size).toBeGreaterThan(500);
+      expect(outputs[0].format).toBe("pdf");
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }

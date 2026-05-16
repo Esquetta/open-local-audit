@@ -1,5 +1,6 @@
 export { auditUrl, auditSnapshot } from "./audit.js";
 export { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "./batch.js";
+export { readBrandConfig } from "./brand.js";
 export {
   buildDiscoverySummary,
   buildProspectRows,
@@ -56,6 +57,8 @@ export type {
   LighthouseCategoryScores,
   LighthouseRunner,
   LighthouseSummary,
+  ReportBrandConfig,
+  ReportRenderOptions,
   PageSnapshot,
   Score,
   Severity

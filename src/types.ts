@@ -62,6 +62,18 @@ export interface AuditReport {
   lighthouse?: LighthouseSummary;
 }
 
+export interface ReportBrandConfig {
+  name?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  footerText?: string;
+  contact?: string;
+}
+
+export interface ReportRenderOptions {
+  brand?: ReportBrandConfig;
+}
+
 export interface PageSnapshot {
   url: string;
   finalUrl: string;

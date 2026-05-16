@@ -211,6 +211,43 @@ describe("CLI behavior helpers", () => {
     expect(result.stderr).not.toContain("Playwright is required");
   });
 
+  it("accepts brand config before validating mutually exclusive input", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-brand-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      const outDir = join(tmp, "reports");
+      const brandPath = join(tmp, "brand.json");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+      writeFileSync(brandPath, JSON.stringify({ name: "TORUT Audit Studio" }), "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "https://ignored.test",
+          "--input",
+          inputPath,
+          "--out-dir",
+          outDir,
+          "--brand-config",
+          brandPath
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Use either a URL or --input, not both");
+      expect(result.stderr).not.toContain("unknown option");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("accepts profile and export CSV options before validating mutually exclusive input", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-"));
     try {

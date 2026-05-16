@@ -1,4 +1,4 @@
-import type { AuditReport, Finding } from "./types.js";
+import type { AuditReport, Finding, ReportBrandConfig, ReportRenderOptions } from "./types.js";
 
 function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
@@ -24,6 +24,37 @@ function severityRank(finding: Finding): number {
   return ranks[finding.severity];
 }
 
+function overallScore(report: AuditReport): number {
+  const scores = Object.values(report.scores);
+  return scores.length === 0 ? 0 : Math.round(scores.reduce((total, score) => total + score.score, 0) / scores.length);
+}
+
+function priorityFindings(report: AuditReport): Finding[] {
+  return [...report.findings]
+    .sort((left, right) => severityRank(left) - severityRank(right))
+    .slice(0, 3);
+}
+
+function executiveSummary(report: AuditReport): { impact: string; firstFix: string; findings: Finding[] } {
+  const findings = priorityFindings(report);
+  const firstFinding = findings[0];
+  const score = overallScore(report);
+  return {
+    impact:
+      score < 50
+        ? "The site has visible trust and conversion gaps that can reduce local customer inquiries."
+        : score < 80
+          ? "The site has focused improvement opportunities that can make outreach or conversion stronger."
+          : "The site is relatively healthy; improvements should focus on smaller trust and conversion refinements.",
+    firstFix: firstFinding?.recommendation ?? "Keep monitoring the page as content and templates change.",
+    findings
+  };
+}
+
+function brandName(brand: ReportBrandConfig | undefined): string {
+  return brand?.name ?? "Open Local Audit";
+}
+
 function renderMarkdownVisualEvidence(report: AuditReport): string[] {
   if (!report.visualEvidence || report.visualEvidence.length === 0) {
     return [];
@@ -35,6 +66,24 @@ function renderMarkdownVisualEvidence(report: AuditReport): string[] {
     "| Label | Path |",
     "| --- | --- |",
     ...report.visualEvidence.map((item) => `| ${escapeCell(item.label)} | ${escapeCell(item.path)} |`),
+    ""
+  ];
+}
+
+function renderMarkdownExecutiveSummary(report: AuditReport): string[] {
+  const summary = executiveSummary(report);
+  return [
+    "## Executive Summary",
+    "",
+    `- Overall health: ${overallScore(report)}/100`,
+    `- Business impact: ${summary.impact}`,
+    `- Recommended first fix: ${summary.firstFix}`,
+    "",
+    "Top 3 issues:",
+    "",
+    ...(summary.findings.length > 0
+      ? summary.findings.map((finding) => `- ${finding.title}`)
+      : ["- No findings were detected by the current rule set."]),
     ""
   ];
 }
@@ -119,14 +168,33 @@ ${warnings}
 `;
 }
 
+function renderHtmlExecutiveSummary(report: AuditReport): string {
+  const summary = executiveSummary(report);
+  const findings =
+    summary.findings.length > 0
+      ? summary.findings.map((finding) => `<li>${escapeHtml(finding.title)}</li>`).join("\n")
+      : "<li>No findings were detected by the current rule set.</li>";
+
+  return `    <section>
+    <h2>Executive Summary</h2>
+    <p><strong>Business impact:</strong> ${escapeHtml(summary.impact)}</p>
+    <p><strong>Recommended first fix:</strong> ${escapeHtml(summary.firstFix)}</p>
+    <h3>Top 3 issues</h3>
+    <ul>
+${findings}
+    </ul>
+    </section>
+`;
+}
+
 export function renderJsonReport(report: AuditReport, pretty = true): string {
   return `${JSON.stringify(report, null, pretty ? 2 : 0)}\n`;
 }
 
-export function renderMarkdownReport(report: AuditReport): string {
+export function renderMarkdownReport(report: AuditReport, options: ReportRenderOptions = {}): string {
   const findings = [...report.findings].sort((left, right) => severityRank(left) - severityRank(right));
   const lines: string[] = [
-    `# Open Local Audit Report`,
+    `# ${brandName(options.brand)} Report`,
     "",
     `- URL: ${report.url}`,
     `- Final URL: ${report.finalUrl}`,
@@ -146,6 +214,7 @@ export function renderMarkdownReport(report: AuditReport): string {
 
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownVisualEvidence(report));
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownLighthouse(report));
+  lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownExecutiveSummary(report));
 
   if (findings.length === 0) {
     lines.push("No findings were detected by the current rule set.", "");
@@ -173,11 +242,11 @@ export function renderMarkdownReport(report: AuditReport): string {
   return `${lines.join("\n")}\n`;
 }
 
-export function renderHtmlReport(report: AuditReport): string {
+export function renderHtmlReport(report: AuditReport, options: ReportRenderOptions = {}): string {
   const findings = [...report.findings].sort((left, right) => severityRank(left) - severityRank(right));
-  const overallScore = Math.round(
-    Object.values(report.scores).reduce((total, score) => total + score.score, 0) / Object.values(report.scores).length
-  );
+  const reportBrand = options.brand;
+  const reportBrandName = brandName(reportBrand);
+  const reportOverallScore = overallScore(report);
   const scoreRows = Object.values(report.scores)
     .map((score) => `<tr><td>${escapeHtml(score.label)}</td><td>${score.score}/${score.max}</td></tr>`)
     .join("\n");
@@ -195,15 +264,20 @@ export function renderHtmlReport(report: AuditReport): string {
       : "<li>Keep monitoring the page as content and templates change.</li>";
   const visualEvidence = renderHtmlVisualEvidence(report);
   const lighthouse = renderHtmlLighthouse(report);
+  const executive = renderHtmlExecutiveSummary(report);
+  const footer =
+    reportBrand?.footerText || reportBrand?.contact
+      ? `<footer class="meta">${escapeHtml([reportBrand.footerText, reportBrand.contact].filter(Boolean).join(" | "))}</footer>`
+      : "";
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Open Local Audit Report - ${escapeHtml(report.finalUrl)}</title>
+    <title>${escapeHtml(reportBrandName)} Report - ${escapeHtml(report.finalUrl)}</title>
     <style>
-      :root { color-scheme: light; --ink: #172026; --muted: #5f6b75; --line: #d8dee5; --panel: #f6f8fa; --brand: #145a73; --accent: #2f7d5f; }
+      :root { color-scheme: light; --ink: #172026; --muted: #5f6b75; --line: #d8dee5; --panel: #f6f8fa; --brand: ${escapeHtml(reportBrand?.primaryColor ?? "#145a73")}; --accent: ${escapeHtml(reportBrand?.accentColor ?? "#2f7d5f")}; }
       * { box-sizing: border-box; }
       body { background: #eef2f5; color: var(--ink); font-family: Arial, sans-serif; line-height: 1.5; margin: 0; }
       .report-shell { max-width: 1120px; margin: 0 auto; padding: 2rem; }
@@ -223,11 +297,11 @@ export function renderHtmlReport(report: AuditReport): string {
   <body>
     <main class="report-shell">
     <header class="hero">
-      <div class="eyebrow">Open Local Audit</div>
-      <h1>Open Local Audit Report</h1>
+      <div class="eyebrow">${escapeHtml(reportBrandName)}</div>
+      <h1>${escapeHtml(reportBrandName)} Report</h1>
       <p class="meta">URL: ${escapeHtml(report.url)}<br>Final URL: ${escapeHtml(report.finalUrl)}<br>Scanned at: ${escapeHtml(report.scannedAt)}<br>Status code: ${report.statusCode}<br>Profile: ${escapeHtml(report.profile ?? "generic")}</p>
       <div class="score-grid" aria-label="Overall Health">
-        <div class="score-card"><span>Overall Health</span><strong>${overallScore}/100</strong></div>
+        <div class="score-card"><span>Overall Health</span><strong>${reportOverallScore}/100</strong></div>
         <div class="score-card"><span>Priority Findings</span><strong>${report.summary.high + report.summary.medium}</strong></div>
         <div class="score-card"><span>Total Findings</span><strong>${report.summary.totalFindings}</strong></div>
       </div>
@@ -241,7 +315,7 @@ ${scoreRows}
       </tbody>
     </table>
     </section>
-${lighthouse}${visualEvidence}    <section>
+${executive}${lighthouse}${visualEvidence}    <section>
     <h2>Findings</h2>
     <table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>
@@ -256,6 +330,7 @@ ${findingRows}
 ${recommendations}
     </ul>
     </section>
+${footer}
     </main>
   </body>
 </html>

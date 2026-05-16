@@ -59,6 +59,8 @@ describe("report renderers", () => {
     expect(markdown).toContain("# Open Local Audit Report");
     expect(markdown).toContain("- Profile: generic");
     expect(markdown).toContain("## Score Summary");
+    expect(markdown).toContain("## Executive Summary");
+    expect(markdown).toContain("Recommended first fix");
     expect(markdown).toContain("## Lighthouse Summary");
     expect(markdown).toContain("| Performance | 72 |");
     expect(markdown).toContain("The page used a test Lighthouse runner.");
@@ -84,6 +86,8 @@ describe("report renderers", () => {
     expect(html).toContain("<title>Open Local Audit Report");
     expect(html).toContain('class="report-shell"');
     expect(html).toContain("Overall Health");
+    expect(html).toContain("Executive Summary");
+    expect(html).toContain("Recommended first fix");
     expect(html).toContain("Priority Findings");
     expect(html).toContain("Profile: generic");
     expect(html).toContain("Score Summary");
@@ -91,6 +95,22 @@ describe("report renderers", () => {
     expect(html).toContain("Performance");
     expect(html).toContain("72");
     expect(html).toContain("Findings");
+  });
+
+  it("applies report branding to HTML reports", () => {
+    const html = renderHtmlReport(report, {
+      brand: {
+        name: "TORUT Audit Studio",
+        primaryColor: "#123456",
+        accentColor: "#abcdef",
+        footerText: "Prepared for outreach review"
+      }
+    });
+
+    expect(html).toContain("TORUT Audit Studio");
+    expect(html).toContain("--brand: #123456");
+    expect(html).toContain("--accent: #abcdef");
+    expect(html).toContain("Prepared for outreach review");
   });
 
   it("renders Markdown with Visual Evidence section when visual evidence is provided", () => {

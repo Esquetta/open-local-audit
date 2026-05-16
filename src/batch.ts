@@ -4,7 +4,7 @@ import { auditUrl } from "./audit.js";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
-import type { AuditOptions, AuditProfile, AuditReport, Severity } from "./types.js";
+import type { AuditOptions, AuditProfile, AuditReport, ReportBrandConfig, Severity } from "./types.js";
 
 export interface BatchInputEntry {
   url: string;
@@ -22,6 +22,7 @@ export interface BatchReportOptions {
   exportCsv?: string;
   concurrency?: number;
   profile?: AuditProfile;
+  brand?: ReportBrandConfig;
 }
 
 export interface BatchAuditContext {
@@ -604,7 +605,8 @@ export async function runBatchReports(
       const outputs = await writeReportOutputs(report, {
         format: options.format,
         outDir: prepared.siteOutDir,
-        pretty: options.pretty
+        pretty: options.pretty,
+        brand: options.brand
       });
 
       return {
