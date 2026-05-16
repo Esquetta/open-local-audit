@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, and report duplicate lead groups.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach columns, and report duplicate lead groups.
 
 ## Business purpose
 
@@ -124,6 +124,26 @@ Write a branded PDF report:
 open-local-audit https://example.com --format pdf --out report.pdf
 ```
 
+Apply report branding:
+
+```bash
+open-local-audit https://example.com --brand-config brand.json --format pdf --out report.pdf
+```
+
+Minimal `brand.json`:
+
+```json
+{
+  "name": "TORUT Audit Studio",
+  "primaryColor": "#123456",
+  "accentColor": "#2f7d5f",
+  "footerText": "Prepared for outreach review",
+  "contact": "hello@example.com"
+}
+```
+
+Brand colors must use six-digit hex values. Branding applies to Markdown, HTML, and PDF reports.
+
 Run a batch audit from a text file:
 
 ```bash
@@ -204,7 +224,7 @@ open-local-audit discover --input places.csv --provider manual-csv --review-csv 
 
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
-Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
+Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -222,6 +242,8 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Markdown report.
 - HTML report.
 - PDF report.
+- Executive Summary section in customer-facing reports.
+- Optional report branding with `--brand-config`.
 - Combined JSON, Markdown, and HTML report output with `--format all --out-dir`.
 - Batch input files with per-site report folders.
 - CSV batch input with optional labels and segments.
@@ -258,6 +280,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--screenshot` uses the rendered audit path, requires `--out-dir`, and also requires Playwright.
 - `--lighthouse` requires a local Chrome or Chromium runtime that Lighthouse can launch.
 - `--format pdf` is supported for single URL audits and requires `--out` or `--out-dir`.
+- `--brand-config` reads local JSON only; it does not fetch remote assets or upload report data.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.

@@ -110,6 +110,17 @@ Before releasing Lighthouse, PDF, and score explanation features:
 - [x] Discovery CSV exports include `opportunityReasons`.
 - [x] Score explanations are covered by prospect-row and CSV tests.
 
+## Branded sales output readiness
+
+Before releasing branded report and lead enrichment features:
+
+- [x] CLI help documents `--brand-config`.
+- [x] Brand config parsing validates local JSON and rejects invalid colors.
+- [x] Markdown, HTML, and PDF outputs accept report branding.
+- [x] Executive Summary sections render before detailed findings.
+- [x] Discovery CSV exports include pitch, offer, need, and outreach reason columns.
+- [x] CSV formula hardening still applies to enriched export fields.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -118,12 +129,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.13.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.14.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.13.0` after:
+Use `v0.14.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -135,6 +146,7 @@ Use `v0.13.0` after:
 - discovery limits, audit caps, summary JSON, opportunity scoring, and CSV formula hardening are verified,
 - discovery review CSV, duplicate JSON, suppression, and opportunity filters are verified,
 - Lighthouse scoring, PDF output, and opportunity score explanations are verified,
+- report branding, Executive Summary output, and enriched lead export columns are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

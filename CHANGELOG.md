@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.14.0 - 2026-05-16
+
+- Added `--brand-config` for JSON-driven report branding across Markdown, HTML, and PDF outputs.
+- Added Executive Summary sections with business impact, top issues, and a recommended first fix.
+- Added lead export enrichment columns: `pitchAngle`, `recommendedOffer`, `estimatedNeed`, and `outreachPriorityReason`.
+
 ## v0.13.0 - 2026-05-15
 
 - Added opt-in Lighthouse category scoring with `--lighthouse`.

@@ -189,6 +189,23 @@ Exit criteria:
 - Discovery score explanations are covered in prospect-row and CSV tests.
 - Full release check passes before npm publish.
 
+## Milestone 10: Branded sales output
+
+Target release:
+- `v0.14.0`.
+
+Deliverables:
+- `--brand-config <path>` for local JSON report branding.
+- Executive Summary sections in Markdown, HTML, and PDF reports.
+- Lead export enrichment columns for outreach positioning: `pitchAngle`, `recommendedOffer`, `estimatedNeed`, and `outreachPriorityReason`.
+- Validation for brand color values before report rendering.
+
+Exit criteria:
+- Brand config parsing and invalid-color behavior are covered by tests.
+- HTML/PDF/Markdown renderers accept branding without changing JSON report data.
+- Executive Summary output is covered by renderer tests.
+- Enriched lead export columns are covered by discovery CSV tests.
+
 ## Deferred work
 
 - Web UI.
