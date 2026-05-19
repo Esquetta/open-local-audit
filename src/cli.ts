@@ -219,7 +219,8 @@ discoveryProgram.action(async (query?: string) => {
             status: "success",
             score,
             topFinding: result.report.findings[0]?.title,
-            reportPath: preferredReportPath(result.slug, result.outputs)
+            reportPath: preferredReportPath(result.slug, result.outputs),
+            contact: result.report.contact
           }
         };
       });

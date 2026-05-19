@@ -60,6 +60,17 @@ export interface AuditReport {
   evidence: Evidence[];
   visualEvidence?: VisualEvidence[];
   lighthouse?: LighthouseSummary;
+  contact?: PublicContact;
+}
+
+export interface PublicContact {
+  publicEmail?: string;
+  publicPhone?: string;
+  whatsappUrl?: string;
+  contactPageUrl?: string;
+  socialProfiles: string[];
+  contactConfidence: "High" | "Medium" | "Low" | "None";
+  contactSource?: string;
 }
 
 export interface ReportBrandConfig {

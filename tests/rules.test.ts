@@ -48,6 +48,30 @@ describe("audit rules", () => {
     expect(report.summary.totalFindings).toBe(0);
   });
 
+  it("adds public contact readiness to audit reports", () => {
+    const report = auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <body>
+            <a href="mailto:hello@localclinic.com">Email</a>
+            <a href="tel:+902120000000">Call</a>
+            <a href="https://wa.me/902120000000">WhatsApp</a>
+            <a href="/contact">Contact</a>
+          </body>
+        </html>
+      `)
+    );
+
+    expect(report.contact).toMatchObject({
+      publicEmail: "hello@localclinic.com",
+      publicPhone: "+902120000000",
+      whatsappUrl: "https://wa.me/902120000000",
+      contactPageUrl: "https://example.test/contact",
+      contactConfidence: "High"
+    });
+  });
+
   it("flags missing essentials with owner-readable recommendations", () => {
     const report = auditSnapshot(
       snapshot(`

@@ -85,8 +85,11 @@ async function startLocalBusinessServer(): Promise<{ server: Server; url: string
   <body>
     <h1>Example Dental Clinic</h1>
     <p>Call us for dental implants, orthodontics, and emergency dental appointments.</p>
+    <a href="mailto:hello@localclinic.com">Email</a>
     <a href="tel:+902120000000">Call now</a>
     <a href="https://wa.me/902120000000">WhatsApp</a>
+    <a href="/contact">Contact</a>
+    <a href="https://www.instagram.com/localclinic">Instagram</a>
     <script type="application/ld+json">
       {"@context":"https://schema.org","@type":"Dentist","name":"Example Dental Clinic","telephone":"+902120000000"}
     </script>
@@ -554,6 +557,10 @@ describe("CLI behavior helpers", () => {
       const csv = readFileSync(exportCsv, "utf8");
       expect(csv).toContain("Example Dental");
       expect(csv).toContain("success");
+      expect(csv).toContain("hello@localclinic.com");
+      expect(csv).toContain("+902120000000");
+      expect(csv).toContain(`http://127.0.0.1:${new URL(url).port}/contact`);
+      expect(csv).toContain("https://www.instagram.com/localclinic");
       expect(csv).toContain("127-0-0-1/open-local-audit-report.html");
       expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(true);
       expect(existsSync(join(outDir, "127-0-0-1"))).toBe(true);

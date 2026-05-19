@@ -120,6 +120,26 @@ function renderMarkdownLighthouse(report: AuditReport): string[] {
   ];
 }
 
+function renderMarkdownContactReadiness(report: AuditReport): string[] {
+  if (!report.contact || report.contact.contactConfidence === "None") {
+    return [];
+  }
+
+  return [
+    "## Contact Readiness",
+    "",
+    "| Signal | Value |",
+    "| --- | --- |",
+    `| Confidence | ${escapeCell(report.contact.contactConfidence)} |`,
+    `| Public email | ${escapeCell(report.contact.publicEmail ?? "")} |`,
+    `| Public phone | ${escapeCell(report.contact.publicPhone ?? "")} |`,
+    `| WhatsApp | ${escapeCell(report.contact.whatsappUrl ?? "")} |`,
+    `| Contact page | ${escapeCell(report.contact.contactPageUrl ?? "")} |`,
+    `| Social profiles | ${escapeCell(report.contact.socialProfiles.join("; "))} |`,
+    ""
+  ];
+}
+
 function renderHtmlVisualEvidence(report: AuditReport): string {
   if (!report.visualEvidence || report.visualEvidence.length === 0) {
     return "";
@@ -164,6 +184,34 @@ ${rows}
       </tbody>
     </table>
 ${warnings}
+    </section>
+`;
+}
+
+function renderHtmlContactReadiness(report: AuditReport): string {
+  if (!report.contact || report.contact.contactConfidence === "None") {
+    return "";
+  }
+
+  const rows = [
+    ["Confidence", report.contact.contactConfidence],
+    ["Public email", report.contact.publicEmail ?? ""],
+    ["Public phone", report.contact.publicPhone ?? ""],
+    ["WhatsApp", report.contact.whatsappUrl ?? ""],
+    ["Contact page", report.contact.contactPageUrl ?? ""],
+    ["Social profiles", report.contact.socialProfiles.join("; ")]
+  ]
+    .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`)
+    .join("\n");
+
+  return `    <section>
+    <h2>Contact Readiness</h2>
+    <table>
+      <thead><tr><th>Signal</th><th>Value</th></tr></thead>
+      <tbody>
+${rows}
+      </tbody>
+    </table>
     </section>
 `;
 }
@@ -214,6 +262,7 @@ export function renderMarkdownReport(report: AuditReport, options: ReportRenderO
 
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownVisualEvidence(report));
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownLighthouse(report));
+  lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownContactReadiness(report));
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownExecutiveSummary(report));
 
   if (findings.length === 0) {
@@ -264,6 +313,7 @@ export function renderHtmlReport(report: AuditReport, options: ReportRenderOptio
       : "<li>Keep monitoring the page as content and templates change.</li>";
   const visualEvidence = renderHtmlVisualEvidence(report);
   const lighthouse = renderHtmlLighthouse(report);
+  const contact = renderHtmlContactReadiness(report);
   const executive = renderHtmlExecutiveSummary(report);
   const footer =
     reportBrand?.footerText || reportBrand?.contact
@@ -315,7 +365,7 @@ ${scoreRows}
       </tbody>
     </table>
     </section>
-${executive}${lighthouse}${visualEvidence}    <section>
+${executive}${contact}${lighthouse}${visualEvidence}    <section>
     <h2>Findings</h2>
     <table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>

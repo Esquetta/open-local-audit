@@ -42,6 +42,15 @@ describe("report renderers", () => {
   it("renders Markdown with scores, findings, Lighthouse summary, and recommendations", () => {
     const markdown = renderMarkdownReport({
       ...report,
+      contact: {
+        publicEmail: "hello@localclinic.com",
+        publicPhone: "+902120000000",
+        whatsappUrl: "https://wa.me/902120000000",
+        contactPageUrl: "https://example.test/contact",
+        socialProfiles: ["https://www.instagram.com/localclinic"],
+        contactConfidence: "High",
+        contactSource: "mailto, tel, whatsapp, contact-page, social"
+      },
       lighthouse: {
         requestedUrl: "https://example.test",
         finalUrl: "https://example.test",
@@ -61,6 +70,8 @@ describe("report renderers", () => {
     expect(markdown).toContain("## Score Summary");
     expect(markdown).toContain("## Executive Summary");
     expect(markdown).toContain("Recommended first fix");
+    expect(markdown).toContain("## Contact Readiness");
+    expect(markdown).toContain("hello@localclinic.com");
     expect(markdown).toContain("## Lighthouse Summary");
     expect(markdown).toContain("| Performance | 72 |");
     expect(markdown).toContain("The page used a test Lighthouse runner.");
@@ -71,6 +82,15 @@ describe("report renderers", () => {
   it("renders standalone HTML with escaped report content", () => {
     const html = renderHtmlReport({
       ...report,
+      contact: {
+        publicEmail: "hello@localclinic.com",
+        publicPhone: "+902120000000",
+        whatsappUrl: "https://wa.me/902120000000",
+        contactPageUrl: "https://example.test/contact",
+        socialProfiles: ["https://www.instagram.com/localclinic"],
+        contactConfidence: "High",
+        contactSource: "mailto, tel, whatsapp, contact-page, social"
+      },
       lighthouse: {
         requestedUrl: "https://example.test",
         categories: {
@@ -88,6 +108,8 @@ describe("report renderers", () => {
     expect(html).toContain("Overall Health");
     expect(html).toContain("Executive Summary");
     expect(html).toContain("Recommended first fix");
+    expect(html).toContain("Contact Readiness");
+    expect(html).toContain("hello@localclinic.com");
     expect(html).toContain("Priority Findings");
     expect(html).toContain("Profile: generic");
     expect(html).toContain("Score Summary");

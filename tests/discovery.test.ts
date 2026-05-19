@@ -406,7 +406,16 @@ describe("lead discovery", () => {
           status: "success",
           score: 45,
           topFinding: "Phone action is missing",
-          reportPath: "weak-test/open-local-audit-report.html"
+          reportPath: "weak-test/open-local-audit-report.html",
+          contact: {
+            publicEmail: "hello@weak.test",
+            publicPhone: "+902120000000",
+            whatsappUrl: "https://wa.me/902120000000",
+            contactPageUrl: "https://weak.test/contact",
+            socialProfiles: ["https://www.instagram.com/weaksite"],
+            contactConfidence: "High",
+            contactSource: "mailto, tel, whatsapp, contact-page, social"
+          }
         }
       },
       {
@@ -455,6 +464,12 @@ describe("lead discovery", () => {
     expect(rows[1].recommendedOffer).toBe("Conversion-focused website tune-up");
     expect(rows[1].estimatedNeed).toBe("High");
     expect(rows[1].outreachPriorityReason).toContain("Audit score is below 60");
+    expect(rows[1].publicEmail).toBe("hello@weak.test");
+    expect(rows[1].publicPhone).toBe("+902120000000");
+    expect(rows[1].whatsappUrl).toBe("https://wa.me/902120000000");
+    expect(rows[1].contactPageUrl).toBe("https://weak.test/contact");
+    expect(rows[1].socialProfiles).toEqual(["https://www.instagram.com/weaksite"]);
+    expect(rows[1].contactConfidence).toBe("High");
     expect(rows[2].nextAction).toContain("Monitor");
     expect(rows[2].opportunityReasons).toContain("Audit score is 80 or higher");
   });
@@ -548,6 +563,13 @@ describe("lead discovery", () => {
         recommendedOffer: "Starter website build",
         estimatedNeed: "High",
         outreachPriorityReason: "No website URL found; Website-build opportunity",
+        publicEmail: "hello@clinic-a.test",
+        publicPhone: "+902120000000",
+        whatsappUrl: "https://wa.me/902120000000",
+        contactPageUrl: "https://clinic-a.test/contact",
+        socialProfiles: ["https://www.instagram.com/clinic-a"],
+        contactConfidence: "High",
+        contactSource: "mailto, tel, whatsapp, contact-page, social",
         priority: "high",
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
@@ -555,11 +577,13 @@ describe("lead discovery", () => {
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
+      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,publicEmail,publicPhone,whatsappUrl,contactPageUrl,socialProfiles,contactConfidence,contactSource,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
     );
     expect(csv).toContain('"Clinic, A"');
     expect(csv).toContain("No website URL found; Website-build opportunity");
     expect(csv).toContain("Starter website build");
+    expect(csv).toContain("hello@clinic-a.test");
+    expect(csv).toContain("https://www.instagram.com/clinic-a");
   });
 
   it("neutralizes spreadsheet formulas in prospect CSV cells", () => {
@@ -577,6 +601,10 @@ describe("lead discovery", () => {
         recommendedOffer: "Starter website build",
         estimatedNeed: "High",
         outreachPriorityReason: "No website URL found; Website-build opportunity",
+        publicEmail: "=lead@example.test",
+        socialProfiles: ["+https://social.example/formula"],
+        contactConfidence: "Medium",
+        contactSource: "text-email, social",
         priority: "high",
         reviewStatus: "new",
         nextAction: "+call this lead"
@@ -585,5 +613,7 @@ describe("lead discovery", () => {
 
     expect(csv).toContain("'=cmd|' /C calc'!A0");
     expect(csv).toContain("'+call this lead");
+    expect(csv).toContain("'=lead@example.test");
+    expect(csv).toContain("'+https://social.example/formula");
   });
 });

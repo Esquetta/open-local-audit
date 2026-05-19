@@ -4,6 +4,7 @@ import { runRules } from "./rules.js";
 import { load } from "cheerio";
 import { renderPageSnapshot } from "./render.js";
 import { runLighthouseAudit } from "./lighthouse.js";
+import { extractPublicContact } from "./contact.js";
 
 const defaultOptions: AuditOptions = {
   timeoutMs: 10000,
@@ -174,6 +175,7 @@ export function auditSnapshot(
   const profile = options.profile ?? "generic";
   const findings = applyProfileAdjustments(runRules(snapshot), profile, snapshot);
   const recommendations = findings.map((finding) => finding.recommendation);
+  const contact = extractPublicContact(snapshot.html, snapshot.finalUrl);
 
   const report: AuditReport = {
     url: snapshot.url,
@@ -185,6 +187,7 @@ export function auditSnapshot(
     scores: scoreCategories(findings),
     findings,
     recommendations: Array.from(new Set(recommendations)),
+    contact,
     evidence: [
       {
         label: "Status code",

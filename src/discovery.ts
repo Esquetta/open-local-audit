@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
-import type { AuditProfile } from "./types.js";
+import type { AuditProfile, PublicContact } from "./types.js";
 
 export type DiscoveryProviderName = "manual-csv" | "google-places";
 
@@ -29,6 +29,7 @@ export interface DiscoveryAuditResult {
   topFinding?: string;
   reportPath?: string;
   error?: string;
+  contact?: PublicContact;
 }
 
 export interface ProspectRowInput {
@@ -55,6 +56,13 @@ export interface ProspectExportRow {
   recommendedOffer: string;
   estimatedNeed: "High" | "Medium" | "Low";
   outreachPriorityReason: string;
+  publicEmail?: string;
+  publicPhone?: string;
+  whatsappUrl?: string;
+  contactPageUrl?: string;
+  socialProfiles?: string[];
+  contactConfidence?: PublicContact["contactConfidence"];
+  contactSource?: string;
   priority: "high" | "medium" | "low";
   nextAction: string;
   reviewStatus: string;
@@ -678,6 +686,13 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       opportunityScore: opportunityScoreFor(input),
       opportunityReasons: opportunityReasonsFor(input),
       ...enrichment,
+      publicEmail: audit.contact?.publicEmail,
+      publicPhone: audit.contact?.publicPhone,
+      whatsappUrl: audit.contact?.whatsappUrl,
+      contactPageUrl: audit.contact?.contactPageUrl,
+      socialProfiles: audit.contact?.socialProfiles ?? [],
+      contactConfidence: audit.contact?.contactConfidence ?? "None",
+      contactSource: audit.contact?.contactSource,
       ...priority,
       reviewStatus: "new",
       reportPath: audit.reportPath,
@@ -727,6 +742,13 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
     "recommendedOffer",
     "estimatedNeed",
     "outreachPriorityReason",
+    "publicEmail",
+    "publicPhone",
+    "whatsappUrl",
+    "contactPageUrl",
+    "socialProfiles",
+    "contactConfidence",
+    "contactSource",
     "priority",
     "nextAction",
     "reviewStatus",
@@ -754,6 +776,13 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.recommendedOffer,
       row.estimatedNeed,
       row.outreachPriorityReason,
+      row.publicEmail ?? "",
+      row.publicPhone ?? "",
+      row.whatsappUrl ?? "",
+      row.contactPageUrl ?? "",
+      row.socialProfiles?.join("; ") ?? "",
+      row.contactConfidence ?? "None",
+      row.contactSource ?? "",
       row.priority,
       row.nextAction,
       row.reviewStatus,
