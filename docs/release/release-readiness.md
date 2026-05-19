@@ -121,6 +121,17 @@ Before releasing branded report and lead enrichment features:
 - [x] Discovery CSV exports include pitch, offer, need, and outreach reason columns.
 - [x] CSV formula hardening still applies to enriched export fields.
 
+## Contact-ready discovery readiness
+
+Before releasing website-derived contact enrichment:
+
+- [x] Public contact extraction covers mailto, tel, WhatsApp, contact-page, social-profile, and visible-text email signals.
+- [x] Audit reports expose Contact Readiness sections in customer-facing formats.
+- [x] Discovery CSV exports include public contact columns only after website audits run.
+- [x] Google Places field masks remain limited to place ID, display name, and website URI.
+- [x] CSV formula hardening applies to public contact columns.
+- [x] Security and ethics docs state that contact enrichment is public website-derived and does not send outreach.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -129,12 +140,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.14.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.15.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.14.0` after:
+Use `v0.15.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -147,6 +158,7 @@ Use `v0.14.0` after:
 - discovery review CSV, duplicate JSON, suppression, and opportunity filters are verified,
 - Lighthouse scoring, PDF output, and opportunity score explanations are verified,
 - report branding, Executive Summary output, and enriched lead export columns are verified,
+- public contact extraction, report Contact Readiness output, and discovery contact CSV columns are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

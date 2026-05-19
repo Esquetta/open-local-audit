@@ -9,6 +9,7 @@ Open Local Audit must be useful without becoming a scraping or spam engine. The 
 - Scan a user-provided public URL.
 - Follow normal redirects.
 - Inspect public HTML, metadata, links, images, and structured data.
+- Extract contact channels that are visibly published in the audited website HTML.
 - Generate local JSON and Markdown reports.
 - Run limited internal link checks when explicitly requested.
 - Import operator-prepared business CSVs for local `manual-csv` discovery triage.
@@ -33,6 +34,8 @@ Discovery providers should support local operator triage, produce local prospect
 The Google Places provider is explicit and opt-in. It uses official Google Places API endpoints only, reads credentials from `GOOGLE_MAPS_API_KEY`, requests only necessary fields, avoids reviews/photos/ratings, does not store raw place responses, and source-tags derived CSV output. Google Maps scraping remains disallowed.
 
 Discovery operators should use `--limit` and `--max-audits` to control Google API usage and downstream site-audit volume. The CLI warns that Google Maps Platform billing may apply when `google-places` is selected.
+
+Public contact enrichment is website-derived only. Google Places still supplies only identity and website-resolution fields; email, phone, WhatsApp, contact-page, and social-profile columns come from the audited public website HTML. Dry-run discovery does not invent or enrich contact data because no website audit has run.
 
 Operators should use `--suppression-list` to avoid repeatedly auditing or reviewing leads already marked as rejected, contacted, not-fit, do-not-contact, or suppressed. `--review-csv` can preserve local operator decisions across reruns, and `--duplicates-json` can expose exact duplicate lead keys for manual cleanup. These files are local state only; the tool does not send outreach or sync review decisions to a remote service.
 

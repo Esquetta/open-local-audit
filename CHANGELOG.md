@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.15.0 - 2026-05-19
+
+- Added public contact extraction for audited pages, including email, phone, WhatsApp, contact-page, and social-profile signals.
+- Added Contact Readiness sections to Markdown, HTML, and PDF reports.
+- Added contact enrichment columns to discovery CSV exports while preserving CSV formula hardening.
+
 ## v0.14.0 - 2026-05-16
 
 - Added `--brand-config` for JSON-driven report branding across Markdown, HTML, and PDF outputs.

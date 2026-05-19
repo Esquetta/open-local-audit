@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach columns, and report duplicate lead groups.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, and report duplicate lead groups.
 
 ## Business purpose
 
@@ -224,7 +224,7 @@ open-local-audit discover --input places.csv --provider manual-csv --review-csv 
 
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
-Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, and review columns for local triage. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
+Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, website-derived public contact columns, and review columns for local triage. Contact columns are populated only from audited public website HTML and include `publicEmail`, `publicPhone`, `whatsappUrl`, `contactPageUrl`, `socialProfiles`, `contactConfidence`, and `contactSource`. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -243,6 +243,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - HTML report.
 - PDF report.
 - Executive Summary section in customer-facing reports.
+- Contact Readiness section in customer-facing reports.
 - Optional report branding with `--brand-config`.
 - Combined JSON, Markdown, and HTML report output with `--format all --out-dir`.
 - Batch input files with per-site report folders.
@@ -254,6 +255,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
 - Prospect CSV export with profile, score, top finding, report path, and error columns.
+- Discovery CSV contact enrichment from audited public website HTML.
 - Optional rendered DOM audits with `--render`.
 - Optional rendered screenshot evidence with `--screenshot`.
 - Optional Lighthouse category scoring with `--lighthouse`.

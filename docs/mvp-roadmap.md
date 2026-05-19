@@ -206,6 +206,23 @@ Exit criteria:
 - Executive Summary output is covered by renderer tests.
 - Enriched lead export columns are covered by discovery CSV tests.
 
+## Milestone 11: Contact-ready discovery output
+
+Target release:
+- `v0.15.0`.
+
+Deliverables:
+- Public contact extraction from audited website HTML.
+- Contact Readiness sections in Markdown, HTML, and PDF reports.
+- Discovery CSV columns for `publicEmail`, `publicPhone`, `whatsappUrl`, `contactPageUrl`, `socialProfiles`, `contactConfidence`, and `contactSource`.
+- Clear docs that Google Places does not provide contact enrichment and dry-run discovery leaves contact fields empty.
+
+Exit criteria:
+- Contact extraction is covered by unit tests.
+- Audit reports include contact readiness without changing provider boundaries.
+- Discovery CSV contact fields are covered by prospect-row and CLI tests.
+- CSV formula hardening applies to contact enrichment columns.
+
 ## Deferred work
 
 - Web UI.
