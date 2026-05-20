@@ -37,6 +37,8 @@ Discovery operators should use `--limit` and `--max-audits` to control Google AP
 
 Public contact enrichment is website-derived only. Google Places still supplies only identity and website-resolution fields; email, phone, WhatsApp, contact-page, and social-profile columns come from the audited public website HTML. Dry-run discovery does not invent or enrich contact data because no website audit has run.
 
+Outreach handoff fields are advisory local triage metadata. They can suggest a preferred manual channel and next action, but the CLI does not send messages, verify inbox ownership, dial phones, or sync contacts to external systems.
+
 Operators should use `--suppression-list` to avoid repeatedly auditing or reviewing leads already marked as rejected, contacted, not-fit, do-not-contact, or suppressed. `--review-csv` can preserve local operator decisions across reruns, and `--duplicates-json` can expose exact duplicate lead keys for manual cleanup. These files are local state only; the tool does not send outreach or sync review decisions to a remote service.
 
 ## Data minimization

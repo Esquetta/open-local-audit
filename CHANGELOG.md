@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.16.0 - 2026-05-20
+
+- Added discovery outreach handoff fields: `preferredContactChannel`, `outreachAction`, and `contactabilityReason`.
+- Added deterministic channel selection for email, WhatsApp, phone, contact-page, and manual-review discovery leads.
+- Preserved CSV formula hardening for the new outreach handoff fields.
+
 ## v0.15.0 - 2026-05-19
 
 - Added public contact extraction for audited pages, including email, phone, WhatsApp, contact-page, and social-profile signals.

@@ -223,6 +223,22 @@ Exit criteria:
 - Discovery CSV contact fields are covered by prospect-row and CLI tests.
 - CSV formula hardening applies to contact enrichment columns.
 
+## Milestone 12: Outreach handoff guidance
+
+Target release:
+- `v0.16.0`.
+
+Deliverables:
+- Discovery CSV fields for `preferredContactChannel`, `outreachAction`, and `contactabilityReason`.
+- Deterministic channel preference from audited public contact fields: email, WhatsApp, phone, contact page, then manual review.
+- Dry-run and unaudited rows that keep advisory manual-review guidance without inventing contact data.
+- CSV formula hardening for all new handoff fields.
+
+Exit criteria:
+- Prospect-row tests cover email, WhatsApp, phone, contact-page, no-contact, and dry-run handoff behavior.
+- CLI discovery tests confirm handoff fields appear in real CSV output.
+- Docs state that handoff fields are advisory and do not send outreach.
+
 ## Deferred work
 
 - Web UI.

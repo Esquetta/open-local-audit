@@ -132,6 +132,16 @@ Before releasing website-derived contact enrichment:
 - [x] CSV formula hardening applies to public contact columns.
 - [x] Security and ethics docs state that contact enrichment is public website-derived and does not send outreach.
 
+## Outreach handoff readiness
+
+Before releasing discovery handoff guidance:
+
+- [x] Discovery exports include `preferredContactChannel`, `outreachAction`, and `contactabilityReason`.
+- [x] Channel selection prefers public email, then WhatsApp, then phone, then contact page, then manual review.
+- [x] Dry-run and unaudited rows do not invent contact data.
+- [x] CSV formula hardening applies to handoff fields.
+- [x] Docs state that handoff fields are advisory only and do not send outreach.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -140,12 +150,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.15.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.16.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.15.0` after:
+Use `v0.16.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -159,6 +169,7 @@ Use `v0.15.0` after:
 - Lighthouse scoring, PDF output, and opportunity score explanations are verified,
 - report branding, Executive Summary output, and enriched lead export columns are verified,
 - public contact extraction, report Contact Readiness output, and discovery contact CSV columns are verified,
+- discovery outreach handoff fields and channel selection are verified,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
