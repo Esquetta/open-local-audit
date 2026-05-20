@@ -110,6 +110,19 @@ function scoredReportFor(
   };
 }
 
+async function waitFor(assertion: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (assertion()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error("Timed out waiting for expected test condition");
+}
+
 describe("batch reports", () => {
   it("reads URL input files with comments and blank lines", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
@@ -290,6 +303,7 @@ describe("batch reports", () => {
     let maxActive = 0;
 
     try {
+      let runCompleted = false;
       const run = runBatchReports(["https://one.test", "https://two.test", "https://three.test"], {
         format: "json",
         outDir: dir,
@@ -301,14 +315,17 @@ describe("batch reports", () => {
           active -= 1;
           return reportFor(url);
         }
+      }).finally(() => {
+        runCompleted = true;
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitFor(() => active === 2);
       expect(active).toBe(2);
-      releaseAudit.shift()?.();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(active).toBe(2);
-      releaseAudit.splice(0).forEach((release) => release());
+
+      while (!runCompleted) {
+        releaseAudit.splice(0).forEach((release) => release());
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
 
       const results = await run;
       expect(maxActive).toBe(2);
