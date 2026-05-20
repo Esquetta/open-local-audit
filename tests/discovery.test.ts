@@ -470,8 +470,91 @@ describe("lead discovery", () => {
     expect(rows[1].contactPageUrl).toBe("https://weak.test/contact");
     expect(rows[1].socialProfiles).toEqual(["https://www.instagram.com/weaksite"]);
     expect(rows[1].contactConfidence).toBe("High");
+    expect(rows[1].preferredContactChannel).toBe("email");
+    expect(rows[1].outreachAction).toBe("Send a personalized audit summary by email.");
+    expect(rows[1].contactabilityReason).toBe("Public email found on the audited website.");
+    expect(rows[2].preferredContactChannel).toBe("manual-review");
+    expect(rows[2].outreachAction).toBe("Find a public contact path manually before outreach.");
+    expect(rows[2].contactabilityReason).toBe("No public contact channel found on the audited website.");
     expect(rows[2].nextAction).toContain("Monitor");
     expect(rows[2].opportunityReasons).toContain("Audit score is 80 or higher");
+  });
+
+  it("prefers WhatsApp, phone, and contact-page outreach handoff channels after email", () => {
+    const rows = buildProspectRows([
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "WhatsApp Lead",
+          websiteUri: "https://whatsapp.test"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://whatsapp.test",
+          status: "resolved"
+        },
+        audit: {
+          status: "success",
+          score: 58,
+          contact: {
+            whatsappUrl: "https://wa.me/902120000000",
+            socialProfiles: [],
+            contactConfidence: "Medium",
+            contactSource: "whatsapp"
+          }
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Phone Lead",
+          websiteUri: "https://phone.test"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://phone.test",
+          status: "resolved"
+        },
+        audit: {
+          status: "success",
+          score: 62,
+          contact: {
+            publicPhone: "+902129999999",
+            socialProfiles: [],
+            contactConfidence: "Medium",
+            contactSource: "tel"
+          }
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Contact Page Lead",
+          websiteUri: "https://contact-page.test"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://contact-page.test",
+          status: "resolved"
+        },
+        audit: {
+          status: "success",
+          score: 72,
+          contact: {
+            contactPageUrl: "https://contact-page.test/contact",
+            socialProfiles: [],
+            contactConfidence: "Medium",
+            contactSource: "contact-page"
+          }
+        }
+      }
+    ]);
+
+    expect(rows.map((row) => [row.label, row.preferredContactChannel, row.outreachAction])).toEqual([
+      ["WhatsApp Lead", "whatsapp", "Send a short WhatsApp message with the top audit issue."],
+      ["Phone Lead", "phone", "Call with the top audit issue and offer a review."],
+      ["Contact Page Lead", "contact-page", "Use the website contact page with the top audit issue."]
+    ]);
   });
 
   it("builds discovery summary metrics from prospect rows", () => {
@@ -490,6 +573,9 @@ describe("lead discovery", () => {
         recommendedOffer: "Starter website build",
         estimatedNeed: "High",
         outreachPriorityReason: "No website URL found; Website-build opportunity",
+        preferredContactChannel: "manual-review",
+        outreachAction: "Find or create a website path before outreach.",
+        contactabilityReason: "No website URL found.",
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
       },
@@ -508,6 +594,9 @@ describe("lead discovery", () => {
         recommendedOffer: "Conversion-focused website tune-up",
         estimatedNeed: "High",
         outreachPriorityReason: "Audit score is below 60; Top finding: Phone action is missing",
+        preferredContactChannel: "manual-review",
+        outreachAction: "Find a public contact path manually before outreach.",
+        contactabilityReason: "No public contact channel found on the audited website.",
         reviewStatus: "new",
         nextAction: "Prioritize outreach with the top audit issue."
       },
@@ -525,6 +614,9 @@ describe("lead discovery", () => {
         recommendedOffer: "Manual audit follow-up",
         estimatedNeed: "Medium",
         outreachPriorityReason: "Audit failed and needs manual review",
+        preferredContactChannel: "manual-review",
+        outreachAction: "Review the failed audit before outreach.",
+        contactabilityReason: "Audit failed before contactability could be trusted.",
         reviewStatus: "new",
         nextAction: "Review the site manually because the audit failed."
       }
@@ -570,6 +662,9 @@ describe("lead discovery", () => {
         socialProfiles: ["https://www.instagram.com/clinic-a"],
         contactConfidence: "High",
         contactSource: "mailto, tel, whatsapp, contact-page, social",
+        preferredContactChannel: "email",
+        outreachAction: "Send a personalized audit summary by email.",
+        contactabilityReason: "Public email found on the audited website.",
         priority: "high",
         reviewStatus: "new",
         nextAction: "Build a basic website before deeper audit."
@@ -577,7 +672,7 @@ describe("lead discovery", () => {
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,publicEmail,publicPhone,whatsappUrl,contactPageUrl,socialProfiles,contactConfidence,contactSource,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
+      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,publicEmail,publicPhone,whatsappUrl,contactPageUrl,socialProfiles,contactConfidence,contactSource,preferredContactChannel,outreachAction,contactabilityReason,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
     );
     expect(csv).toContain('"Clinic, A"');
     expect(csv).toContain("No website URL found; Website-build opportunity");
@@ -605,6 +700,9 @@ describe("lead discovery", () => {
         socialProfiles: ["+https://social.example/formula"],
         contactConfidence: "Medium",
         contactSource: "text-email, social",
+        preferredContactChannel: "=email",
+        outreachAction: "+send outreach",
+        contactabilityReason: "@public email found",
         priority: "high",
         reviewStatus: "new",
         nextAction: "+call this lead"
@@ -615,5 +713,8 @@ describe("lead discovery", () => {
     expect(csv).toContain("'+call this lead");
     expect(csv).toContain("'=lead@example.test");
     expect(csv).toContain("'+https://social.example/formula");
+    expect(csv).toContain("'=email");
+    expect(csv).toContain("'+send outreach");
+    expect(csv).toContain("'@public email found");
   });
 });

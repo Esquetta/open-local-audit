@@ -340,6 +340,9 @@ describe("CLI behavior helpers", () => {
       expect(csv).toContain("not-audited");
       expect(csv).toContain("opportunityScore");
       expect(csv).toContain("Build a basic website");
+      expect(csv).toContain("preferredContactChannel");
+      expect(csv).toContain("manual-review");
+      expect(csv).toContain("No website URL found.");
       expect(result.stdout).toContain("With website: 1");
       expect(result.stdout).toContain("Without website: 1");
       expect(result.stdout).toContain("Suppressed: 0");
@@ -561,6 +564,9 @@ describe("CLI behavior helpers", () => {
       expect(csv).toContain("+902120000000");
       expect(csv).toContain(`http://127.0.0.1:${new URL(url).port}/contact`);
       expect(csv).toContain("https://www.instagram.com/localclinic");
+      expect(csv).toContain("email");
+      expect(csv).toContain("Send a personalized audit summary by email.");
+      expect(csv).toContain("Public email found on the audited website.");
       expect(csv).toContain("127-0-0-1/open-local-audit-report.html");
       expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(true);
       expect(existsSync(join(outDir, "127-0-0-1"))).toBe(true);

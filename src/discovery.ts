@@ -63,6 +63,9 @@ export interface ProspectExportRow {
   socialProfiles?: string[];
   contactConfidence?: PublicContact["contactConfidence"];
   contactSource?: string;
+  preferredContactChannel: string;
+  outreachAction: string;
+  contactabilityReason: string;
   priority: "high" | "medium" | "low";
   nextAction: string;
   reviewStatus: string;
@@ -653,6 +656,74 @@ function enrichmentFor(input: ProspectRowInput): Pick<
   };
 }
 
+function contactHandoffFor(input: ProspectRowInput): Pick<
+  ProspectExportRow,
+  "preferredContactChannel" | "outreachAction" | "contactabilityReason"
+> {
+  const contact = input.audit?.contact;
+  if (contact?.publicEmail) {
+    return {
+      preferredContactChannel: "email",
+      outreachAction: "Send a personalized audit summary by email.",
+      contactabilityReason: "Public email found on the audited website."
+    };
+  }
+
+  if (contact?.whatsappUrl) {
+    return {
+      preferredContactChannel: "whatsapp",
+      outreachAction: "Send a short WhatsApp message with the top audit issue.",
+      contactabilityReason: "WhatsApp link found on the audited website."
+    };
+  }
+
+  if (contact?.publicPhone) {
+    return {
+      preferredContactChannel: "phone",
+      outreachAction: "Call with the top audit issue and offer a review.",
+      contactabilityReason: "Public phone number found on the audited website."
+    };
+  }
+
+  if (contact?.contactPageUrl) {
+    return {
+      preferredContactChannel: "contact-page",
+      outreachAction: "Use the website contact page with the top audit issue.",
+      contactabilityReason: "Contact page found on the audited website."
+    };
+  }
+
+  if (input.resolution.status === "missing") {
+    return {
+      preferredContactChannel: "manual-review",
+      outreachAction: "Find or create a website path before outreach.",
+      contactabilityReason: "No website URL found."
+    };
+  }
+
+  if (input.audit?.status === "failed") {
+    return {
+      preferredContactChannel: "manual-review",
+      outreachAction: "Review the failed audit before outreach.",
+      contactabilityReason: "Audit failed before contactability could be trusted."
+    };
+  }
+
+  if (!input.audit || input.audit.status === "not-audited") {
+    return {
+      preferredContactChannel: "manual-review",
+      outreachAction: "Audit the website before choosing an outreach channel.",
+      contactabilityReason: "Website was not audited, so public contactability is unknown."
+    };
+  }
+
+  return {
+    preferredContactChannel: "manual-review",
+    outreachAction: "Find a public contact path manually before outreach.",
+    contactabilityReason: "No public contact channel found on the audited website."
+  };
+}
+
 function hasWebsiteValue(resolution: WebsiteResolution): ProspectExportRow["hasWebsite"] {
   if (resolution.status === "resolved") {
     return "yes";
@@ -670,6 +741,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
     const audit = input.audit ?? { status: "not-audited" as const };
     const priority = priorityFor(input);
     const enrichment = enrichmentFor(input);
+    const handoff = contactHandoffFor(input);
 
     return {
       leadKey: stableLeadKey(input),
@@ -693,6 +765,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       socialProfiles: audit.contact?.socialProfiles ?? [],
       contactConfidence: audit.contact?.contactConfidence ?? "None",
       contactSource: audit.contact?.contactSource,
+      ...handoff,
       ...priority,
       reviewStatus: "new",
       reportPath: audit.reportPath,
@@ -749,6 +822,9 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
     "socialProfiles",
     "contactConfidence",
     "contactSource",
+    "preferredContactChannel",
+    "outreachAction",
+    "contactabilityReason",
     "priority",
     "nextAction",
     "reviewStatus",
@@ -783,6 +859,9 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
       row.socialProfiles?.join("; ") ?? "",
       row.contactConfidence ?? "None",
       row.contactSource ?? "",
+      row.preferredContactChannel,
+      row.outreachAction,
+      row.contactabilityReason,
       row.priority,
       row.nextAction,
       row.reviewStatus,
