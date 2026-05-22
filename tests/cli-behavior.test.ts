@@ -426,7 +426,7 @@ describe("CLI behavior helpers", () => {
       const duplicatesJson = join(tmp, "duplicates.json");
       writeFileSync(
         inputPath,
-        "label,website,segment,profile\nFirst Dental,https://dup.example,dental,dental\nSecond Dental,https://dup.example/,dental,dental\nFresh Dental,,dental,dental\n",
+        "label,website,segment,profile\nFirst Dental,https://dup.example,dental,dental\nSecond Dental,https://dup.example/,dental,dental\nKadikoy Smile Dental,https://smile.example/location-a,dental,dental\nKadikoy Smile Clinic,https://smile.example/location-b,dental,dental\nFresh Dental,,dental,dental\n",
         "utf8"
       );
       writeFileSync(
@@ -472,6 +472,17 @@ describe("CLI behavior helpers", () => {
             leadKey: "url:https://dup.example",
             count: 2,
             labels: ["First Dental", "Second Dental"],
+            sources: ["manual-csv"]
+          }
+        ],
+        fuzzyDuplicateGroups: [
+          {
+            matchKey: "domain:smile.example",
+            confidence: "high",
+            matchReasons: ["Shared website domain: smile.example", "Similar business labels"],
+            count: 2,
+            labels: ["Kadikoy Smile Clinic", "Kadikoy Smile Dental"],
+            leadKeys: ["url:https://smile.example/location-a", "url:https://smile.example/location-b"],
             sources: ["manual-csv"]
           }
         ]

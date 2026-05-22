@@ -9,6 +9,7 @@ import {
   buildDiscoverySummary,
   buildProspectRows,
   findDuplicateProspectGroups,
+  findFuzzyDuplicateProspectGroups,
   fetchGooglePlacesCandidates,
   filterSuppressedProspects,
   mergeDiscoveryReviewRows,
@@ -239,7 +240,14 @@ discoveryProgram.action(async (query?: string) => {
       await mkdir(dirname(options.duplicatesJson), { recursive: true });
       await writeFile(
         options.duplicatesJson,
-        `${JSON.stringify({ duplicateGroups: findDuplicateProspectGroups(rows) }, null, 2)}\n`,
+        `${JSON.stringify(
+          {
+            duplicateGroups: findDuplicateProspectGroups(rows),
+            fuzzyDuplicateGroups: findFuzzyDuplicateProspectGroups(rows)
+          },
+          null,
+          2
+        )}\n`,
         "utf8"
       );
     }

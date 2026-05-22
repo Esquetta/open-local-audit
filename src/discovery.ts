@@ -103,6 +103,18 @@ export interface DuplicateProspectGroup {
   sources: string[];
 }
 
+export type FuzzyDuplicateConfidence = "high" | "medium" | "low";
+
+export interface FuzzyDuplicateProspectGroup {
+  matchKey: string;
+  confidence: FuzzyDuplicateConfidence;
+  matchReasons: string[];
+  count: number;
+  labels: string[];
+  leadKeys: string[];
+  sources: string[];
+}
+
 export interface ReadManualDiscoveryCsvOptions {
   defaultProfile?: AuditProfile;
 }
@@ -194,6 +206,85 @@ function normalizeIdentityUrl(value: string | undefined): string | undefined {
 function normalizeLabel(value: string | undefined): string | undefined {
   const normalized = value?.trim().replace(/\s+/g, " ").toLowerCase();
   return normalized || undefined;
+}
+
+function normalizeHostname(value: string | undefined): string | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(inputUrlSchema.parse(value));
+    return parsed.hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeEmail(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && normalized.includes("@") ? normalized : undefined;
+}
+
+function normalizePhone(value: string | undefined): string | undefined {
+  const digits = value?.replace(/\D+/g, "");
+  return digits && digits.length >= 7 ? digits : undefined;
+}
+
+const weakLabelTokens = new Set([
+  "a",
+  "and",
+  "clinic",
+  "co",
+  "company",
+  "dental",
+  "group",
+  "inc",
+  "ltd",
+  "merkezi",
+  "the"
+]);
+
+const sharedProfileHostnames = new Set([
+  "beacons.ai",
+  "bio.site",
+  "campsite.bio",
+  "forms.gle",
+  "linktr.ee",
+  "lnk.bio",
+  "msha.ke",
+  "taplink.cc"
+]);
+
+function sortStrings(values: string[]): string[] {
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+function labelTokens(value: string | undefined): string[] {
+  const normalized = normalizeLabel(
+    value
+      ?.normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/gi, " ")
+  );
+  if (!normalized) {
+    return [];
+  }
+
+  return [...new Set(normalized.split(" ").filter((token) => token.length > 2 && !weakLabelTokens.has(token)))];
+}
+
+function labelSimilarity(left: string | undefined, right: string | undefined): number {
+  const leftTokens = labelTokens(left);
+  const rightTokens = labelTokens(right);
+  if (leftTokens.length < 2 || rightTokens.length < 2) {
+    return 0;
+  }
+
+  const rightSet = new Set(rightTokens);
+  const overlap = leftTokens.filter((token) => rightSet.has(token)).length;
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union > 0 ? overlap / union : 0;
 }
 
 function normalizeLimit(limit: number | undefined): number {
@@ -480,6 +571,159 @@ export function findDuplicateProspectGroups(rows: ProspectExportRow[]): Duplicat
       labels: [...new Set(group.flatMap((row) => (row.label ? [row.label] : [])))],
       sources: [...new Set(group.map((row) => row.source))]
     }));
+}
+
+interface FuzzyDuplicateSignal {
+  matchKey: string;
+  confidence: FuzzyDuplicateConfidence;
+  reason: string;
+}
+
+function fuzzySignalsFor(row: ProspectExportRow): FuzzyDuplicateSignal[] {
+  const signals: FuzzyDuplicateSignal[] = [];
+  const domain = normalizeHostname(row.websiteUrl);
+  if (domain && !sharedProfileHostnames.has(domain)) {
+    signals.push({
+      matchKey: `domain:${domain}`,
+      confidence: "high",
+      reason: `Shared website domain: ${domain}`
+    });
+  }
+
+  const email = normalizeEmail(row.publicEmail);
+  if (email) {
+    signals.push({
+      matchKey: `email:${email}`,
+      confidence: "high",
+      reason: `Shared public email: ${email}`
+    });
+  }
+
+  const phone = normalizePhone(row.publicPhone);
+  if (phone) {
+    signals.push({
+      matchKey: `phone:${phone}`,
+      confidence: "high",
+      reason: "Shared public phone number"
+    });
+  }
+
+  return signals;
+}
+
+function confidenceRank(confidence: FuzzyDuplicateConfidence): number {
+  return confidence === "high" ? 3 : confidence === "medium" ? 2 : 1;
+}
+
+function strongestConfidence(signals: FuzzyDuplicateSignal[]): FuzzyDuplicateConfidence {
+  return signals.reduce<FuzzyDuplicateConfidence>(
+    (strongest, signal) => (confidenceRank(signal.confidence) > confidenceRank(strongest) ? signal.confidence : strongest),
+    "low"
+  );
+}
+
+function compactGroup(rows: ProspectExportRow[], signals: FuzzyDuplicateSignal[]): FuzzyDuplicateProspectGroup | undefined {
+  const leadKeys = sortStrings([...new Set(rows.map((row) => row.leadKey))]);
+  if (leadKeys.length < 2) {
+    return undefined;
+  }
+
+  const sortedSignals = [...signals].sort((left, right) => {
+    const confidenceDelta = confidenceRank(right.confidence) - confidenceRank(left.confidence);
+    return confidenceDelta !== 0 ? confidenceDelta : left.matchKey.localeCompare(right.matchKey);
+  });
+
+  return {
+    matchKey: sortedSignals[0]?.matchKey ?? `review:${leadKeys.join("|")}`,
+    confidence: strongestConfidence(sortedSignals),
+    matchReasons: sortStrings([...new Set(sortedSignals.map((signal) => signal.reason))]),
+    count: rows.length,
+    labels: sortStrings([...new Set(rows.flatMap((row) => (row.label ? [row.label] : [])))]),
+    leadKeys,
+    sources: sortStrings([...new Set(rows.map((row) => row.source))])
+  };
+}
+
+function mergeFuzzyGroups(
+  existing: FuzzyDuplicateProspectGroup,
+  next: FuzzyDuplicateProspectGroup
+): FuzzyDuplicateProspectGroup {
+  const confidence =
+    confidenceRank(next.confidence) > confidenceRank(existing.confidence) ? next.confidence : existing.confidence;
+  const matchKey =
+    confidenceRank(next.confidence) > confidenceRank(existing.confidence)
+      ? next.matchKey
+      : sortStrings([existing.matchKey, next.matchKey])[0];
+
+  return {
+    matchKey,
+    confidence,
+    matchReasons: sortStrings([...new Set([...existing.matchReasons, ...next.matchReasons])]),
+    count: Math.max(existing.count, next.count),
+    labels: sortStrings([...new Set([...existing.labels, ...next.labels])]),
+    leadKeys: sortStrings([...new Set([...existing.leadKeys, ...next.leadKeys])]),
+    sources: sortStrings([...new Set([...existing.sources, ...next.sources])])
+  };
+}
+
+export function findFuzzyDuplicateProspectGroups(rows: ProspectExportRow[]): FuzzyDuplicateProspectGroup[] {
+  const groupsBySignal = new Map<string, { rows: ProspectExportRow[]; signals: FuzzyDuplicateSignal[] }>();
+
+  for (const row of rows) {
+    for (const signal of fuzzySignalsFor(row)) {
+      const group = groupsBySignal.get(signal.matchKey) ?? { rows: [], signals: [] };
+      group.rows.push(row);
+      group.signals.push(signal);
+      groupsBySignal.set(signal.matchKey, group);
+    }
+  }
+
+  const signalGroups = [...groupsBySignal.values()]
+    .filter((group) => group.rows.length > 1)
+    .flatMap((group) => compactGroup(group.rows, group.signals) ?? []);
+
+  const labelGroups: FuzzyDuplicateProspectGroup[] = [];
+  for (let leftIndex = 0; leftIndex < rows.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < rows.length; rightIndex += 1) {
+      const left = rows[leftIndex];
+      const right = rows[rightIndex];
+      if (left.leadKey === right.leadKey) {
+        continue;
+      }
+
+      const similarity = labelSimilarity(left.label, right.label);
+      if (similarity < 0.75) {
+        continue;
+      }
+
+      const compacted = compactGroup([left, right], [
+        {
+          matchKey: `label:${labelTokens(left.label).filter((token) => labelTokens(right.label).includes(token)).join("-")}`,
+          confidence: "medium",
+          reason: "Similar business labels"
+        }
+      ]);
+      if (compacted) {
+        labelGroups.push(compacted);
+      }
+    }
+  }
+
+  const byLeadKeys = new Map<string, FuzzyDuplicateProspectGroup>();
+  for (const group of [...signalGroups, ...labelGroups]) {
+    const key = [...group.leadKeys].sort().join("|");
+    const existing = byLeadKeys.get(key);
+    if (existing) {
+      byLeadKeys.set(key, mergeFuzzyGroups(existing, group));
+    } else {
+      byLeadKeys.set(key, group);
+    }
+  }
+
+  return [...byLeadKeys.values()].sort((left, right) => {
+    const confidenceDelta = confidenceRank(right.confidence) - confidenceRank(left.confidence);
+    return confidenceDelta !== 0 ? confidenceDelta : left.matchKey.localeCompare(right.matchKey);
+  });
 }
 
 function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority" | "nextAction"> {

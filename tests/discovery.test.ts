@@ -6,6 +6,7 @@ import {
   buildDiscoverySummary,
   buildProspectRows,
   findDuplicateProspectGroups,
+  findFuzzyDuplicateProspectGroups,
   fetchGooglePlacesCandidates,
   filterSuppressedProspects,
   mergeDiscoveryReviewRows,
@@ -372,6 +373,232 @@ describe("lead discovery", () => {
         sources: ["manual-csv"]
       }
     ]);
+  });
+
+  it("reports advisory fuzzy duplicate candidates without repeating exact-only groups", () => {
+    const rows = buildProspectRows([
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Kadikoy Smile Dental",
+          websiteUri: "https://smile.example/location-a"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://smile.example/location-a",
+          status: "resolved"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Kadikoy Smile Clinic",
+          websiteUri: "https://smile.example/location-b"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://smile.example/location-b",
+          status: "resolved"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "First Exact",
+          websiteUri: "https://exact.example"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://exact.example",
+          status: "resolved"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Second Exact",
+          websiteUri: "https://exact.example/"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://exact.example/",
+          status: "resolved"
+        }
+      }
+    ]);
+
+    expect(findDuplicateProspectGroups(rows)).toEqual([
+      {
+        leadKey: "url:https://exact.example",
+        count: 2,
+        labels: ["First Exact", "Second Exact"],
+        sources: ["manual-csv"]
+      }
+    ]);
+    expect(findFuzzyDuplicateProspectGroups(rows)).toEqual([
+      {
+        matchKey: "domain:smile.example",
+        confidence: "high",
+        matchReasons: ["Shared website domain: smile.example", "Similar business labels"],
+        count: 2,
+        labels: ["Kadikoy Smile Clinic", "Kadikoy Smile Dental"],
+        leadKeys: ["url:https://smile.example/location-a", "url:https://smile.example/location-b"],
+        sources: ["manual-csv"]
+      }
+    ]);
+  });
+
+  it("uses label similarity cautiously for fuzzy duplicate review", () => {
+    const rows = buildProspectRows([
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Kadikoy Smile Dental"
+        },
+        resolution: {
+          hasWebsite: false,
+          status: "missing"
+        }
+      },
+      {
+        candidate: {
+          source: "google-places",
+          label: "Kadikoy Smile Clinic"
+        },
+        resolution: {
+          hasWebsite: false,
+          status: "missing"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Dental Clinic"
+        },
+        resolution: {
+          hasWebsite: false,
+          status: "missing"
+        }
+      },
+      {
+        candidate: {
+          source: "google-places",
+          label: "Dental Clinic"
+        },
+        resolution: {
+          hasWebsite: false,
+          status: "missing"
+        }
+      }
+    ]);
+
+    expect(findFuzzyDuplicateProspectGroups(rows)).toEqual([
+      {
+        matchKey: "label:kadikoy-smile",
+        confidence: "medium",
+        matchReasons: ["Similar business labels"],
+        count: 2,
+        labels: ["Kadikoy Smile Clinic", "Kadikoy Smile Dental"],
+        leadKeys: ["label:google-places:kadikoy smile clinic", "label:manual-csv:kadikoy smile dental"],
+        sources: ["google-places", "manual-csv"]
+      }
+    ]);
+  });
+
+  it("keeps fuzzy duplicate groups deterministic and merges matching evidence", () => {
+    const rows = buildProspectRows([
+      {
+        candidate: {
+          source: "google-places",
+          label: "Second Contact",
+          websiteUri: "https://contact.example/b"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://contact.example/b",
+          status: "resolved"
+        },
+        audit: {
+          status: "success",
+          contact: {
+            publicEmail: "HELLO@contact.example",
+            publicPhone: "+90 212 000 0000",
+            socialProfiles: [],
+            contactConfidence: "High"
+          }
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "First Contact",
+          websiteUri: "https://contact.example/a"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://contact.example/a",
+          status: "resolved"
+        },
+        audit: {
+          status: "success",
+          contact: {
+            publicEmail: "hello@contact.example",
+            publicPhone: "+902120000000",
+            socialProfiles: [],
+            contactConfidence: "High"
+          }
+        }
+      }
+    ]);
+    const expected = [
+      {
+        matchKey: "domain:contact.example",
+        confidence: "high",
+        matchReasons: [
+          "Shared public email: hello@contact.example",
+          "Shared public phone number",
+          "Shared website domain: contact.example"
+        ],
+        count: 2,
+        labels: ["First Contact", "Second Contact"],
+        leadKeys: ["url:https://contact.example/a", "url:https://contact.example/b"],
+        sources: ["google-places", "manual-csv"]
+      }
+    ];
+
+    expect(findFuzzyDuplicateProspectGroups(rows)).toEqual(expected);
+    expect(findFuzzyDuplicateProspectGroups([...rows].reverse())).toEqual(expected);
+  });
+
+  it("does not treat shared profile hosts as high-confidence domain duplicates", () => {
+    const rows = buildProspectRows([
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Cafe One",
+          websiteUri: "https://linktr.ee/cafeone"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://linktr.ee/cafeone",
+          status: "resolved"
+        }
+      },
+      {
+        candidate: {
+          source: "manual-csv",
+          label: "Bike Shop Two",
+          websiteUri: "https://linktr.ee/bikeshoptwo"
+        },
+        resolution: {
+          hasWebsite: true,
+          websiteUrl: "https://linktr.ee/bikeshoptwo",
+          status: "resolved"
+        }
+      }
+    ]);
+
+    expect(findFuzzyDuplicateProspectGroups(rows)).toEqual([]);
   });
 
   it("builds prospect rows with priority and next action guidance", () => {
