@@ -239,6 +239,23 @@ Exit criteria:
 - CLI discovery tests confirm handoff fields appear in real CSV output.
 - Docs state that handoff fields are advisory and do not send outreach.
 
+## Milestone 13: Fuzzy duplicate lead review
+
+Target release:
+- `v0.17.0`.
+
+Deliverables:
+- Advisory fuzzy duplicate candidate groups in discovery duplicate JSON output.
+- Matching signals based on normalized business labels, website domains, public email, and public phone where available.
+- Clear duplicate confidence and reason fields for operator review.
+- No automatic suppression, review-status mutation, outreach sending, or CRM sync.
+
+Exit criteria:
+- Exact duplicate reporting remains unchanged.
+- Fuzzy duplicate candidates are deterministic and covered by unit and CLI tests.
+- Docs state that fuzzy matching is advisory only.
+- Discovery exports and review CSV behavior remain manual operator state.
+
 ## Deferred work
 
 - Web UI.

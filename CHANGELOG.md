@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.17.0 - 2026-05-22
+
+- Added advisory fuzzy duplicate candidate groups to discovery duplicate JSON output.
+- Added duplicate review reasons for likely business-label and website-domain similarity.
+- Preserved exact duplicate reporting while keeping fuzzy matching manual-review only.
+- Confirmed fuzzy duplicate review does not auto-suppress leads, send outreach, or sync to a CRM.
+
 ## v0.16.0 - 2026-05-20
 
 - Added discovery outreach handoff fields: `preferredContactChannel`, `outreachAction`, and `contactabilityReason`.

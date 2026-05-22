@@ -142,6 +142,16 @@ Before releasing discovery handoff guidance:
 - [x] CSV formula hardening applies to handoff fields.
 - [x] Docs state that handoff fields are advisory only and do not send outreach.
 
+## Fuzzy duplicate review readiness
+
+Before releasing fuzzy duplicate lead review:
+
+- [x] `--duplicates-json` preserves exact duplicate lead-key groups.
+- [x] Fuzzy duplicate candidates include clear matching reasons and confidence.
+- [x] Tests cover label and website/domain duplicate candidates.
+- [x] Docs state fuzzy matching is advisory only.
+- [x] Docs state fuzzy matching does not auto-suppress leads, send outreach, or sync to a CRM.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -150,12 +160,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.16.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.17.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.16.0` after:
+Use `v0.17.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -170,6 +180,8 @@ Use `v0.16.0` after:
 - report branding, Executive Summary output, and enriched lead export columns are verified,
 - public contact extraction, report Contact Readiness output, and discovery contact CSV columns are verified,
 - discovery outreach handoff fields and channel selection are verified,
+- fuzzy duplicate lead review candidates are verified with deterministic fixtures,
+- duplicate JSON output is confirmed advisory-only and does not change suppression, review CSV, outreach, or CRM behavior,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

@@ -39,7 +39,7 @@ Public contact enrichment is website-derived only. Google Places still supplies 
 
 Outreach handoff fields are advisory local triage metadata. They can suggest a preferred manual channel and next action, but the CLI does not send messages, verify inbox ownership, dial phones, or sync contacts to external systems.
 
-Operators should use `--suppression-list` to avoid repeatedly auditing or reviewing leads already marked as rejected, contacted, not-fit, do-not-contact, or suppressed. `--review-csv` can preserve local operator decisions across reruns, and `--duplicates-json` can expose exact duplicate lead keys for manual cleanup. These files are local state only; the tool does not send outreach or sync review decisions to a remote service.
+Operators should use `--suppression-list` to avoid repeatedly auditing or reviewing leads already marked as rejected, contacted, not-fit, do-not-contact, or suppressed. `--review-csv` can preserve local operator decisions across reruns, and `--duplicates-json` can expose exact duplicate lead keys plus advisory fuzzy duplicate candidates for manual cleanup. These files are local state only; fuzzy matches do not auto-suppress leads, and the tool does not send outreach or sync review decisions to a remote service.
 
 ## Data minimization
 

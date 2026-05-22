@@ -13,7 +13,7 @@ The feature should not become a Google Maps scraper or a persistent copy of Goog
 
 ## Problem
 
-TORUT needs a professional way to answer:
+The project needs a professional way to answer:
 
 - Which local businesses exist in a target area and segment?
 - Which ones have a website?

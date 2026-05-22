@@ -101,7 +101,7 @@ discover "dentists in Boston" --provider google-places
   -> Operator-controlled candidate and audit caps
   -> Optional summary JSON for release evidence
   -> Local suppression and review-state fields
-  -> Optional review CSV and duplicate JSON outputs
+  -> Optional review CSV and exact/fuzzy duplicate JSON outputs
 ```
 
 Responsibilities:
@@ -114,9 +114,9 @@ Responsibilities:
 - Support `--limit`, `--max-audits`, `--min-opportunity-score`, `--suppression-list`, `--review-csv`, `--duplicates-json`, `--dry-run`, and `--summary-json` for controlled local triage.
 - Filter suppressed candidates before running website audits.
 - Preserve operator review decisions across reruns in a separate review CSV.
-- Report exact stable lead-key duplicate groups when requested.
+- Report exact stable lead-key duplicate groups and advisory fuzzy duplicate candidates when requested.
 - Neutralize formula-like CSV cells before export.
-- Keep review and outreach decisions manual.
+- Keep review, suppression, outreach, and CRM decisions manual.
 
 Out of scope for this slice:
 - Google Maps scraping.
