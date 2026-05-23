@@ -4,7 +4,7 @@ import { auditUrl } from "./audit.js";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
-import type { AuditOptions, AuditProfile, AuditReport, ReportBrandConfig, Severity } from "./types.js";
+import type { AuditOptions, AuditProfile, AuditReport, PublicContact, ReportBrandConfig, Severity } from "./types.js";
 
 export interface BatchInputEntry {
   url: string;
@@ -58,6 +58,28 @@ export interface FailedBatchReportResult extends BatchInputEntry {
 
 export type BatchReportResult = SuccessfulBatchReportResult | FailedBatchReportResult;
 
+type BatchContactChannel = "email" | "whatsapp" | "phone" | "contact-page" | "manual-review";
+
+type BatchContactRollup = {
+  withAnyPublicContact: number;
+  publicEmail: number;
+  publicPhone: number;
+  whatsapp: number;
+  contactPage: number;
+  socialProfiles: number;
+  confidence: Record<PublicContact["contactConfidence"], number>;
+};
+
+type BatchOutreachRollup = {
+  preferredChannels: Record<BatchContactChannel, number>;
+};
+
+type BatchOutreachHandoff = {
+  preferredContactChannel: BatchContactChannel;
+  outreachAction: string;
+  contactabilityReason: string;
+};
+
 type BatchIndexEntry = {
   url: string;
   label?: string;
@@ -69,6 +91,8 @@ type BatchIndexEntry = {
   findings?: AuditReport["summary"];
   topFinding?: string;
   reports?: Partial<Record<Exclude<OutputFormat, "all">, string>>;
+  contact?: PublicContact;
+  outreach?: BatchOutreachHandoff;
   error?: string;
 };
 
@@ -93,6 +117,8 @@ interface BatchIndex {
     profiles: Record<string, BatchBreakdownEntry>;
     segments: Record<string, BatchBreakdownEntry>;
     topFindings: BatchFindingFrequency[];
+    contact: BatchContactRollup;
+    outreach: BatchOutreachRollup;
   };
   entries: BatchIndexEntry[];
 }
@@ -205,6 +231,56 @@ function totalScore(report: AuditReport): number {
   return Math.round(scores.reduce((total, score) => total + score.score, 0) / scores.length);
 }
 
+function hasAnyPublicContact(contact: PublicContact | undefined): boolean {
+  return Boolean(
+    contact?.publicEmail ||
+      contact?.publicPhone ||
+      contact?.whatsappUrl ||
+      contact?.contactPageUrl ||
+      (contact?.socialProfiles.length ?? 0) > 0
+  );
+}
+
+function contactHandoffFor(contact: PublicContact | undefined): BatchOutreachHandoff {
+  if (contact?.publicEmail) {
+    return {
+      preferredContactChannel: "email",
+      outreachAction: "Send a personalized audit summary by email.",
+      contactabilityReason: "Public email found on the audited website."
+    };
+  }
+
+  if (contact?.whatsappUrl) {
+    return {
+      preferredContactChannel: "whatsapp",
+      outreachAction: "Send a short WhatsApp message with the top audit issue.",
+      contactabilityReason: "WhatsApp link found on the audited website."
+    };
+  }
+
+  if (contact?.publicPhone) {
+    return {
+      preferredContactChannel: "phone",
+      outreachAction: "Call with the top audit issue and offer a review.",
+      contactabilityReason: "Public phone number found on the audited website."
+    };
+  }
+
+  if (contact?.contactPageUrl) {
+    return {
+      preferredContactChannel: "contact-page",
+      outreachAction: "Use the website contact page with the top audit issue.",
+      contactabilityReason: "Contact page found on the audited website."
+    };
+  }
+
+  return {
+    preferredContactChannel: "manual-review",
+    outreachAction: "Find a public contact path manually before outreach.",
+    contactabilityReason: "No public contact channel found on the audited website."
+  };
+}
+
 function worstSeverityRank(report: AuditReport): number {
   const ranks: Record<Severity, number> = {
     high: 4,
@@ -230,6 +306,11 @@ function buildBatchIndexEntry(result: BatchReportResult, profile?: AuditProfile)
     };
   }
 
+  const contact = result.report.contact ?? {
+    socialProfiles: [],
+    contactConfidence: "None" as const
+  };
+
   return {
     url: result.url,
     label: result.label,
@@ -240,6 +321,8 @@ function buildBatchIndexEntry(result: BatchReportResult, profile?: AuditProfile)
     score: totalScore(result.report),
     findings: result.report.summary,
     topFinding: result.report.findings[0]?.title,
+    contact,
+    outreach: contactHandoffFor(contact),
     reports: outputReports(result.slug, result.outputs)
   };
 }
@@ -360,7 +443,53 @@ function buildBatchSummary(entries: BatchIndexEntry[]): BatchIndex["summary"] {
       .map(([title, count]) => ({ title, count }))
       .filter((entry) => entry.count > 1)
       .sort((left, right) => right.count - left.count || left.title.localeCompare(right.title))
-      .slice(0, 5)
+      .slice(0, 5),
+    contact: buildContactRollup(entries),
+    outreach: buildOutreachRollup(entries)
+  };
+}
+
+function buildContactRollup(entries: BatchIndexEntry[]): BatchContactRollup {
+  const confidence: BatchContactRollup["confidence"] = {
+    High: 0,
+    Medium: 0,
+    Low: 0,
+    None: 0
+  };
+  for (const entry of entries) {
+    if (entry.contact) {
+      confidence[entry.contact.contactConfidence] += 1;
+    }
+  }
+
+  return {
+    withAnyPublicContact: entries.filter((entry) => hasAnyPublicContact(entry.contact)).length,
+    publicEmail: entries.filter((entry) => entry.contact?.publicEmail).length,
+    publicPhone: entries.filter((entry) => entry.contact?.publicPhone).length,
+    whatsapp: entries.filter((entry) => entry.contact?.whatsappUrl).length,
+    contactPage: entries.filter((entry) => entry.contact?.contactPageUrl).length,
+    socialProfiles: entries.filter((entry) => (entry.contact?.socialProfiles.length ?? 0) > 0).length,
+    confidence
+  };
+}
+
+function buildOutreachRollup(entries: BatchIndexEntry[]): BatchOutreachRollup {
+  const preferredChannels: BatchOutreachRollup["preferredChannels"] = {
+    email: 0,
+    whatsapp: 0,
+    phone: 0,
+    "contact-page": 0,
+    "manual-review": 0
+  };
+
+  for (const entry of entries) {
+    if (entry.outreach) {
+      preferredChannels[entry.outreach.preferredContactChannel] += 1;
+    }
+  }
+
+  return {
+    preferredChannels
   };
 }
 
@@ -406,6 +535,8 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
     `- Succeeded: ${index.summary.succeeded}`,
     `- Failed: ${index.summary.failed}`,
     `- Average score: ${index.summary.averageScore ?? "N/A"}`,
+    `- With public contact: ${index.summary.contact.withAnyPublicContact}`,
+    `- Manual contact review: ${index.summary.outreach.preferredChannels["manual-review"]}`,
     "",
     "## Profile Breakdown",
     "",
@@ -433,10 +564,37 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
       ? index.summary.topFindings.map((entry) => `| ${escapeMarkdownCell(entry.title)} | ${entry.count} |`)
       : ["|  |  |"]),
     "",
+    "## Contact Rollup",
+    "",
+    "| Preferred channel | Count |",
+    "| --- | ---: |",
+    `| email | ${index.summary.contact.publicEmail} |`,
+    `| whatsapp | ${index.summary.contact.whatsapp} |`,
+    `| phone | ${index.summary.contact.publicPhone} |`,
+    `| contact-page | ${index.summary.contact.contactPage} |`,
+    `| social-profiles | ${index.summary.contact.socialProfiles} |`,
+    "",
+    "| Contact confidence | Count |",
+    "| --- | ---: |",
+    `| High | ${index.summary.contact.confidence.High} |`,
+    `| Medium | ${index.summary.contact.confidence.Medium} |`,
+    `| Low | ${index.summary.contact.confidence.Low} |`,
+    `| None | ${index.summary.contact.confidence.None} |`,
+    "",
+    "## Outreach Rollup",
+    "",
+    "| Preferred channel | Count |",
+    "| --- | ---: |",
+    `| email | ${index.summary.outreach.preferredChannels.email} |`,
+    `| whatsapp | ${index.summary.outreach.preferredChannels.whatsapp} |`,
+    `| phone | ${index.summary.outreach.preferredChannels.phone} |`,
+    `| contact-page | ${index.summary.outreach.preferredChannels["contact-page"]} |`,
+    `| manual-review | ${index.summary.outreach.preferredChannels["manual-review"]} |`,
+    "",
     "## Entries",
     "",
-    "| Status | Label | URL | Segment | Profile | Score | Top issue | Error |",
-    "| --- | --- | --- | --- | --- | ---: | --- | --- |"
+    "| Status | Label | URL | Segment | Profile | Score | Contact confidence | Preferred channel | Contact reason | Top issue | Error |",
+    "| --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- |"
   ];
 
   for (const entry of index.entries) {
@@ -448,6 +606,9 @@ function renderBatchIndexMarkdown(index: BatchIndex): string {
         entry.segment ?? "",
         entry.profile ?? "",
         entry.score?.toString() ?? "",
+        entry.contact?.contactConfidence ?? "",
+        entry.outreach?.preferredContactChannel ?? "",
+        entry.outreach?.contactabilityReason ?? "",
         entry.topFinding ?? "",
         entry.error ?? ""
       ]
@@ -476,10 +637,25 @@ function renderBatchIndexHtml(index: BatchIndex): string {
           .map((entry) => `<tr><td>${escapeHtml(entry.title)}</td><td>${entry.count}</td></tr>`)
           .join("\n")
       : `<tr><td></td><td></td></tr>`;
+  const contactChannelRows = [
+    ["email", index.summary.contact.publicEmail],
+    ["whatsapp", index.summary.contact.whatsapp],
+    ["phone", index.summary.contact.publicPhone],
+    ["contact-page", index.summary.contact.contactPage],
+    ["social-profiles", index.summary.contact.socialProfiles]
+  ]
+    .map(([channel, count]) => `<tr><td>${escapeHtml(String(channel))}</td><td>${count}</td></tr>`)
+    .join("\n");
+  const contactConfidenceRows = Object.entries(index.summary.contact.confidence)
+    .map(([confidence, count]) => `<tr><td>${escapeHtml(confidence)}</td><td>${count}</td></tr>`)
+    .join("\n");
+  const outreachChannelRows = Object.entries(index.summary.outreach.preferredChannels)
+    .map(([channel, count]) => `<tr><td>${escapeHtml(channel)}</td><td>${count}</td></tr>`)
+    .join("\n");
   const rows = index.entries
     .map(
       (entry) =>
-        `<tr><td>${entry.status}</td><td>${escapeHtml(entry.label ?? "")}</td><td>${escapeHtml(entry.url)}</td><td>${escapeHtml(entry.segment ?? "")}</td><td>${escapeHtml(entry.profile ?? "")}</td><td>${entry.score ?? ""}</td><td>${escapeHtml(entry.topFinding ?? "")}</td><td>${escapeHtml(entry.error ?? "")}</td></tr>`
+        `<tr><td>${entry.status}</td><td>${escapeHtml(entry.label ?? "")}</td><td>${escapeHtml(entry.url)}</td><td>${escapeHtml(entry.segment ?? "")}</td><td>${escapeHtml(entry.profile ?? "")}</td><td>${entry.score ?? ""}</td><td>${escapeHtml(entry.contact?.contactConfidence ?? "")}</td><td>${escapeHtml(entry.outreach?.preferredContactChannel ?? "")}</td><td>${escapeHtml(entry.outreach?.contactabilityReason ?? "")}</td><td>${escapeHtml(entry.topFinding ?? "")}</td><td>${escapeHtml(entry.error ?? "")}</td></tr>`
     )
     .join("\n");
 
@@ -498,7 +674,7 @@ function renderBatchIndexHtml(index: BatchIndex): string {
   </head>
   <body>
     <h1>Open Local Audit Batch Index</h1>
-    <p>Total: ${index.summary.total}<br>Succeeded: ${index.summary.succeeded}<br>Failed: ${index.summary.failed}<br>Average score: ${index.summary.averageScore ?? "N/A"}</p>
+    <p>Total: ${index.summary.total}<br>Succeeded: ${index.summary.succeeded}<br>Failed: ${index.summary.failed}<br>Average score: ${index.summary.averageScore ?? "N/A"}<br>With public contact: ${index.summary.contact.withAnyPublicContact}<br>Manual contact review: ${index.summary.outreach.preferredChannels["manual-review"]}</p>
     <h2>Profile Breakdown</h2>
     <table>
       <thead><tr><th>Profile</th><th>Total</th><th>Succeeded</th><th>Failed</th><th>Average score</th></tr></thead>
@@ -520,9 +696,29 @@ ${renderBreakdownRows(index.summary.segments)}
 ${findingRows}
       </tbody>
     </table>
+    <h2>Contact Rollup</h2>
+    <table>
+      <thead><tr><th>Preferred channel</th><th>Count</th></tr></thead>
+      <tbody>
+${contactChannelRows}
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>Contact confidence</th><th>Count</th></tr></thead>
+      <tbody>
+${contactConfidenceRows}
+      </tbody>
+    </table>
+    <h2>Outreach Rollup</h2>
+    <table>
+      <thead><tr><th>Preferred channel</th><th>Count</th></tr></thead>
+      <tbody>
+${outreachChannelRows}
+      </tbody>
+    </table>
     <h2>Entries</h2>
     <table>
-      <thead><tr><th>Status</th><th>Label</th><th>URL</th><th>Segment</th><th>Profile</th><th>Score</th><th>Top issue</th><th>Error</th></tr></thead>
+      <thead><tr><th>Status</th><th>Label</th><th>URL</th><th>Segment</th><th>Profile</th><th>Score</th><th>Contact confidence</th><th>Preferred channel</th><th>Contact reason</th><th>Top issue</th><th>Error</th></tr></thead>
       <tbody>
 ${rows}
       </tbody>
@@ -552,10 +748,25 @@ async function writeBatchIndex(results: BatchReportResult[], options: BatchRepor
 }
 
 function renderProspectCsv(results: BatchReportResult[]): string {
-  const header = ["url", "label", "segment", "profile", "status", "score", "topFinding", "report paths", "error"];
+  const header = [
+    "url",
+    "label",
+    "segment",
+    "profile",
+    "status",
+    "score",
+    "topFinding",
+    "contactConfidence",
+    "preferredContactChannel",
+    "contactabilityReason",
+    "report paths",
+    "error"
+  ];
   const rows = results.map((result) => {
     const reports = result.status === "success" ? outputReports(result.slug, result.outputs) : {};
     const reportPaths = Object.values(reports).join("; ");
+    const contact = result.status === "success" ? (result.report.contact ?? { socialProfiles: [], contactConfidence: "None" as const }) : undefined;
+    const outreach = result.status === "success" ? contactHandoffFor(contact) : undefined;
     const values = [
       result.url,
       result.label ?? "",
@@ -564,6 +775,9 @@ function renderProspectCsv(results: BatchReportResult[]): string {
       result.status,
       result.status === "success" ? totalScore(result.report).toString() : "",
       result.status === "success" ? (result.report.findings[0]?.title ?? "") : "",
+      contact?.contactConfidence ?? "",
+      outreach?.preferredContactChannel ?? "",
+      outreach?.contactabilityReason ?? "",
       reportPaths,
       result.status === "failed" ? result.error : ""
     ];

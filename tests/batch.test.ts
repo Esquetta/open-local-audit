@@ -110,6 +110,13 @@ function scoredReportFor(
   };
 }
 
+function reportWithContactFor(url: string, contact: AuditReport["contact"]): AuditReport {
+  return {
+    ...scoredReportFor(url, 72, ["medium"]),
+    contact
+  };
+}
+
 async function waitFor(assertion: () => boolean): Promise<void> {
   const deadline = Date.now() + 1000;
   while (Date.now() < deadline) {
@@ -468,17 +475,184 @@ describe("batch reports", () => {
         beauty: { total: 2, succeeded: 1, failed: 1, averageScore: 80 }
       });
       expect(json.summary.topFindings).toEqual([{ title: "high issue", count: 2 }]);
+      expect(json.summary.contact).toEqual({
+        withAnyPublicContact: 0,
+        publicEmail: 0,
+        publicPhone: 0,
+        whatsapp: 0,
+        contactPage: 0,
+        socialProfiles: 0,
+        confidence: {
+          High: 0,
+          Medium: 0,
+          Low: 0,
+          None: 2
+        }
+      });
+      expect(json.summary.outreach).toEqual({
+        preferredChannels: {
+          email: 0,
+          whatsapp: 0,
+          phone: 0,
+          "contact-page": 0,
+          "manual-review": 2
+        }
+      });
 
       const markdown = await readFile(join(dir, "open-local-audit-batch-index.md"), "utf8");
       expect(markdown).toContain("- Average score: 70");
+      expect(markdown).toContain("- With public contact: 0");
       expect(markdown).toContain("## Profile Breakdown");
       expect(markdown).toContain("| dental | 1 | 1 | 0 | 60 |");
       expect(markdown).toContain("## Frequent Findings");
+      expect(markdown).toContain("## Contact Rollup");
+      expect(markdown).toContain("## Outreach Rollup");
 
       const html = await readFile(join(dir, "open-local-audit-batch-index.html"), "utf8");
       expect(html).toContain("<h2>Profile Breakdown</h2>");
       expect(html).toContain("<td>dental</td><td>1</td><td>1</td><td>0</td><td>60</td>");
       expect(html).toContain("<h2>Frequent Findings</h2>");
+      expect(html).toContain("<h2>Contact Rollup</h2>");
+      expect(html).toContain("<h2>Outreach Rollup</h2>");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adds contact and outreach rollups to batch indexes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-contact-"));
+    try {
+      await runBatchReports(
+        [
+          "https://email.test",
+          "https://whatsapp.test",
+          "https://phone.test",
+          "https://contact-page.test",
+          "https://social.test",
+          "https://manual.test",
+          "https://failed.test"
+        ],
+        {
+          format: "all",
+          outDir: dir,
+          pretty: true,
+          audit: async (url) => {
+            if (url === "https://failed.test") {
+              throw new Error("offline");
+            }
+
+            if (url === "https://email.test") {
+              return reportWithContactFor(url, {
+                publicEmail: "hello@email.test",
+                socialProfiles: [],
+                contactConfidence: "High",
+                contactSource: "mailto"
+              });
+            }
+
+            if (url === "https://whatsapp.test") {
+              return reportWithContactFor(url, {
+                whatsappUrl: "https://wa.me/902120000000",
+                socialProfiles: [],
+                contactConfidence: "Medium",
+                contactSource: "whatsapp"
+              });
+            }
+
+            if (url === "https://phone.test") {
+              return reportWithContactFor(url, {
+                publicPhone: "+902120000000",
+                socialProfiles: [],
+                contactConfidence: "Medium",
+                contactSource: "tel"
+              });
+            }
+
+            if (url === "https://contact-page.test") {
+              return reportWithContactFor(url, {
+                contactPageUrl: "https://contact-page.test/contact",
+                socialProfiles: [],
+                contactConfidence: "Low",
+                contactSource: "contact-page"
+              });
+            }
+
+            if (url === "https://social.test") {
+              return reportWithContactFor(url, {
+                socialProfiles: ["https://www.instagram.com/socialtest"],
+                contactConfidence: "Low",
+                contactSource: "social"
+              });
+            }
+
+            return reportWithContactFor(url, {
+              socialProfiles: [],
+              contactConfidence: "None"
+            });
+          }
+        }
+      );
+
+      const json = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(json.summary.contact).toEqual({
+        withAnyPublicContact: 5,
+        publicEmail: 1,
+        publicPhone: 1,
+        whatsapp: 1,
+        contactPage: 1,
+        socialProfiles: 1,
+        confidence: {
+          High: 1,
+          Medium: 2,
+          Low: 2,
+          None: 1
+        }
+      });
+      expect(json.summary.outreach).toEqual({
+        preferredChannels: {
+          email: 1,
+          whatsapp: 1,
+          phone: 1,
+          "contact-page": 1,
+          "manual-review": 2
+        }
+      });
+      expect(json.entries.map((entry: {
+        url: string;
+        contact?: { contactConfidence: string };
+        outreach?: { preferredContactChannel: string };
+      }) => [
+        entry.url,
+        entry.outreach?.preferredContactChannel ?? "",
+        entry.contact?.contactConfidence ?? ""
+      ])).toEqual([
+        ["https://email.test", "email", "High"],
+        ["https://whatsapp.test", "whatsapp", "Medium"],
+        ["https://phone.test", "phone", "Medium"],
+        ["https://contact-page.test", "contact-page", "Low"],
+        ["https://social.test", "manual-review", "Low"],
+        ["https://manual.test", "manual-review", "None"],
+        ["https://failed.test", "", ""]
+      ]);
+      expect(json.entries[0].contact.publicEmail).toBe("hello@email.test");
+      expect(json.entries[0].outreach.contactabilityReason).toBe("Public email found on the audited website.");
+      expect(json.entries[6].outreach).toBeUndefined();
+
+      const markdown = await readFile(join(dir, "open-local-audit-batch-index.md"), "utf8");
+      expect(markdown).toContain("- With public contact: 5");
+      expect(markdown).toContain("- Manual contact review: 2");
+      expect(markdown).toContain("| whatsapp | 1 |");
+      expect(markdown).toContain("| social-profiles | 1 |");
+      expect(markdown).toContain("| Medium | 2 |");
+      expect(markdown).toContain(
+        "| success |  | https://email.test |  | generic | 72 | High | email | Public email found on the audited website. | medium issue |  |"
+      );
+
+      const html = await readFile(join(dir, "open-local-audit-batch-index.html"), "utf8");
+      expect(html).toContain("With public contact: 5");
+      expect(html).toContain("<td>contact-page</td><td>1</td>");
+      expect(html).toContain("<td>social-profiles</td><td>1</td>");
+      expect(html).toContain("<td>https://email.test</td><td></td><td>generic</td><td>72</td><td>High</td><td>email</td>");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -528,6 +702,9 @@ describe("batch reports", () => {
         "status",
         "score",
         "topFinding",
+        "contactConfidence",
+        "preferredContactChannel",
+        "contactabilityReason",
         "report paths",
         "error"
       ]);
@@ -539,6 +716,9 @@ describe("batch reports", () => {
         "success",
         "93",
         "high issue",
+        "None",
+        "manual-review",
+        "No public contact channel found on the audited website.",
         "good-test/open-local-audit-report.json",
         ""
       ]);
@@ -551,8 +731,39 @@ describe("batch reports", () => {
         "",
         "",
         "",
+        "",
+        "",
+        "",
         "timeout"
       ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("neutralizes spreadsheet formulas in batch CSV cells alongside contact columns", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-csv-formula-"));
+    const csvPath = join(dir, "prospects.csv");
+
+    try {
+      await runBatchReports([{ url: "https://formula.test", label: "=Formula Lead" }], {
+        format: "json",
+        outDir: dir,
+        exportCsv: csvPath,
+        audit: async (url) =>
+          reportWithContactFor(url, {
+            publicEmail: "=lead@example.test",
+            socialProfiles: [],
+            contactConfidence: "High",
+            contactSource: "mailto"
+          })
+      });
+
+      const csv = await readFile(csvPath, "utf8");
+      expect(csv).toContain("'=Formula Lead");
+      expect(csv).toContain("High");
+      expect(csv).toContain("email");
+      expect(csv).toContain("Public email found on the audited website.");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
