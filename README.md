@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections and contact/outreach rollups to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates.
 
 ## Business purpose
 
@@ -180,7 +180,7 @@ Capture screenshots during batch audits:
 open-local-audit --input sites.csv --screenshot --format all --out-dir reports
 ```
 
-Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, and frequent finding sections.
+Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, frequent finding sections, contact rollups, and advisory outreach channel rollups. Batch CSV exports include contact confidence, preferred contact channel, and contactability reason when reports were audited successfully.
 
 Supported CSV columns:
 
@@ -252,9 +252,10 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Batch index filtering, sorting, and top-N triage controls.
 - Controlled parallel batch audits with `--concurrency`.
 - Batch index insights for average score, profile breakdown, segment breakdown, and frequent findings.
+- Batch contact and outreach rollups for audited public website contact readiness.
 - Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
-- Prospect CSV export with profile, score, top finding, report path, and error columns.
+- Prospect CSV export with profile, score, top finding, contact handoff, report path, and error columns.
 - Discovery CSV contact enrichment from audited public website HTML.
 - Discovery CSV outreach handoff fields for manual next-channel selection.
 - Advisory fuzzy duplicate lead review candidates for discovery reruns.
@@ -287,6 +288,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--format pdf` is supported for single URL audits and requires `--out` or `--out-dir`.
 - `--brand-config` reads local JSON only; it does not fetch remote assets or upload report data.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
+- Batch contact and outreach rollups are advisory local triage metadata; they do not send outreach or sync to a CRM.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
 - `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.

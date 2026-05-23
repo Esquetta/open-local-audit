@@ -256,6 +256,23 @@ Exit criteria:
 - Docs state that fuzzy matching is advisory only.
 - Discovery exports and review CSV behavior remain manual operator state.
 
+## Milestone 14: Batch contact and outreach rollups
+
+Target release:
+- `v0.18.0`.
+
+Deliverables:
+- Batch index summary rollups for public contact coverage, contact confidence, and preferred manual outreach channels.
+- Per-entry batch index contact and outreach metadata for successful audits.
+- Batch prospect CSV columns for contact confidence, preferred contact channel, and contactability reason.
+- Clear docs that rollups are advisory local triage metadata only.
+
+Exit criteria:
+- JSON, Markdown, and HTML batch indexes include contact and outreach rollups.
+- Failed batch entries do not invent contact or outreach metadata.
+- CSV exports retain formula hardening for the new advisory fields.
+- Docs state that batch rollups do not send outreach or sync to a CRM.
+
 ## Deferred work
 
 - Web UI.

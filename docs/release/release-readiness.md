@@ -152,6 +152,16 @@ Before releasing fuzzy duplicate lead review:
 - [x] Docs state fuzzy matching is advisory only.
 - [x] Docs state fuzzy matching does not auto-suppress leads, send outreach, or sync to a CRM.
 
+## Batch contact rollup readiness
+
+Before releasing batch contact and outreach rollups:
+
+- [x] Batch JSON indexes include public contact and outreach rollup summaries.
+- [x] Batch Markdown and HTML indexes include contact and outreach rollup sections.
+- [x] Batch entries include contact and outreach metadata only for successful audits.
+- [x] Batch CSV exports include contact confidence, preferred channel, and contactability reason.
+- [x] Docs state that batch rollups are advisory only and do not send outreach or sync to a CRM.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -160,12 +170,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.17.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.18.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.17.0` after:
+Use `v0.18.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -182,6 +192,7 @@ Use `v0.17.0` after:
 - discovery outreach handoff fields and channel selection are verified,
 - fuzzy duplicate lead review candidates are verified with deterministic fixtures,
 - duplicate JSON output is confirmed advisory-only and does not change suppression, review CSV, outreach, or CRM behavior,
+- batch contact and outreach rollups are verified in JSON, Markdown, HTML, and CSV exports,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

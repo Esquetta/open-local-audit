@@ -118,6 +118,17 @@ Responsibilities:
 - Neutralize formula-like CSV cells before export.
 - Keep review, suppression, outreach, and CRM decisions manual.
 
+### Batch contact and outreach rollups
+
+Batch indexes include advisory contact and outreach summaries derived from successful audited reports:
+
+- Public contact coverage by email, phone, WhatsApp, contact page, and social profile signals.
+- Contact confidence breakdown.
+- Preferred manual outreach channel counts.
+- Per-entry contact and outreach metadata for successful audits only.
+
+Failed batch entries keep only their error state and do not invent contactability metadata. Batch rollups are local triage output only; they do not send outreach or sync to CRM systems.
+
 Out of scope for this slice:
 - Google Maps scraping.
 - Raw Google Places response storage beyond the mapped candidate fields.

@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.18.0 - 2026-05-23
+
+- Added batch index contact rollups for public contact coverage and confidence.
+- Added batch outreach rollups for preferred manual contact channels.
+- Added per-entry batch index contact and outreach metadata for successful audits.
+- Added batch CSV export columns for contact confidence, preferred contact channel, and contactability reason.
+
 ## v0.17.0 - 2026-05-22
 
 - Added advisory fuzzy duplicate candidate groups to discovery duplicate JSON output.
