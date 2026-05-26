@@ -40,6 +40,7 @@ const discoveryProgram = program
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--brand-config <path>", "read report branding from a JSON file")
   .option("--export-csv <path>", "write lead discovery CSV output")
+  .option("--export-preset <preset>", "CSV export preset: standard or crm", "standard")
   .option("--summary-json <path>", "write discovery summary JSON output")
   .option("--suppression-list <path>", "read reviewed or suppressed lead identities from a CSV file")
   .option("--review-csv <path>", "write or merge a local discovery review queue CSV")
@@ -97,10 +98,7 @@ async function readOptionalReviewCsv(path: string | undefined): Promise<LeadRevi
 
 discoveryProgram.action(async (query?: string) => {
   try {
-    const rawDiscoveryOptions = {
-      ...program.opts(),
-      ...discoveryProgram.opts()
-    };
+    const rawDiscoveryOptions = discoveryProgram.optsWithGlobals();
     const options = cliOptionsSchema
       .pick({
         input: true,
@@ -108,6 +106,7 @@ discoveryProgram.action(async (query?: string) => {
         outDir: true,
         brandConfig: true,
         exportCsv: true,
+        exportPreset: true,
         dryRun: true,
         concurrency: true,
         provider: true,
@@ -231,7 +230,7 @@ discoveryProgram.action(async (query?: string) => {
       options.minOpportunityScore === undefined ? true : row.opportunityScore >= options.minOpportunityScore
     );
     await mkdir(dirname(options.exportCsv), { recursive: true });
-    await writeFile(options.exportCsv, renderProspectRowsCsv(rows), "utf8");
+    await writeFile(options.exportCsv, renderProspectRowsCsv(rows, options.exportPreset), "utf8");
     if (options.reviewCsv) {
       await mkdir(dirname(options.reviewCsv), { recursive: true });
       await writeFile(options.reviewCsv, renderDiscoveryReviewCsv(mergeDiscoveryReviewRows(rows, existingReviewRows)), "utf8");
@@ -281,6 +280,7 @@ program
   .option("--concurrency <count>", "maximum concurrent batch audits", "1")
   .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, or auto-service", "generic")
   .option("--export-csv <path>", "write a batch prospect CSV export")
+  .option("--export-preset <preset>", "CSV export preset for --export-csv: standard or crm", "standard")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--max-redirects <count>", "maximum redirects to follow", "5")
   .option("--check-links", "check same-origin links found on the audited page", false)
@@ -324,6 +324,7 @@ program
           outDir: options.outDir,
           pretty: options.pretty,
           exportCsv: options.exportCsv,
+          exportPreset: options.exportPreset,
           concurrency: options.concurrency,
           profile: options.profile,
           brand,

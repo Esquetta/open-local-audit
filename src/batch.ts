@@ -20,10 +20,13 @@ export interface BatchReportOptions {
   audit?: (url: string, context: BatchAuditContext) => Promise<AuditReport>;
   index?: BatchIndexOptions;
   exportCsv?: string;
+  exportPreset?: BatchCsvExportPreset;
   concurrency?: number;
   profile?: AuditProfile;
   brand?: ReportBrandConfig;
 }
+
+export type BatchCsvExportPreset = "standard" | "crm";
 
 export interface BatchAuditContext {
   slug: string;
@@ -747,7 +750,88 @@ async function writeBatchIndex(results: BatchReportResult[], options: BatchRepor
   }
 }
 
-function renderProspectCsv(results: BatchReportResult[]): string {
+function fallbackCompanyName(result: BatchReportResult): string {
+  if (result.label?.trim()) {
+    return result.label;
+  }
+
+  try {
+    return new URL(result.url).hostname.replace(/^www\./, "");
+  } catch {
+    return result.url;
+  }
+}
+
+function reportPathsFor(result: BatchReportResult): string {
+  const reports = result.status === "success" ? outputReports(result.slug, result.outputs) : {};
+  return Object.values(reports).join("; ");
+}
+
+function preferredReportPathFor(result: BatchReportResult): string {
+  if (result.status !== "success") {
+    return "";
+  }
+
+  const reports = outputReports(result.slug, result.outputs);
+  return reports.html ?? reports.markdown ?? reports.json ?? "";
+}
+
+function renderCrmProspectCsv(results: BatchReportResult[]): string {
+  const header = [
+    "companyName",
+    "website",
+    "segment",
+    "profile",
+    "priority",
+    "score",
+    "opportunityScore",
+    "topFinding",
+    "contactConfidence",
+    "preferredContactChannel",
+    "contactabilityReason",
+    "publicEmail",
+    "publicPhone",
+    "contactPageUrl",
+    "source",
+    "leadKey",
+    "reportPath"
+  ];
+  const rows = results.filter((result) => result.status === "success").map((result) => {
+    const contact = result.status === "success" ? (result.report.contact ?? { socialProfiles: [], contactConfidence: "None" as const }) : undefined;
+    const outreach = result.status === "success" ? contactHandoffFor(contact) : undefined;
+    const score = result.status === "success" ? totalScore(result.report).toString() : "";
+    const profile = result.status === "success" ? (result.report.profile ?? result.profile ?? "generic") : (result.profile ?? "");
+    const values = [
+      fallbackCompanyName(result),
+      result.url,
+      result.segment ?? "",
+      profile,
+      "",
+      score,
+      "",
+      result.status === "success" ? (result.report.findings[0]?.title ?? "") : "",
+      contact?.contactConfidence ?? "",
+      outreach?.preferredContactChannel ?? "",
+      outreach?.contactabilityReason ?? "",
+      contact?.publicEmail ?? "",
+      contact?.publicPhone ?? "",
+      contact?.contactPageUrl ?? "",
+      "batch",
+      `url:${result.url}`,
+      preferredReportPathFor(result)
+    ];
+
+    return values.map(escapeCsvCell).join(",");
+  });
+
+  return `${[header.join(","), ...rows].join("\n")}\n`;
+}
+
+function renderProspectCsv(results: BatchReportResult[], preset: BatchCsvExportPreset = "standard"): string {
+  if (preset === "crm") {
+    return renderCrmProspectCsv(results);
+  }
+
   const header = [
     "url",
     "label",
@@ -763,8 +847,7 @@ function renderProspectCsv(results: BatchReportResult[]): string {
     "error"
   ];
   const rows = results.map((result) => {
-    const reports = result.status === "success" ? outputReports(result.slug, result.outputs) : {};
-    const reportPaths = Object.values(reports).join("; ");
+    const reportPaths = reportPathsFor(result);
     const contact = result.status === "success" ? (result.report.contact ?? { socialProfiles: [], contactConfidence: "None" as const }) : undefined;
     const outreach = result.status === "success" ? contactHandoffFor(contact) : undefined;
     const values = [
@@ -855,7 +938,7 @@ export async function runBatchReports(
   await writeBatchIndex(results, options);
   if (options.exportCsv) {
     await mkdir(dirname(options.exportCsv), { recursive: true });
-    await writeFile(options.exportCsv, renderProspectCsv(results), "utf8");
+    await writeFile(options.exportCsv, renderProspectCsv(results, options.exportPreset), "utf8");
   }
 
   return results;

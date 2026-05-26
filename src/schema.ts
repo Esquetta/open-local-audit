@@ -19,6 +19,7 @@ export const inputUrlSchema = z
 export const outputFormatSchema = z.enum(["json", "markdown", "html", "pdf", "all"]);
 export const failOnSchema = z.enum(["none", "high", "medium", "low"]);
 export const batchIndexSortSchema = z.enum(["score-asc", "severity-desc"]);
+export const exportPresetSchema = z.enum(["standard", "crm"]);
 export const auditProfileSchema = z.enum([
   "generic",
   "dental",
@@ -46,6 +47,7 @@ export const cliOptionsSchema = z.object({
   concurrency: z.coerce.number().int().positive().default(1),
   profile: auditProfileSchema.default("generic"),
   exportCsv: z.string().optional(),
+  exportPreset: exportPresetSchema.default("standard"),
   provider: discoveryProviderSchema.default("manual-csv"),
   dryRun: z.boolean().default(false),
   limit: z.coerce.number().int().positive().default(10),

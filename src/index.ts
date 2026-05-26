@@ -31,6 +31,7 @@ export type {
   BatchInputEntry,
   BatchReportOptions,
   BatchReportResult,
+  BatchCsvExportPreset,
   FailedBatchReportResult,
   SuccessfulBatchReportResult
 } from "./batch.js";
@@ -46,6 +47,7 @@ export type {
   LeadSuppressionEntry,
   PlaceCandidate,
   ProspectExportRow,
+  ProspectCsvExportPreset,
   ProspectRowInput,
   ReadManualDiscoveryCsvOptions,
   WebsiteResolution

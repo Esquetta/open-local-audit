@@ -119,6 +119,8 @@ export interface ReadManualDiscoveryCsvOptions {
   defaultProfile?: AuditProfile;
 }
 
+export type ProspectCsvExportPreset = "standard" | "crm";
+
 export interface FetchGooglePlacesCandidatesOptions {
   apiKey?: string;
   defaultProfile?: AuditProfile;
@@ -1040,7 +1042,74 @@ export function buildDiscoverySummary(rows: ProspectExportRow[], suppressedCandi
   };
 }
 
-export function renderProspectRowsCsv(rows: ProspectExportRow[]): string {
+function fallbackCompanyName(row: Pick<ProspectExportRow, "label" | "websiteUrl" | "leadKey">): string {
+  if (row.label?.trim()) {
+    return row.label;
+  }
+
+  if (row.websiteUrl) {
+    try {
+      return new URL(row.websiteUrl).hostname.replace(/^www\./, "");
+    } catch {
+      return row.websiteUrl;
+    }
+  }
+
+  return row.leadKey;
+}
+
+function renderCrmProspectRowsCsv(rows: ProspectExportRow[]): string {
+  const header = [
+    "companyName",
+    "website",
+    "segment",
+    "profile",
+    "priority",
+    "score",
+    "opportunityScore",
+    "topFinding",
+    "contactConfidence",
+    "preferredContactChannel",
+    "contactabilityReason",
+    "publicEmail",
+    "publicPhone",
+    "contactPageUrl",
+    "source",
+    "leadKey",
+    "reportPath"
+  ];
+  const body = rows.map((row) =>
+    [
+      fallbackCompanyName(row),
+      row.websiteUrl ?? "",
+      row.segment ?? "",
+      row.profile,
+      row.priority,
+      row.score?.toString() ?? "",
+      row.opportunityScore.toString(),
+      row.topFinding ?? "",
+      row.contactConfidence ?? "None",
+      row.preferredContactChannel,
+      row.contactabilityReason,
+      row.publicEmail ?? "",
+      row.publicPhone ?? "",
+      row.contactPageUrl ?? "",
+      row.source,
+      row.leadKey,
+      row.reportPath ?? ""
+    ]
+      .map(escapeCsvCell)
+      .join(",")
+  );
+
+  return `${[header.join(","), ...body].join("\n")}\n`;
+}
+
+export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: ProspectCsvExportPreset = "standard"): string {
+  if (preset === "crm") {
+    return renderCrmProspectRowsCsv(rows);
+  }
+
   const header = [
     "leadKey",
     "source",

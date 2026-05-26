@@ -273,7 +273,9 @@ describe("CLI behavior helpers", () => {
           "--profile",
           "dental",
           "--export-csv",
-          exportCsv
+          exportCsv,
+          "--export-preset",
+          "crm"
         ],
         {
           cwd: process.cwd(),
@@ -284,6 +286,82 @@ describe("CLI behavior helpers", () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("Use either a URL or --input, not both");
       expect(result.stderr).not.toContain("unknown option");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("writes CRM-ready batch CSV output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-batch-crm-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      const outDir = join(tmp, "reports");
+      const exportCsv = join(tmp, "crm-prospects.csv");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "--input",
+          inputPath,
+          "--out-dir",
+          outDir,
+          "--format",
+          "json",
+          "--timeout",
+          "1",
+          "--export-csv",
+          exportCsv,
+          "--export-preset",
+          "crm"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(readFileSync(exportCsv, "utf8").split(/\r?\n/)[0]).toBe(
+        "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,source,leadKey,reportPath"
+      );
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects unknown CSV export presets", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-export-preset-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "--input",
+          inputPath,
+          "--out-dir",
+          join(tmp, "reports"),
+          "--export-csv",
+          join(tmp, "out.csv"),
+          "--export-preset",
+          "remote-crm"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Invalid enum value");
     } finally {
       removeTempDir(tmp);
     }
@@ -354,6 +432,52 @@ describe("CLI behavior helpers", () => {
         notAudited: 2
       });
       expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("writes CRM-ready discovery CSV output in dry-run mode", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-crm-"));
+    try {
+      const inputPath = join(tmp, "places.csv");
+      const exportCsv = join(tmp, "crm-leads.csv");
+      writeFileSync(
+        inputPath,
+        "label,website,segment,profile\nCRM Dental,https://crm-dental.test,dental,dental\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "discover",
+          "--input",
+          inputPath,
+          "--provider",
+          "manual-csv",
+          "--export-csv",
+          exportCsv,
+          "--export-preset",
+          "crm",
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      const csv = readFileSync(exportCsv, "utf8");
+      expect(csv.split(/\r?\n/)[0]).toBe(
+        "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,source,leadKey,reportPath"
+      );
+      expect(csv).toContain("CRM Dental,https://crm-dental.test,dental,dental,medium,,55");
+      expect(csv).toContain('manual-review,"Website was not audited, so public contactability is unknown."');
     } finally {
       removeTempDir(tmp);
     }

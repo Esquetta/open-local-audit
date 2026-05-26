@@ -741,6 +741,96 @@ describe("batch reports", () => {
     }
   });
 
+  it("writes a CRM-ready batch prospect CSV export", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-crm-"));
+    const csvPath = join(dir, "crm.csv");
+
+    try {
+      await runBatchReports(
+        [
+          {
+            url: "https://crm.test",
+            label: "CRM Lead",
+            segment: "clinic",
+            profile: "clinic"
+          },
+          {
+            url: "https://failed-crm.test",
+            label: "Failed CRM Lead",
+            segment: "clinic",
+            profile: "clinic"
+          }
+        ],
+        {
+          format: "all",
+          outDir: dir,
+          exportCsv: csvPath,
+          exportPreset: "crm",
+          audit: async (url, context) => {
+            if (url === "https://failed-crm.test") {
+              throw new Error("offline");
+            }
+
+            return {
+              ...scoredReportFor(url, 82, ["low"], context.profile),
+              contact: {
+                publicEmail: "hello@crm.test",
+                publicPhone: "+902120000000",
+                contactPageUrl: "https://crm.test/contact",
+                socialProfiles: [],
+                contactConfidence: "High",
+                contactSource: "mailto, tel, contact-page"
+              }
+            };
+          }
+        }
+      );
+
+      const rows = (await readFile(csvPath, "utf8")).trim().split(/\r?\n/).map(parseCsvLine);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toEqual([
+        "companyName",
+        "website",
+        "segment",
+        "profile",
+        "priority",
+        "score",
+        "opportunityScore",
+        "topFinding",
+        "contactConfidence",
+        "preferredContactChannel",
+        "contactabilityReason",
+        "publicEmail",
+        "publicPhone",
+        "contactPageUrl",
+        "source",
+        "leadKey",
+        "reportPath"
+      ]);
+      expect(rows[1]).toEqual([
+        "CRM Lead",
+        "https://crm.test",
+        "clinic",
+        "clinic",
+        "",
+        "82",
+        "",
+        "low issue",
+        "High",
+        "email",
+        "Public email found on the audited website.",
+        "hello@crm.test",
+        "'+902120000000",
+        "https://crm.test/contact",
+        "batch",
+        "url:https://crm.test",
+        "crm-test/open-local-audit-report.html"
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("neutralizes spreadsheet formulas in batch CSV cells alongside contact columns", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-csv-formula-"));
     const csvPath = join(dir, "prospects.csv");

@@ -908,6 +908,50 @@ describe("lead discovery", () => {
     expect(csv).toContain("https://www.instagram.com/clinic-a");
   });
 
+  it("renders discovery prospects with a CRM-ready CSV preset", () => {
+    const csv = renderProspectRowsCsv(
+      [
+        {
+          leadKey: "url:https://clinic-a.test",
+          source: "manual-csv",
+          label: "Clinic A",
+          segment: "dental",
+          profile: "dental",
+          hasWebsite: "yes",
+          websiteUrl: "https://clinic-a.test",
+          auditStatus: "success",
+          score: 72,
+          topFinding: "Primary CTA is missing",
+          opportunityScore: 65,
+          opportunityReasons: ["Audit score is below 80"],
+          pitchAngle: "Improve local trust signals",
+          recommendedOffer: "Local SEO and trust cleanup",
+          estimatedNeed: "Medium",
+          outreachPriorityReason: "Audit score is below 80",
+          publicEmail: "hello@clinic-a.test",
+          publicPhone: "+902120000000",
+          contactPageUrl: "https://clinic-a.test/contact",
+          contactConfidence: "High",
+          preferredContactChannel: "email",
+          outreachAction: "Send a personalized audit summary by email.",
+          contactabilityReason: "Public email found on the audited website.",
+          priority: "medium",
+          reviewStatus: "new",
+          nextAction: "Review for a focused improvement offer.",
+          reportPath: "clinic-a/open-local-audit-report.html"
+        }
+      ],
+      "crm"
+    );
+
+    expect(csv.split(/\r?\n/)[0]).toBe(
+      "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,source,leadKey,reportPath"
+    );
+    expect(csv).toContain("Clinic A,https://clinic-a.test,dental,dental,medium,72,65,Primary CTA is missing");
+    expect(csv).toContain("High,email,Public email found on the audited website.,hello@clinic-a.test,'+902120000000");
+    expect(csv).toContain("manual-csv,url:https://clinic-a.test,clinic-a/open-local-audit-report.html");
+  });
+
   it("neutralizes spreadsheet formulas in prospect CSV cells", () => {
     const csv = renderProspectRowsCsv([
       {
