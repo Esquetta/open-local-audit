@@ -273,6 +273,23 @@ Exit criteria:
 - CSV exports retain formula hardening for the new advisory fields.
 - Docs state that batch rollups do not send outreach or sync to a CRM.
 
+## Milestone 15: CRM-ready local CSV preset
+
+Target release:
+- `v0.19.0`.
+
+Deliverables:
+- `--export-preset standard|crm` for batch and discovery CSV exports.
+- CRM-ready local import columns for company identity, website, segment, profile, scoring, contact handoff, source, lead key, and report path.
+- Default CSV behavior remains unchanged.
+- Clear docs that the CRM preset is a local CSV only and does not sync to CRM APIs.
+
+Exit criteria:
+- Batch and discovery tests cover the CRM preset.
+- CLI tests cover the preset flag and invalid preset rejection.
+- CSV formula hardening applies to CRM preset cells.
+- Release docs state that CRM sync and outreach sending remain out of scope.
+
 ## Deferred work
 
 - Web UI.

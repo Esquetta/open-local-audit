@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.19.0 - 2026-05-26
+
+- Added `--export-preset standard|crm` for batch and discovery CSV exports.
+- Added CRM-ready local import columns for company identity, website, scoring, contact handoff, source, lead key, and report path.
+- Preserved existing standard CSV export behavior as the default.
+- Kept CRM export local-only with no CRM API sync or outreach sending.
+
 ## v0.18.0 - 2026-05-23
 
 - Added batch index contact rollups for public contact coverage and confidence.

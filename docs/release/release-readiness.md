@@ -162,6 +162,16 @@ Before releasing batch contact and outreach rollups:
 - [x] Batch CSV exports include contact confidence, preferred channel, and contactability reason.
 - [x] Docs state that batch rollups are advisory only and do not send outreach or sync to a CRM.
 
+## CRM export preset readiness
+
+Before releasing the CRM-ready CSV preset:
+
+- [x] Default batch and discovery CSV export behavior remains unchanged.
+- [x] Batch and discovery exports support `--export-preset crm`.
+- [x] CLI rejects unknown export preset values.
+- [x] CRM preset cells use the existing CSV formula hardening.
+- [x] Docs state that the CRM preset is local CSV only and does not sync to a CRM or send outreach.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -170,12 +180,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.18.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.19.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.18.0` after:
+Use `v0.19.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -193,6 +203,7 @@ Use `v0.18.0` after:
 - fuzzy duplicate lead review candidates are verified with deterministic fixtures,
 - duplicate JSON output is confirmed advisory-only and does not change suppression, review CSV, outreach, or CRM behavior,
 - batch contact and outreach rollups are verified in JSON, Markdown, HTML, and CSV exports,
+- CRM-ready local CSV preset is verified for batch and discovery exports,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

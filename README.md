@@ -180,7 +180,7 @@ Capture screenshots during batch audits:
 open-local-audit --input sites.csv --screenshot --format all --out-dir reports
 ```
 
-Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, frequent finding sections, contact rollups, and advisory outreach channel rollups. Batch CSV exports include contact confidence, preferred contact channel, and contactability reason when reports were audited successfully.
+Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, frequent finding sections, contact rollups, and advisory outreach channel rollups. Batch CSV exports include contact confidence, preferred contact channel, and contactability reason when reports were audited successfully. Use `--export-preset crm` with `--export-csv` to write a CRM-ready local import CSV instead of the standard operator CSV.
 
 Supported CSV columns:
 
@@ -222,9 +222,15 @@ Maintain a review queue and duplicate review report across reruns:
 open-local-audit discover --input places.csv --provider manual-csv --review-csv review.csv --duplicates-json duplicates.json --dry-run --export-csv leads.csv
 ```
 
+Write a CRM-ready local import CSV:
+
+```bash
+open-local-audit discover --input places.csv --provider manual-csv --dry-run --export-csv crm-leads.csv --export-preset crm
+```
+
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
-Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, website-derived public contact columns, manual outreach handoff columns, and review columns for local triage. Contact columns are populated only from audited public website HTML and include `publicEmail`, `publicPhone`, `whatsappUrl`, `contactPageUrl`, `socialProfiles`, `contactConfidence`, and `contactSource`. Handoff columns include `preferredContactChannel`, `outreachAction`, and `contactabilityReason`; they are advisory only and do not send outreach. Duplicate review JSON includes exact `duplicateGroups` and advisory `fuzzyDuplicateGroups` with confidence and matching reasons for local operator review. Fuzzy duplicate candidates do not auto-suppress leads, change review status, send outreach, or sync to a CRM. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export.
+Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, website-derived public contact columns, manual outreach handoff columns, and review columns for local triage. Contact columns are populated only from audited public website HTML and include `publicEmail`, `publicPhone`, `whatsappUrl`, `contactPageUrl`, `socialProfiles`, `contactConfidence`, and `contactSource`. Handoff columns include `preferredContactChannel`, `outreachAction`, and `contactabilityReason`; they are advisory only and do not send outreach. Duplicate review JSON includes exact `duplicateGroups` and advisory `fuzzyDuplicateGroups` with confidence and matching reasons for local operator review. Fuzzy duplicate candidates do not auto-suppress leads, change review status, send outreach, or sync to a CRM. The CRM export preset writes `companyName`, `website`, `segment`, `profile`, `priority`, `score`, `opportunityScore`, `topFinding`, `contactConfidence`, `preferredContactChannel`, `contactabilityReason`, `publicEmail`, `publicPhone`, `contactPageUrl`, `source`, `leadKey`, and `reportPath`; it is a local import file only and does not call CRM APIs. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export, so values such as phone numbers starting with `+` may be prefixed for spreadsheet safety.
 
 See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
 
@@ -253,6 +259,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Controlled parallel batch audits with `--concurrency`.
 - Batch index insights for average score, profile breakdown, segment breakdown, and frequent findings.
 - Batch contact and outreach rollups for audited public website contact readiness.
+- CRM-ready local CSV export preset for batch and discovery exports.
 - Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
 - Prospect CSV export with profile, score, top finding, contact handoff, report path, and error columns.
@@ -289,6 +296,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--brand-config` reads local JSON only; it does not fetch remote assets or upload report data.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - Batch contact and outreach rollups are advisory local triage metadata; they do not send outreach or sync to a CRM.
+- `--export-preset crm` changes CSV columns only; it does not create, update, or sync CRM records.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
 - `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.
