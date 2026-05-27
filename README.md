@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections and contact/outreach rollups to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections and contact/outreach rollups to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates. CRM-ready CSV exports can be validated locally before import.
 
 ## Business purpose
 
@@ -228,6 +228,15 @@ Write a CRM-ready local import CSV:
 open-local-audit discover --input places.csv --provider manual-csv --dry-run --export-csv crm-leads.csv --export-preset crm
 ```
 
+Validate a CRM-ready local import CSV:
+
+```bash
+open-local-audit validate-export --input crm-leads.csv --preset crm
+open-local-audit validate-export --input crm-leads.csv --preset crm --format json
+```
+
+`validate-export` checks the local CSV shape before a manual import. It reports missing CRM columns, missing `companyName`, missing `website`, missing `leadKey`, duplicate `leadKey` values, low or empty contact confidence, and rows that still need manual contact review. Markdown output is the default; JSON is available for automation. Any issue returns exit code `1`, while a clean file returns exit code `0`.
+
 The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It uses the official Places Text Search API and requests only `places.id`, `places.displayName`, and `places.websiteUri`. It does not scrape Google Maps, collect reviews/photos/ratings, send outreach, or store raw Places responses. Google Maps Platform billing and quota limits apply to API use, and the CLI prints a billing warning when this provider is selected.
 
 Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, website-derived public contact columns, manual outreach handoff columns, and review columns for local triage. Contact columns are populated only from audited public website HTML and include `publicEmail`, `publicPhone`, `whatsappUrl`, `contactPageUrl`, `socialProfiles`, `contactConfidence`, and `contactSource`. Handoff columns include `preferredContactChannel`, `outreachAction`, and `contactabilityReason`; they are advisory only and do not send outreach. Duplicate review JSON includes exact `duplicateGroups` and advisory `fuzzyDuplicateGroups` with confidence and matching reasons for local operator review. Fuzzy duplicate candidates do not auto-suppress leads, change review status, send outreach, or sync to a CRM. The CRM export preset writes `companyName`, `website`, `segment`, `profile`, `priority`, `score`, `opportunityScore`, `topFinding`, `contactConfidence`, `preferredContactChannel`, `contactabilityReason`, `publicEmail`, `publicPhone`, `contactPageUrl`, `source`, `leadKey`, and `reportPath`; it is a local import file only and does not call CRM APIs. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export, so values such as phone numbers starting with `+` may be prefixed for spreadsheet safety.
@@ -260,6 +269,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Batch index insights for average score, profile breakdown, segment breakdown, and frequent findings.
 - Batch contact and outreach rollups for audited public website contact readiness.
 - CRM-ready local CSV export preset for batch and discovery exports.
+- Local CRM export validation with Markdown and JSON issue reports.
 - Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
 - Prospect CSV export with profile, score, top finding, contact handoff, report path, and error columns.
@@ -297,6 +307,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
 - Batch contact and outreach rollups are advisory local triage metadata; they do not send outreach or sync to a CRM.
 - `--export-preset crm` changes CSV columns only; it does not create, update, or sync CRM records.
+- `validate-export` checks local CSV files only; it does not create, update, or sync CRM records.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
 - `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.

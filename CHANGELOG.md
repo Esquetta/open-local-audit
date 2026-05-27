@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.20.0 - 2026-05-27
+
+- Added `validate-export --input <path> --preset crm` for local CRM CSV import checks.
+- Added Markdown and JSON validation reports with row counts, errors, warnings, and issue details.
+- Flagged missing CRM columns, missing company or website fields, duplicate lead keys, low contact confidence, and manual-review handoffs.
+- Kept validation local-only with no CRM API sync, remote import, or outreach sending.
+
 ## v0.19.0 - 2026-05-26
 
 - Added `--export-preset standard|crm` for batch and discovery CSV exports.

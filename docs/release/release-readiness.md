@@ -172,6 +172,16 @@ Before releasing the CRM-ready CSV preset:
 - [x] CRM preset cells use the existing CSV formula hardening.
 - [x] Docs state that the CRM preset is local CSV only and does not sync to a CRM or send outreach.
 
+## CRM import quality gate readiness
+
+Before releasing the CRM import validator:
+
+- [x] `validate-export --input <path> --preset crm` validates local CRM CSV exports.
+- [x] Markdown and JSON validation reports include row counts, errors, warnings, and issue details.
+- [x] Validator catches missing CRM columns, missing company or website fields, and duplicate lead keys.
+- [x] Validator flags low contact confidence and manual-review handoffs as warnings.
+- [x] Docs state that validation is local-only and does not sync to a CRM or send outreach.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -180,12 +190,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.19.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.20.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.19.0` after:
+Use `v0.20.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -204,6 +214,7 @@ Use `v0.19.0` after:
 - duplicate JSON output is confirmed advisory-only and does not change suppression, review CSV, outreach, or CRM behavior,
 - batch contact and outreach rollups are verified in JSON, Markdown, HTML, and CSV exports,
 - CRM-ready local CSV preset is verified for batch and discovery exports,
+- CRM import validation is verified for Markdown output, JSON output, clean exit code `0`, and issue exit code `1`,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

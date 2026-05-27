@@ -290,6 +290,22 @@ Exit criteria:
 - CSV formula hardening applies to CRM preset cells.
 - Release docs state that CRM sync and outreach sending remain out of scope.
 
+## Milestone 16: CRM import quality gate
+
+Target release:
+- `v0.20.0`.
+
+Deliverables:
+- `validate-export --input <path> --preset crm` for local CRM CSV checks.
+- Markdown and JSON validation reports with row counts, errors, warnings, and issue details.
+- Checks for missing CRM columns, missing company or website fields, missing or duplicate lead keys, low contact confidence, and manual-review contact handoffs.
+- Clear docs that validation is local-only and does not sync to CRM APIs.
+
+Exit criteria:
+- Validator tests cover clean files, missing columns, row-level blockers, duplicate lead keys, and warning-only contact review cases.
+- CLI tests cover Markdown output, JSON output, clean exit code `0`, and issue exit code `1`.
+- Release docs state that the validator does not create CRM records or send outreach.
+
 ## Deferred work
 
 - Web UI.
