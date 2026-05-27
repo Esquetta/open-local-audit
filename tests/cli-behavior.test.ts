@@ -367,6 +367,110 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("validates a clean CRM export CSV", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-validate-clean-"));
+    try {
+      const inputPath = join(tmp, "crm.csv");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,source,leadKey,reportPath",
+          "Clinic A,https://clinic-a.test,dental,dental,high,82,74,Low contrast,High,email,Public email found,hello@clinic-a.test,'+902120000000,https://clinic-a.test/contact,manual-csv,url:https://clinic-a.test,clinic-a/open-local-audit-report.html"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "validate-export", "--input", inputPath, "--preset", "crm"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("# CRM Export Validation");
+      expect(result.stdout).toContain("No import issues found.");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("returns JSON and a failing status for CRM export issues", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-validate-issues-"));
+    try {
+      const inputPath = join(tmp, "crm.csv");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,source,leadKey,reportPath",
+          ",,dental,dental,medium,70,60,Missing title,None,manual-review,No public contact,,,,manual-csv,url:https://clinic-a.test,"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "validate-export",
+          "--input",
+          inputPath,
+          "--preset",
+          "crm",
+          "--format",
+          "json"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      const output = JSON.parse(result.stdout);
+      expect(output.summary).toMatchObject({
+        rows: 1,
+        errors: 2,
+        warnings: 2,
+        valid: false
+      });
+      expect(output.issues.map((issue: { code: string }) => issue.code)).toEqual([
+        "missing-company-name",
+        "missing-website",
+        "low-contact-confidence",
+        "manual-contact-review"
+      ]);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects unsupported export validation presets", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-validate-preset-"));
+    try {
+      const inputPath = join(tmp, "crm.csv");
+      writeFileSync(inputPath, "companyName\nClinic A\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "validate-export", "--input", inputPath, "--preset", "standard"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("validate-export currently supports --preset crm only");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("runs manual CSV lead discovery in dry-run mode", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
     try {

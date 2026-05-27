@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { readBrandConfig } from "./brand.js";
@@ -23,6 +23,13 @@ import {
   type ProspectRowInput
 } from "./discovery.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
+import {
+  renderExportValidationJson,
+  renderExportValidationMarkdown,
+  validateCrmExportCsv,
+  type ExportValidationFormat,
+  type ExportValidationPreset
+} from "./export-validation.js";
 import { writeReportOutputs } from "./output.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
@@ -263,6 +270,43 @@ discoveryProgram.action(async (query?: string) => {
     process.exitCode = 1;
   }
 });
+
+const validateExportProgram = program
+  .command("validate-export")
+  .description("Validate a local CRM export CSV before importing it into external tools.")
+  .option("--input <path>", "read the CSV export to validate")
+  .option("--preset <preset>", "export preset to validate: crm", "crm")
+  .option("--format <format>", "validation report format: markdown or json", "markdown")
+  .action(async () => {
+    try {
+      const rawOptions = validateExportProgram.optsWithGlobals() as { input?: string; preset: string; format: string };
+      const preset = rawOptions.preset as ExportValidationPreset;
+      const format = rawOptions.format as ExportValidationFormat;
+      if (!rawOptions.input) {
+        throw new Error("--input is required for validate-export");
+      }
+
+      if (preset !== "crm") {
+        throw new Error("validate-export currently supports --preset crm only");
+      }
+
+      if (format !== "markdown" && format !== "json") {
+        throw new Error("validate-export --format must be markdown or json");
+      }
+
+      const result = validateCrmExportCsv(await readFile(rawOptions.input, "utf8"));
+      process.stdout.write(
+        format === "json" ? renderExportValidationJson(result) : renderExportValidationMarkdown(result)
+      );
+      if (!result.summary.valid) {
+        process.exitCode = 1;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
 
 program
   .name("open-local-audit")

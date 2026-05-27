@@ -19,6 +19,11 @@ export {
   stableLeadKey
 } from "./discovery.js";
 export { shouldFailOnThreshold } from "./exit-policy.js";
+export {
+  renderExportValidationJson,
+  renderExportValidationMarkdown,
+  validateCrmExportCsv
+} from "./export-validation.js";
 export { auditProfiles } from "./profiles.js";
 export { writeReportOutputs } from "./output.js";
 export { runLighthouseAudit } from "./lighthouse.js";
@@ -52,6 +57,14 @@ export type {
   ReadManualDiscoveryCsvOptions,
   WebsiteResolution
 } from "./discovery.js";
+export type {
+  ExportValidationFormat,
+  ExportValidationIssue,
+  ExportValidationPreset,
+  ExportValidationResult,
+  ExportValidationSeverity,
+  ExportValidationSummary
+} from "./export-validation.js";
 export type {
   AuditOptions,
   AuditProfile,
