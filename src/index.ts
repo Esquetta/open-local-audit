@@ -26,6 +26,7 @@ export {
 } from "./export-validation.js";
 export { auditProfiles } from "./profiles.js";
 export { writeReportOutputs } from "./output.js";
+export { packageReport } from "./report-pack.js";
 export { runLighthouseAudit } from "./lighthouse.js";
 export { renderPdfReport } from "./pdf.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
@@ -65,6 +66,7 @@ export type {
   ExportValidationSeverity,
   ExportValidationSummary
 } from "./export-validation.js";
+export type { ReportPackManifest, ReportPackOptions, ReportPackResult } from "./report-pack.js";
 export type {
   AuditOptions,
   AuditProfile,

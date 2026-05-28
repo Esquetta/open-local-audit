@@ -31,6 +31,7 @@ import {
   type ExportValidationPreset
 } from "./export-validation.js";
 import { writeReportOutputs } from "./output.js";
+import { packageReport } from "./report-pack.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import { renderTerminalSummary } from "./summary.js";
@@ -301,6 +302,36 @@ const validateExportProgram = program
       if (!result.summary.valid) {
         process.exitCode = 1;
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+const packageReportProgram = program
+  .command("package-report")
+  .description("Package an existing single-site report directory for local customer sharing.")
+  .option("--input <path>", "read an existing report directory")
+  .option("--out <path>", "write the report pack to a directory")
+  .action(async () => {
+    try {
+      const options = packageReportProgram.optsWithGlobals() as { input?: string; out?: string };
+      if (!options.input) {
+        throw new Error("--input is required for package-report");
+      }
+
+      if (!options.out) {
+        throw new Error("--out is required for package-report");
+      }
+
+      const result = await packageReport({
+        inputDir: options.input,
+        outDir: options.out
+      });
+      process.stdout.write(`Packaged report for ${result.manifest.finalUrl}\n`);
+      process.stdout.write(`Files: ${result.manifest.files.length}\n`);
+      process.stdout.write(`Output: ${result.outDir}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);

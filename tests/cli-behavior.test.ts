@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -466,6 +466,69 @@ describe("CLI behavior helpers", () => {
 
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("validate-export currently supports --preset crm only");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("packages an existing single-site report directory", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-package-report-"));
+    try {
+      const inputDir = join(tmp, "site");
+      const outDir = join(tmp, "pack");
+      mkdirSync(inputDir, { recursive: true });
+      const sourceReport = auditSnapshot(
+        {
+          url: "https://package.test",
+          finalUrl: "https://package.test",
+          statusCode: 200,
+          headers: {
+            "content-type": "text/html"
+          },
+          html: "<html><head><title></title></head><body><h1></h1></body></html>"
+        },
+        "2026-05-28T00:00:00.000Z"
+      );
+      writeFileSync(join(inputDir, "open-local-audit-report.json"), `${JSON.stringify(sourceReport, null, 2)}\n`, "utf8");
+      writeFileSync(join(inputDir, "open-local-audit-report.md"), "# Open Local Audit Report\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "package-report", "--input", inputDir, "--out", outDir],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Packaged report for https://package.test");
+      expect(readFileSync(join(outDir, "README.md"), "utf8")).toContain("# Open Local Audit Report Pack");
+      expect(readFileSync(join(outDir, "next-actions.md"), "utf8")).toContain("# Next Actions");
+      expect(JSON.parse(readFileSync(join(outDir, "manifest.json"), "utf8"))).toMatchObject({
+        url: "https://package.test",
+        finalUrl: "https://package.test"
+      });
+      expect(existsSync(join(outDir, "reports", "open-local-audit-report.md"))).toBe(true);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("reports a clear package-report error for missing JSON reports", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-package-report-missing-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "package-report", "--input", tmp, "--out", join(tmp, "pack")],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("package-report requires open-local-audit-report.json in the input directory");
     } finally {
       removeTempDir(tmp);
     }
