@@ -182,6 +182,16 @@ Before releasing the CRM import validator:
 - [x] Validator flags low contact confidence and manual-review handoffs as warnings.
 - [x] Docs state that validation is local-only and does not sync to a CRM or send outreach.
 
+## Report pack readiness
+
+Before releasing local report packaging:
+
+- [x] `package-report --input <path> --out <path>` packages existing single-site report folders.
+- [x] Package output includes `README.md`, `next-actions.md`, and `manifest.json`.
+- [x] Available JSON, Markdown, HTML, and PDF report artifacts are copied into `reports/`.
+- [x] CLI reports a clear error when `open-local-audit-report.json` is missing.
+- [x] Docs state that report packaging is local-only and does not upload reports, send outreach, or sync to a CRM.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -190,12 +200,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.20.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.21.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.20.0` after:
+Use `v0.21.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -215,6 +225,7 @@ Use `v0.20.0` after:
 - batch contact and outreach rollups are verified in JSON, Markdown, HTML, and CSV exports,
 - CRM-ready local CSV preset is verified for batch and discovery exports,
 - CRM import validation is verified for Markdown output, JSON output, clean exit code `0`, and issue exit code `1`,
+- local report packaging is verified for generated summaries, manifest, copied report artifacts, and missing JSON report errors,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

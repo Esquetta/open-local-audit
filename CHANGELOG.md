@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.21.0 - 2026-05-28
+
+- Added `package-report --input <path> --out <path>` for local customer-shareable report packs.
+- Added report-pack `README.md`, `next-actions.md`, and `manifest.json` generation from existing single-site JSON reports.
+- Copied available JSON, Markdown, HTML, and PDF report artifacts into the local package.
+- Kept report packaging local-only with no uploads, outreach sending, or CRM sync.
+
 ## v0.20.0 - 2026-05-27
 
 - Added `validate-export --input <path> --preset crm` for local CRM CSV import checks.

@@ -306,6 +306,22 @@ Exit criteria:
 - CLI tests cover Markdown output, JSON output, clean exit code `0`, and issue exit code `1`.
 - Release docs state that the validator does not create CRM records or send outreach.
 
+## Milestone 17: Local report pack
+
+Target release:
+- `v0.21.0`.
+
+Deliverables:
+- `package-report --input <path> --out <path>` for local single-site report packaging.
+- Generated `README.md`, `next-actions.md`, and `manifest.json` files.
+- Copying of available JSON, Markdown, HTML, and PDF report artifacts into a local `reports/` folder.
+- Clear docs that report packaging is local-only and does not upload reports, send outreach, or sync to CRM APIs.
+
+Exit criteria:
+- Module tests cover package creation and missing JSON report errors.
+- CLI tests cover package creation output and clear failure for invalid input folders.
+- Release docs state that package output is a local sharing aid only.
+
 ## Deferred work
 
 - Web UI.
