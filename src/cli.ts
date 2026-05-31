@@ -34,6 +34,12 @@ import { writeReportOutputs } from "./output.js";
 import { packageReport } from "./report-pack.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
+import {
+  buildLeadShortlist,
+  renderShortlistJson,
+  renderShortlistMarkdown,
+  type ShortlistFormat
+} from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
 
 const program = new Command();
@@ -332,6 +338,51 @@ const packageReportProgram = program
       process.stdout.write(`Packaged report for ${result.manifest.finalUrl}\n`);
       process.stdout.write(`Files: ${result.manifest.files.length}\n`);
       process.stdout.write(`Output: ${result.outDir}\n`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+const shortlistProgram = program
+  .command("shortlist")
+  .description("Rank a local discovery or CRM CSV export into a lead shortlist report.")
+  .option("--input <path>", "read a discovery or CRM CSV export")
+  .option("--out <path>", "write the shortlist report")
+  .option("--top <count>", "number of leads to include", "20")
+  .option("--format <format>", "shortlist report format: markdown or json", "markdown")
+  .action(async () => {
+    try {
+      const options = shortlistProgram.optsWithGlobals() as {
+        input?: string;
+        out?: string;
+        top: string;
+        format: string;
+      };
+      if (!options.input) {
+        throw new Error("--input is required for shortlist");
+      }
+
+      if (!options.out) {
+        throw new Error("--out is required for shortlist");
+      }
+
+      const format = options.format as ShortlistFormat;
+      if (format !== "markdown" && format !== "json") {
+        throw new Error("shortlist --format must be markdown or json");
+      }
+
+      const top = Number(options.top);
+      const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top });
+      await mkdir(dirname(options.out), { recursive: true });
+      await writeFile(
+        options.out,
+        format === "json" ? renderShortlistJson(result) : renderShortlistMarkdown(result),
+        "utf8"
+      );
+      process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
+      process.stdout.write(`Output: ${options.out}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);

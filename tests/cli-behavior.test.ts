@@ -534,6 +534,86 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("writes a markdown lead shortlist from a CSV export", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.md");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,source,leadKey,reportPath",
+          "Lower Lead,https://lower.test,dental,dental,medium,80,60,Missing title,High,email,Public email found,manual-csv,url:https://lower.test,lower/open-local-audit-report.html",
+          "Best Lead,https://best.test,dental,dental,high,70,95,Missing CTA,Medium,phone,Phone found,manual-csv,url:https://best.test,best/open-local-audit-report.html"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "shortlist", "--input", inputPath, "--out", outPath, "--top", "1"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
+      const markdown = readFileSync(outPath, "utf8");
+      expect(markdown).toContain("# Lead Shortlist");
+      expect(markdown).toContain("| 1 | Best Lead | https://best.test | high | 95 | 70 | Medium | phone | Missing CTA | best/open-local-audit-report.html |");
+      expect(markdown).not.toContain("Lower Lead");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("writes a JSON lead shortlist from a CSV export", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-json-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "label,websiteUrl,priority,score,opportunityScore,contactConfidence,preferredContactChannel,topFinding,reportPath",
+          "JSON Lead,https://json.test,high,88,92,High,email,Missing CTA,json/open-local-audit-report.html"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        totalRows: 1,
+        selected: 1,
+        leads: [{ companyName: "JSON Lead" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("runs manual CSV lead discovery in dry-run mode", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
     try {
