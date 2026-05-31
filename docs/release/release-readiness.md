@@ -192,6 +192,16 @@ Before releasing local report packaging:
 - [x] CLI reports a clear error when `open-local-audit-report.json` is missing.
 - [x] Docs state that report packaging is local-only and does not upload reports, send outreach, or sync to a CRM.
 
+## Lead shortlist readiness
+
+Before releasing local lead shortlist reports:
+
+- [x] `shortlist --input <path> --out <path>` ranks local discovery and CRM CSV exports.
+- [x] Markdown and JSON shortlist output are covered by tests.
+- [x] Ranking is deterministic across opportunity score, priority, contact confidence, audit score, and company name.
+- [x] Invalid CSV input and invalid top values fail clearly.
+- [x] Docs state that shortlist generation is local-only and does not call APIs, send outreach, or sync to a CRM.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -200,12 +210,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.21.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.22.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.21.0` after:
+Use `v0.22.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -226,6 +236,7 @@ Use `v0.21.0` after:
 - CRM-ready local CSV preset is verified for batch and discovery exports,
 - CRM import validation is verified for Markdown output, JSON output, clean exit code `0`, and issue exit code `1`,
 - local report packaging is verified for generated summaries, manifest, copied report artifacts, and missing JSON report errors,
+- local lead shortlist reports are verified for Markdown output, JSON output, deterministic ranking, and invalid input errors,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

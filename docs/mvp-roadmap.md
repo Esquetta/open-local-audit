@@ -322,6 +322,22 @@ Exit criteria:
 - CLI tests cover package creation output and clear failure for invalid input folders.
 - Release docs state that package output is a local sharing aid only.
 
+## Milestone 18: Lead shortlist report
+
+Target release:
+- `v0.22.0`.
+
+Deliverables:
+- `shortlist --input <path> --out <path>` for local discovery and CRM CSV exports.
+- Markdown and JSON shortlist reports.
+- Deterministic ranking by opportunity score, priority, contact confidence, audit score, and company name.
+- Clear docs that shortlist generation is local-only and does not call APIs, send outreach, or sync to CRM systems.
+
+Exit criteria:
+- Module tests cover ranking, discovery columns, CRM columns, Markdown output, JSON output, and invalid input.
+- CLI tests cover Markdown and JSON shortlist output.
+- Release docs state that shortlist output is local operator guidance only.
+
 ## Deferred work
 
 - Web UI.

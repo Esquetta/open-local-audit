@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.22.0 - 2026-05-31
+
+- Added `shortlist --input <path> --out <path>` for local lead shortlist reports.
+- Added Markdown and JSON shortlist output for discovery and CRM CSV exports.
+- Ranked leads by opportunity score, priority, contact confidence, audit score, and company name.
+- Kept shortlist generation local-only with no API calls, outreach sending, or CRM sync.
+
 ## v0.21.0 - 2026-05-28
 
 - Added `package-report --input <path> --out <path>` for local customer-shareable report packs.
