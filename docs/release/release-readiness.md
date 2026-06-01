@@ -202,6 +202,16 @@ Before releasing local lead shortlist reports:
 - [x] Invalid CSV input and invalid top values fail clearly.
 - [x] Docs state that shortlist generation is local-only and does not call APIs, send outreach, or sync to a CRM.
 
+## Shortlist review workflow readiness
+
+Before releasing shortlist review-state handling:
+
+- [x] `shortlist --review-csv <path>` reads local review state.
+- [x] Suppressed review statuses are excluded before ranking.
+- [x] Matching active review status, reason, and last-reviewed date render in Markdown and JSON output.
+- [x] CLI output reports suppressed row counts.
+- [x] Docs state that review CSV handling is local-only and does not mutate review files, send outreach, or sync to a CRM.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -210,12 +220,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.22.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.23.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.22.0` after:
+Use `v0.23.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -237,6 +247,7 @@ Use `v0.22.0` after:
 - CRM import validation is verified for Markdown output, JSON output, clean exit code `0`, and issue exit code `1`,
 - local report packaging is verified for generated summaries, manifest, copied report artifacts, and missing JSON report errors,
 - local lead shortlist reports are verified for Markdown output, JSON output, deterministic ranking, and invalid input errors,
+- local shortlist review-state suppression is verified for Markdown output, JSON output, suppressed-count reporting, and active review metadata,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

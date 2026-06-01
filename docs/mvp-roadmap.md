@@ -338,6 +338,22 @@ Exit criteria:
 - CLI tests cover Markdown and JSON shortlist output.
 - Release docs state that shortlist output is local operator guidance only.
 
+## Milestone 19: Shortlist review workflow
+
+Target release:
+- `v0.23.0`.
+
+Deliverables:
+- `shortlist --review-csv <path>` for local review-state aware shortlist runs.
+- Suppression of leads already marked `rejected`, `contacted`, `not-fit`, `not_a_fit`, `do-not-contact`, or `suppressed`.
+- Review status, reason, and last-reviewed context in Markdown and JSON shortlist output.
+- Clear docs that review CSV handling is local-only and does not mutate the source file, send outreach, or sync CRM systems.
+
+Exit criteria:
+- Module tests cover review CSV parsing, suppression, and active review metadata.
+- CLI tests cover `--review-csv` output and suppressed-count reporting.
+- Release docs state that review CSV handling is local operator guidance only.
+
 ## Deferred work
 
 - Web UI.

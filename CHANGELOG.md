@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.23.0 - 2026-06-01
+
+- Added `shortlist --review-csv <path>` for local review-state aware shortlist runs.
+- Suppressed already handled shortlist leads marked `rejected`, `contacted`, `not-fit`, `not_a_fit`, `do-not-contact`, or `suppressed`.
+- Carried active review status, review reason, and last-reviewed date into Markdown and JSON shortlist reports.
+- Kept shortlist review handling local-only with no review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.22.0 - 2026-05-31
 
 - Added `shortlist --input <path> --out <path>` for local lead shortlist reports.
