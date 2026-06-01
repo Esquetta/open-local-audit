@@ -4,6 +4,19 @@ export type ShortlistFormat = "markdown" | "json";
 
 export interface ShortlistOptions {
   top?: number;
+  reviewRows?: ShortlistReviewRow[];
+}
+
+export interface ShortlistReviewRow {
+  leadKey?: string;
+  website?: string;
+  websiteUrl?: string;
+  url?: string;
+  label?: string;
+  companyName?: string;
+  reviewStatus?: string;
+  reviewReason?: string;
+  lastReviewedAt?: string;
 }
 
 export interface ShortlistLead {
@@ -22,10 +35,14 @@ export interface ShortlistLead {
   reason: string;
   reportPath: string;
   leadKey: string;
+  reviewStatus: string;
+  reviewReason: string;
+  lastReviewedAt: string;
 }
 
 export interface ShortlistResult {
   totalRows: number;
+  suppressedRows: number;
   selected: number;
   leads: ShortlistLead[];
 }
@@ -44,6 +61,15 @@ const confidenceRank: Record<string, number> = {
   Low: 1,
   None: 0
 };
+
+const suppressedReviewStatuses = new Set([
+  "rejected",
+  "contacted",
+  "not-fit",
+  "not_a_fit",
+  "do-not-contact",
+  "suppressed"
+]);
 
 function value(row: RawLeadRow, ...columns: string[]): string {
   for (const column of columns) {
@@ -77,6 +103,33 @@ function parseRows(content: string): RawLeadRow[] {
     const cells = parseCsvLine(line);
     return Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""]));
   });
+}
+
+function parseOptionalRows(content: string): RawLeadRow[] {
+  const lines = cleanInputLines(content);
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const headers = parseCsvLine(lines[0]);
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    return Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""]));
+  });
+}
+
+export function readShortlistReviewCsv(content: string): ShortlistReviewRow[] {
+  return parseOptionalRows(content).map((row) => ({
+    leadKey: value(row, "leadKey"),
+    website: value(row, "website"),
+    websiteUrl: value(row, "websiteUrl"),
+    url: value(row, "url"),
+    label: value(row, "label"),
+    companyName: value(row, "companyName"),
+    reviewStatus: value(row, "reviewStatus"),
+    reviewReason: value(row, "reviewReason"),
+    lastReviewedAt: value(row, "lastReviewedAt")
+  }));
 }
 
 function fallbackCompanyName(row: RawLeadRow): string {
@@ -131,7 +184,85 @@ function normalizeLead(row: RawLeadRow): Omit<ShortlistLead, "rank"> {
     contactabilityReason: value(row, "contactabilityReason"),
     reason: leadReason(row),
     reportPath: value(row, "reportPath", "report paths"),
-    leadKey: value(row, "leadKey")
+    leadKey: value(row, "leadKey"),
+    reviewStatus: value(row, "reviewStatus") || "new",
+    reviewReason: value(row, "reviewReason"),
+    lastReviewedAt: value(row, "lastReviewedAt")
+  };
+}
+
+function normalizeWebsite(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const url = new URL(trimmed.startsWith("http://") || trimmed.startsWith("https://") ? trimmed : `https://${trimmed}`);
+    return `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}`;
+  } catch {
+    return trimmed.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+  }
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function reviewIdentity(row: ShortlistReviewRow): { leadKey: string; website: string; label: string } {
+  return {
+    leadKey: normalizeText(row.leadKey ?? ""),
+    website: normalizeWebsite(row.websiteUrl ?? row.website ?? row.url ?? ""),
+    label: normalizeText(row.companyName ?? row.label ?? "")
+  };
+}
+
+function leadIdentity(lead: Omit<ShortlistLead, "rank">): { leadKey: string; website: string; label: string } {
+  return {
+    leadKey: normalizeText(lead.leadKey),
+    website: normalizeWebsite(lead.website),
+    label: normalizeText(lead.companyName)
+  };
+}
+
+function findReviewRow(
+  lead: Omit<ShortlistLead, "rank">,
+  reviewRows: ShortlistReviewRow[]
+): ShortlistReviewRow | undefined {
+  const identity = leadIdentity(lead);
+
+  return reviewRows.find((row) => {
+    const review = reviewIdentity(row);
+    return (
+      (identity.leadKey && identity.leadKey === review.leadKey) ||
+      (identity.website && identity.website === review.website) ||
+      (identity.label && identity.label === review.label)
+    );
+  });
+}
+
+function applyReviewState(
+  lead: Omit<ShortlistLead, "rank">,
+  reviewRows: ShortlistReviewRow[]
+): { lead?: Omit<ShortlistLead, "rank">; suppressed: boolean } {
+  const review = findReviewRow(lead, reviewRows);
+  if (!review) {
+    return { lead, suppressed: false };
+  }
+
+  const reviewStatus = review.reviewStatus?.trim() || lead.reviewStatus;
+  if (suppressedReviewStatuses.has(reviewStatus.toLowerCase())) {
+    return { suppressed: true };
+  }
+
+  return {
+    lead: {
+      ...lead,
+      reviewStatus,
+      reviewReason: review.reviewReason?.trim() || lead.reviewReason,
+      lastReviewedAt: review.lastReviewedAt?.trim() || lead.lastReviewedAt
+    },
+    suppressed: false
   };
 }
 
@@ -152,8 +283,12 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     throw new Error("shortlist --top must be a positive integer");
   }
 
-  const leads = rows
+  const reviewedLeads = rows
     .map(normalizeLead)
+    .map((lead) => applyReviewState(lead, options.reviewRows ?? []));
+  const suppressedRows = reviewedLeads.filter((result) => result.suppressed).length;
+  const leads = reviewedLeads
+    .flatMap((result) => (result.lead ? [result.lead] : []))
     .sort(sortLeads)
     .slice(0, top)
     .map((lead, index) => ({
@@ -163,6 +298,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
 
   return {
     totalRows: rows.length,
+    suppressedRows,
     selected: leads.length,
     leads
   };
@@ -188,6 +324,9 @@ export function renderShortlistMarkdown(result: ShortlistResult): string {
       lead.contactConfidence,
       lead.preferredContactChannel,
       lead.reason,
+      lead.reviewStatus,
+      lead.reviewReason,
+      lead.lastReviewedAt,
       lead.reportPath
     ]
       .map(markdownCell)
@@ -198,10 +337,11 @@ export function renderShortlistMarkdown(result: ShortlistResult): string {
     "# Lead Shortlist",
     "",
     `- Total rows: ${result.totalRows}`,
+    `- Suppressed rows: ${result.suppressedRows}`,
     `- Selected leads: ${result.selected}`,
     "",
-    "| Rank | Company | Website | Priority | Opportunity | Score | Contact | Channel | Reason | Report |",
-    "| ---: | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |",
+    "| Rank | Company | Website | Priority | Opportunity | Score | Contact | Channel | Reason | Review | Review Reason | Last Reviewed | Report |",
+    "| ---: | --- | --- | --- | ---: | ---: | --- | --- | --- | --- | --- | --- | --- |",
     ...rows
   ].join("\n")}\n`;
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildLeadShortlist, renderShortlistJson, renderShortlistMarkdown } from "../src/shortlist.js";
+import {
+  buildLeadShortlist,
+  readShortlistReviewCsv,
+  renderShortlistJson,
+  renderShortlistMarkdown
+} from "../src/shortlist.js";
 
 describe("lead shortlist", () => {
   it("ranks discovery leads by opportunity, priority, contact confidence, and score", () => {
@@ -49,12 +54,61 @@ describe("lead shortlist", () => {
       ].join("\n")
     );
 
-    expect(renderShortlistMarkdown(result)).toContain("| 1 | Lead A | https://a.test | high | 90 | 80 | High | email | Missing CTA | a/open-local-audit-report.html |");
+    expect(renderShortlistMarkdown(result)).toContain(
+      "| 1 | Lead A | https://a.test | high | 90 | 80 | High | email | Missing CTA | new |  |  | a/open-local-audit-report.html |"
+    );
     expect(JSON.parse(renderShortlistJson(result))).toMatchObject({
       totalRows: 1,
+      suppressedRows: 0,
       selected: 1,
       leads: [{ companyName: "Lead A" }]
     });
+  });
+
+  it("suppresses completed review rows and carries active review metadata", () => {
+    const reviewRows = readShortlistReviewCsv(
+      [
+        "leadKey,websiteUrl,label,reviewStatus,reviewReason,lastReviewedAt",
+        "url:https://old.test,https://old.test,Old Lead,contacted,Already contacted,2026-06-01",
+        "url:https://fresh.test,https://fresh.test,Fresh Lead,pending,Needs manual review,2026-06-02"
+      ].join("\n")
+    );
+    const result = buildLeadShortlist(
+      [
+        "leadKey,label,websiteUrl,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,reportPath",
+        "url:https://old.test,Old Lead,https://old.test,high,90,99,Missing CTA,High,email,old/open-local-audit-report.html",
+        "url:https://fresh.test,Fresh Lead,https://fresh.test,medium,80,88,Missing title,Medium,phone,fresh/open-local-audit-report.html"
+      ].join("\n"),
+      { reviewRows }
+    );
+
+    expect(result.totalRows).toBe(2);
+    expect(result.suppressedRows).toBe(1);
+    expect(result.leads).toHaveLength(1);
+    expect(result.leads[0]).toMatchObject({
+      companyName: "Fresh Lead",
+      reviewStatus: "pending",
+      reviewReason: "Needs manual review",
+      lastReviewedAt: "2026-06-02"
+    });
+  });
+
+  it("matches review rows by normalized website when lead keys are absent", () => {
+    const result = buildLeadShortlist(
+      [
+        "label,websiteUrl,priority,score,opportunityScore,topFinding,contactConfidence",
+        "Website Match,https://www.match.test/,high,90,95,Missing CTA,High",
+        "Fresh Lead,https://fresh.test,medium,80,88,Missing title,Medium"
+      ].join("\n"),
+      {
+        reviewRows: readShortlistReviewCsv(
+          "websiteUrl,reviewStatus,reviewReason,lastReviewedAt\nhttps://match.test,suppressed,Duplicate,2026-06-01\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Fresh Lead"]);
   });
 
   it("requires a header and at least one lead row", () => {

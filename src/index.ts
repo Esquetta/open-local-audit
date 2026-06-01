@@ -30,7 +30,7 @@ export { packageReport } from "./report-pack.js";
 export { runLighthouseAudit } from "./lighthouse.js";
 export { renderPdfReport } from "./pdf.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
-export { buildLeadShortlist, renderShortlistJson, renderShortlistMarkdown } from "./shortlist.js";
+export { buildLeadShortlist, readShortlistReviewCsv, renderShortlistJson, renderShortlistMarkdown } from "./shortlist.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
   BatchAuditContext,
@@ -68,7 +68,13 @@ export type {
   ExportValidationSummary
 } from "./export-validation.js";
 export type { ReportPackManifest, ReportPackOptions, ReportPackResult } from "./report-pack.js";
-export type { ShortlistFormat, ShortlistLead, ShortlistOptions, ShortlistResult } from "./shortlist.js";
+export type {
+  ShortlistFormat,
+  ShortlistLead,
+  ShortlistOptions,
+  ShortlistResult,
+  ShortlistReviewRow
+} from "./shortlist.js";
 export type {
   AuditOptions,
   AuditProfile,

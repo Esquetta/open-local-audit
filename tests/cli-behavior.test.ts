@@ -562,8 +562,69 @@ describe("CLI behavior helpers", () => {
       expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
       const markdown = readFileSync(outPath, "utf8");
       expect(markdown).toContain("# Lead Shortlist");
-      expect(markdown).toContain("| 1 | Best Lead | https://best.test | high | 95 | 70 | Medium | phone | Missing CTA | best/open-local-audit-report.html |");
+      expect(markdown).toContain(
+        "| 1 | Best Lead | https://best.test | high | 95 | 70 | Medium | phone | Missing CTA | new |  |  | best/open-local-audit-report.html |"
+      );
       expect(markdown).not.toContain("Lower Lead");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("uses local review state when writing a lead shortlist", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-review-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const reviewPath = join(tmp, "review.csv");
+      const outPath = join(tmp, "shortlist.md");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,leadKey,reportPath",
+          "Old Lead,https://old.test,high,90,99,Missing CTA,High,email,url:https://old.test,old/open-local-audit-report.html",
+          "Fresh Lead,https://fresh.test,medium,80,88,Missing title,Medium,phone,url:https://fresh.test,fresh/open-local-audit-report.html"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        reviewPath,
+        [
+          "leadKey,websiteUrl,label,reviewStatus,reviewReason,lastReviewedAt",
+          "url:https://old.test,https://old.test,Old Lead,contacted,Already contacted,2026-06-01",
+          "url:https://fresh.test,https://fresh.test,Fresh Lead,pending,Needs call,2026-06-02"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--review-csv",
+          reviewPath,
+          "--out",
+          outPath
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
+      expect(result.stdout).toContain("Suppressed: 1");
+      const markdown = readFileSync(outPath, "utf8");
+      expect(markdown).not.toContain("Old Lead");
+      expect(markdown).toContain("Fresh Lead");
+      expect(markdown).toContain("pending");
+      expect(markdown).toContain("Needs call");
+      expect(markdown).toContain("2026-06-02");
     } finally {
       removeTempDir(tmp);
     }

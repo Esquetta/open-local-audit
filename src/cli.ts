@@ -36,6 +36,7 @@ import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import {
   buildLeadShortlist,
+  readShortlistReviewCsv,
   renderShortlistJson,
   renderShortlistMarkdown,
   type ShortlistFormat
@@ -350,6 +351,7 @@ const shortlistProgram = program
   .description("Rank a local discovery or CRM CSV export into a lead shortlist report.")
   .option("--input <path>", "read a discovery or CRM CSV export")
   .option("--out <path>", "write the shortlist report")
+  .option("--review-csv <path>", "read local review state and suppress completed leads")
   .option("--top <count>", "number of leads to include", "20")
   .option("--format <format>", "shortlist report format: markdown or json", "markdown")
   .action(async () => {
@@ -357,6 +359,7 @@ const shortlistProgram = program
       const options = shortlistProgram.optsWithGlobals() as {
         input?: string;
         out?: string;
+        reviewCsv?: string;
         top: string;
         format: string;
       };
@@ -374,7 +377,8 @@ const shortlistProgram = program
       }
 
       const top = Number(options.top);
-      const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top });
+      const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
+      const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top, reviewRows });
       await mkdir(dirname(options.out), { recursive: true });
       await writeFile(
         options.out,
@@ -382,6 +386,7 @@ const shortlistProgram = program
         "utf8"
       );
       process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
+      process.stdout.write(`Suppressed: ${result.suppressedRows}\n`);
       process.stdout.write(`Output: ${options.out}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
