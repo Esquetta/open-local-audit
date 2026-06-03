@@ -354,6 +354,22 @@ Exit criteria:
 - CLI tests cover `--review-csv` output and suppressed-count reporting.
 - Release docs state that review CSV handling is local operator guidance only.
 
+## Milestone 20: Spreadsheet-ready shortlist CSV
+
+Target release:
+- `v0.24.0`.
+
+Deliverables:
+- `shortlist --format csv` for local spreadsheet-ready shortlist output.
+- CSV columns for rank, lead identity, scoring, contact handoff, review context, lead key, and report path.
+- Existing CSV formula hardening applied to shortlist CSV cells.
+- Clear docs that CSV shortlist output is local-only and does not import, send outreach, or sync CRM records.
+
+Exit criteria:
+- Module tests cover CSV rendering and formula-like cell hardening.
+- CLI tests cover `--format csv` with review-state suppression.
+- Release docs state that CSV shortlist output is local operator guidance only.
+
 ## Deferred work
 
 - Web UI.

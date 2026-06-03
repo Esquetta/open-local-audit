@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.24.0 - 2026-06-03
+
+- Added `shortlist --format csv` for spreadsheet-ready local shortlist output.
+- Included rank, scoring, contact handoff, review context, lead key, and report path columns in CSV shortlist reports.
+- Reused existing CSV cell hardening so formula-like shortlist values are neutralized before spreadsheet review.
+- Kept CSV shortlist generation local-only with no API calls, outreach sending, review CSV mutation, or CRM sync.
+
 ## v0.23.0 - 2026-06-01
 
 - Added `shortlist --review-csv <path>` for local review-state aware shortlist runs.

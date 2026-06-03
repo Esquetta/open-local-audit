@@ -212,6 +212,16 @@ Before releasing shortlist review-state handling:
 - [x] CLI output reports suppressed row counts.
 - [x] Docs state that review CSV handling is local-only and does not mutate review files, send outreach, or sync to a CRM.
 
+## Shortlist CSV readiness
+
+Before releasing spreadsheet-ready shortlist output:
+
+- [x] `shortlist --format csv` writes local CSV output.
+- [x] CSV output includes rank, scoring, contact handoff, review context, lead key, and report path columns.
+- [x] CSV output uses formula-like cell hardening before spreadsheet review.
+- [x] CLI tests cover CSV output with review-state suppression.
+- [x] Docs state that CSV shortlist output is local-only and does not import, send outreach, or sync to a CRM.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -220,12 +230,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.23.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.24.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.23.0` after:
+Use `v0.24.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -248,6 +258,7 @@ Use `v0.23.0` after:
 - local report packaging is verified for generated summaries, manifest, copied report artifacts, and missing JSON report errors,
 - local lead shortlist reports are verified for Markdown output, JSON output, deterministic ranking, and invalid input errors,
 - local shortlist review-state suppression is verified for Markdown output, JSON output, suppressed-count reporting, and active review metadata,
+- local shortlist CSV output is verified for spreadsheet-safe cells, review context, and suppressed-row handling,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
