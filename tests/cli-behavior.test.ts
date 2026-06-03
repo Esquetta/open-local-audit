@@ -675,6 +675,69 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("writes a CSV lead shortlist from a CSV export", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-csv-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const reviewPath = join(tmp, "review.csv");
+      const outPath = join(tmp, "shortlist.csv");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,leadKey,reportPath",
+          "Old Lead,https://old.test,high,90,99,Missing CTA,High,email,url:https://old.test,old/open-local-audit-report.html",
+          "Fresh Lead,https://fresh.test,medium,80,88,Missing title,Medium,phone,url:https://fresh.test,fresh/open-local-audit-report.html"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        reviewPath,
+        [
+          "leadKey,websiteUrl,label,reviewStatus,reviewReason,lastReviewedAt",
+          "url:https://old.test,https://old.test,Old Lead,suppressed,Duplicate,2026-06-01",
+          "url:https://fresh.test,https://fresh.test,Fresh Lead,pending,Needs call,2026-06-03"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--review-csv",
+          reviewPath,
+          "--out",
+          outPath,
+          "--format",
+          "csv"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
+      expect(result.stdout).toContain("Suppressed: 1");
+      const csv = readFileSync(outPath, "utf8");
+      expect(csv.split(/\r?\n/)[0]).toBe(
+        "rank,companyName,website,segment,profile,priority,opportunityScore,score,contactConfidence,preferredContactChannel,reason,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath"
+      );
+      expect(csv).toContain("Fresh Lead");
+      expect(csv).toContain("pending");
+      expect(csv).toContain("Needs call");
+      expect(csv).not.toContain("Old Lead");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("runs manual CSV lead discovery in dry-run mode", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
     try {

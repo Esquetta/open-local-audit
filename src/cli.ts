@@ -37,6 +37,7 @@ import { resolveGoogleMapsApiKey } from "./secrets.js";
 import {
   buildLeadShortlist,
   readShortlistReviewCsv,
+  renderShortlistCsv,
   renderShortlistJson,
   renderShortlistMarkdown,
   type ShortlistFormat
@@ -353,7 +354,7 @@ const shortlistProgram = program
   .option("--out <path>", "write the shortlist report")
   .option("--review-csv <path>", "read local review state and suppress completed leads")
   .option("--top <count>", "number of leads to include", "20")
-  .option("--format <format>", "shortlist report format: markdown or json", "markdown")
+  .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
     try {
       const options = shortlistProgram.optsWithGlobals() as {
@@ -372,19 +373,21 @@ const shortlistProgram = program
       }
 
       const format = options.format as ShortlistFormat;
-      if (format !== "markdown" && format !== "json") {
-        throw new Error("shortlist --format must be markdown or json");
+      if (format !== "markdown" && format !== "json" && format !== "csv") {
+        throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
       const top = Number(options.top);
       const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
       const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top, reviewRows });
       await mkdir(dirname(options.out), { recursive: true });
-      await writeFile(
-        options.out,
-        format === "json" ? renderShortlistJson(result) : renderShortlistMarkdown(result),
-        "utf8"
-      );
+      const output =
+        format === "json"
+          ? renderShortlistJson(result)
+          : format === "csv"
+            ? renderShortlistCsv(result)
+            : renderShortlistMarkdown(result);
+      await writeFile(options.out, output, "utf8");
       process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
       process.stdout.write(`Suppressed: ${result.suppressedRows}\n`);
       process.stdout.write(`Output: ${options.out}\n`);

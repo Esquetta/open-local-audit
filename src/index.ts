@@ -30,7 +30,13 @@ export { packageReport } from "./report-pack.js";
 export { runLighthouseAudit } from "./lighthouse.js";
 export { renderPdfReport } from "./pdf.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
-export { buildLeadShortlist, readShortlistReviewCsv, renderShortlistJson, renderShortlistMarkdown } from "./shortlist.js";
+export {
+  buildLeadShortlist,
+  readShortlistReviewCsv,
+  renderShortlistCsv,
+  renderShortlistJson,
+  renderShortlistMarkdown
+} from "./shortlist.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
   BatchAuditContext,

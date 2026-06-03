@@ -1,6 +1,6 @@
-import { cleanInputLines, parseCsvLine } from "./csv.js";
+import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 
-export type ShortlistFormat = "markdown" | "json";
+export type ShortlistFormat = "markdown" | "json" | "csv";
 
 export interface ShortlistOptions {
   top?: number;
@@ -306,6 +306,51 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
 
 export function renderShortlistJson(result: ShortlistResult): string {
   return `${JSON.stringify(result, null, 2)}\n`;
+}
+
+export function renderShortlistCsv(result: ShortlistResult): string {
+  const headers = [
+    "rank",
+    "companyName",
+    "website",
+    "segment",
+    "profile",
+    "priority",
+    "opportunityScore",
+    "score",
+    "contactConfidence",
+    "preferredContactChannel",
+    "reason",
+    "reviewStatus",
+    "reviewReason",
+    "lastReviewedAt",
+    "leadKey",
+    "reportPath"
+  ];
+  const rows = result.leads.map((lead) =>
+    [
+      lead.rank.toString(),
+      lead.companyName,
+      lead.website,
+      lead.segment,
+      lead.profile,
+      lead.priority,
+      lead.opportunityScore?.toString() ?? "",
+      lead.score?.toString() ?? "",
+      lead.contactConfidence,
+      lead.preferredContactChannel,
+      lead.reason,
+      lead.reviewStatus,
+      lead.reviewReason,
+      lead.lastReviewedAt,
+      lead.leadKey,
+      lead.reportPath
+    ]
+      .map(escapeCsvCell)
+      .join(",")
+  );
+
+  return `${[headers.join(","), ...rows].join("\n")}\n`;
 }
 
 function markdownCell(value: string | number | undefined): string {

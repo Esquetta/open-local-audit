@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLeadShortlist,
   readShortlistReviewCsv,
+  renderShortlistCsv,
   renderShortlistJson,
   renderShortlistMarkdown
 } from "../src/shortlist.js";
@@ -63,6 +64,23 @@ describe("lead shortlist", () => {
       selected: 1,
       leads: [{ companyName: "Lead A" }]
     });
+  });
+
+  it("renders a CSV shortlist report with review context and safe cells", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,segment,profile,priority,score,opportunityScore,contactConfidence,preferredContactChannel,topFinding,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath",
+        "Lead A,https://a.test,dental,dental,high,80,90,High,email,Missing CTA,pending,=Needs review,2026-06-03,url:https://a.test,a/open-local-audit-report.html"
+      ].join("\n")
+    );
+
+    expect(renderShortlistCsv(result)).toBe(
+      [
+        "rank,companyName,website,segment,profile,priority,opportunityScore,score,contactConfidence,preferredContactChannel,reason,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath",
+        "1,Lead A,https://a.test,dental,dental,high,90,80,High,email,Missing CTA,pending,'=Needs review,2026-06-03,url:https://a.test,a/open-local-audit-report.html",
+        ""
+      ].join("\n")
+    );
   });
 
   it("suppresses completed review rows and carries active review metadata", () => {
