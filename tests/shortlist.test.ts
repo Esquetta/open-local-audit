@@ -61,6 +61,7 @@ describe("lead shortlist", () => {
     expect(JSON.parse(renderShortlistJson(result))).toMatchObject({
       totalRows: 1,
       suppressedRows: 0,
+      filteredRows: 0,
       selected: 1,
       leads: [{ companyName: "Lead A" }]
     });
@@ -129,6 +130,24 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Fresh Lead"]);
   });
 
+  it("filters leads below the minimum opportunity score before ranking", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+        "Low Opportunity,https://low.test,high,95,60,Missing title,High",
+        "Strong Opportunity,https://strong.test,medium,70,92,Missing CTA,Medium",
+        "No Opportunity Score,https://unknown.test,high,99,,Missing meta,High"
+      ].join("\n"),
+      { minOpportunityScore: 80 }
+    );
+
+    expect(result.totalRows).toBe(3);
+    expect(result.suppressedRows).toBe(0);
+    expect(result.filteredRows).toBe(2);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Strong Opportunity"]);
+    expect(renderShortlistMarkdown(result)).toContain("- Filtered rows: 2");
+  });
+
   it("requires a header and at least one lead row", () => {
     expect(() => buildLeadShortlist("companyName,website\n")).toThrow(
       "shortlist requires a CSV file with a header and at least one lead row"
@@ -139,5 +158,11 @@ describe("lead shortlist", () => {
     expect(() => buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { top: 0 })).toThrow(
       "shortlist --top must be a positive integer"
     );
+  });
+
+  it("requires a numeric minimum opportunity score", () => {
+    expect(() =>
+      buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { minOpportunityScore: Number.NaN })
+    ).toThrow("shortlist --min-opportunity-score must be a number");
   });
 });

@@ -738,6 +738,87 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("filters a lead shortlist by minimum opportunity score", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-min-opportunity-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.csv");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,leadKey,reportPath",
+          "Low Lead,https://low.test,high,95,60,Missing title,High,email,url:https://low.test,low/open-local-audit-report.html",
+          "Strong Lead,https://strong.test,medium,80,91,Missing CTA,Medium,phone,url:https://strong.test,strong/open-local-audit-report.html"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "csv",
+          "--min-opportunity-score",
+          "80"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
+      expect(result.stdout).toContain("Filtered: 1");
+      const csv = readFileSync(outPath, "utf8");
+      expect(csv).toContain("Strong Lead");
+      expect(csv).not.toContain("Low Lead");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects invalid minimum opportunity score values for shortlists", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-min-opportunity-invalid-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      writeFileSync(inputPath, "companyName,website\nLead A,https://a.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          join(tmp, "shortlist.md"),
+          "--min-opportunity-score",
+          "not-a-number"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("shortlist --min-opportunity-score must be a number");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("runs manual CSV lead discovery in dry-run mode", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
     try {

@@ -354,6 +354,7 @@ const shortlistProgram = program
   .option("--out <path>", "write the shortlist report")
   .option("--review-csv <path>", "read local review state and suppress completed leads")
   .option("--top <count>", "number of leads to include", "20")
+  .option("--min-opportunity-score <score>", "include only leads at or above an opportunity score")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
     try {
@@ -362,6 +363,7 @@ const shortlistProgram = program
         out?: string;
         reviewCsv?: string;
         top: string;
+        minOpportunityScore?: string;
         format: string;
       };
       if (!options.input) {
@@ -378,8 +380,10 @@ const shortlistProgram = program
       }
 
       const top = Number(options.top);
+      const minOpportunityScore =
+        options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
       const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
-      const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top, reviewRows });
+      const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top, minOpportunityScore, reviewRows });
       await mkdir(dirname(options.out), { recursive: true });
       const output =
         format === "json"
@@ -390,6 +394,7 @@ const shortlistProgram = program
       await writeFile(options.out, output, "utf8");
       process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
       process.stdout.write(`Suppressed: ${result.suppressedRows}\n`);
+      process.stdout.write(`Filtered: ${result.filteredRows}\n`);
       process.stdout.write(`Output: ${options.out}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

@@ -4,6 +4,7 @@ export type ShortlistFormat = "markdown" | "json" | "csv";
 
 export interface ShortlistOptions {
   top?: number;
+  minOpportunityScore?: number;
   reviewRows?: ShortlistReviewRow[];
 }
 
@@ -43,6 +44,7 @@ export interface ShortlistLead {
 export interface ShortlistResult {
   totalRows: number;
   suppressedRows: number;
+  filteredRows: number;
   selected: number;
   leads: ShortlistLead[];
 }
@@ -283,12 +285,20 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     throw new Error("shortlist --top must be a positive integer");
   }
 
+  if (options.minOpportunityScore !== undefined && !Number.isFinite(options.minOpportunityScore)) {
+    throw new Error("shortlist --min-opportunity-score must be a number");
+  }
+
   const reviewedLeads = rows
     .map(normalizeLead)
     .map((lead) => applyReviewState(lead, options.reviewRows ?? []));
   const suppressedRows = reviewedLeads.filter((result) => result.suppressed).length;
-  const leads = reviewedLeads
-    .flatMap((result) => (result.lead ? [result.lead] : []))
+  const unsuppressedLeads = reviewedLeads.flatMap((result) => (result.lead ? [result.lead] : []));
+  const eligibleLeads = unsuppressedLeads.filter((lead) =>
+    options.minOpportunityScore === undefined ? true : (lead.opportunityScore ?? -1) >= options.minOpportunityScore
+  );
+  const filteredRows = unsuppressedLeads.length - eligibleLeads.length;
+  const leads = eligibleLeads
     .sort(sortLeads)
     .slice(0, top)
     .map((lead, index) => ({
@@ -299,6 +309,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
   return {
     totalRows: rows.length,
     suppressedRows,
+    filteredRows,
     selected: leads.length,
     leads
   };
@@ -383,6 +394,7 @@ export function renderShortlistMarkdown(result: ShortlistResult): string {
     "",
     `- Total rows: ${result.totalRows}`,
     `- Suppressed rows: ${result.suppressedRows}`,
+    `- Filtered rows: ${result.filteredRows}`,
     `- Selected leads: ${result.selected}`,
     "",
     "| Rank | Company | Website | Priority | Opportunity | Score | Contact | Channel | Reason | Review | Review Reason | Last Reviewed | Report |",
