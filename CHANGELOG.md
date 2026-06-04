@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.25.0 - 2026-06-04
+
+- Added `shortlist --min-opportunity-score <score>` for local shortlist filtering.
+- Filtered low-opportunity shortlist leads after review-state suppression and before top-N ranking.
+- Reported filtered row counts in CLI output, Markdown summaries, and JSON results.
+- Kept shortlist filtering local-only with no API calls, outreach sending, review CSV mutation, or CRM sync.
+
 ## v0.24.0 - 2026-06-03
 
 - Added `shortlist --format csv` for spreadsheet-ready local shortlist output.

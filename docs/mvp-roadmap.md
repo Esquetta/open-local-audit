@@ -370,6 +370,22 @@ Exit criteria:
 - CLI tests cover `--format csv` with review-state suppression.
 - Release docs state that CSV shortlist output is local operator guidance only.
 
+## Milestone 21: Shortlist opportunity filter
+
+Target release:
+- `v0.25.0`.
+
+Deliverables:
+- `shortlist --min-opportunity-score <score>` for local shortlist filtering.
+- Filtering after review-state suppression and before top-N ranking.
+- Filtered row counts in CLI, Markdown, and JSON shortlist output.
+- Clear docs that shortlist filtering affects local report output only and does not mutate lead sources, send outreach, or sync CRM records.
+
+Exit criteria:
+- Module tests cover minimum opportunity filtering and invalid score handling.
+- CLI tests cover filtered CSV output and invalid score handling.
+- Release docs state that filtering is local operator guidance only.
+
 ## Deferred work
 
 - Web UI.
