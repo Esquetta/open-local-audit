@@ -355,17 +355,25 @@ const shortlistProgram = program
   .option("--review-csv <path>", "read local review state and suppress completed leads")
   .option("--top <count>", "number of leads to include", "20")
   .option("--min-opportunity-score <score>", "include only leads at or above an opportunity score")
+  .option("--segment <segment>", "include only leads matching a segment")
+  .option("--profile <profile>", "include only leads matching a profile")
+  .option("--priority <priority>", "include only leads matching a priority")
+  .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
+    const options = shortlistProgram.optsWithGlobals() as {
+      input?: string;
+      out?: string;
+      reviewCsv?: string;
+      top: string;
+      minOpportunityScore?: string;
+      segment?: string;
+      profile?: string;
+      priority?: string;
+      contactConfidence?: string;
+      format: string;
+    };
     try {
-      const options = shortlistProgram.optsWithGlobals() as {
-        input?: string;
-        out?: string;
-        reviewCsv?: string;
-        top: string;
-        minOpportunityScore?: string;
-        format: string;
-      };
       if (!options.input) {
         throw new Error("--input is required for shortlist");
       }
@@ -383,7 +391,15 @@ const shortlistProgram = program
       const minOpportunityScore =
         options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
       const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
-      const result = buildLeadShortlist(await readFile(options.input, "utf8"), { top, minOpportunityScore, reviewRows });
+      const result = buildLeadShortlist(await readFile(options.input, "utf8"), {
+        top,
+        minOpportunityScore,
+        segment: options.segment,
+        profile: options.profile,
+        priority: options.priority,
+        contactConfidence: options.contactConfidence,
+        reviewRows
+      });
       await mkdir(dirname(options.out), { recursive: true });
       const output =
         format === "json"
@@ -417,7 +433,7 @@ program
   .option("--top <count>", "limit the batch index to the top N entries after filtering and sorting")
   .option("--sort <sort>", "batch index sort: score-asc or severity-desc")
   .option("--concurrency <count>", "maximum concurrent batch audits", "1")
-  .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, or auto-service", "generic")
+  .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, or auto-service")
   .option("--export-csv <path>", "write a batch prospect CSV export")
   .option("--export-preset <preset>", "CSV export preset for --export-csv: standard or crm", "standard")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")

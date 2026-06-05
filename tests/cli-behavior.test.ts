@@ -819,6 +819,63 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("filters a lead shortlist by focus fields", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-focus-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence",
+          "Dental Match,https://match.test,Dental,dental,High,80,92,Missing CTA,High",
+          "Wrong Segment,https://segment.test,beauty,dental,high,90,95,Missing title,High",
+          "Wrong Confidence,https://confidence.test,dental,dental,high,90,95,Missing title,Medium"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--segment",
+          "dental",
+          "--profile",
+          "dental",
+          "--priority",
+          "high",
+          "--contact-confidence",
+          "high"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 3 leads");
+      expect(result.stdout).toContain("Filtered: 2");
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        filteredRows: 2,
+        selected: 1,
+        leads: [{ companyName: "Dental Match" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("runs manual CSV lead discovery in dry-run mode", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
     try {

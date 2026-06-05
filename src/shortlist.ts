@@ -5,6 +5,10 @@ export type ShortlistFormat = "markdown" | "json" | "csv";
 export interface ShortlistOptions {
   top?: number;
   minOpportunityScore?: number;
+  segment?: string;
+  profile?: string;
+  priority?: string;
+  contactConfidence?: string;
   reviewRows?: ShortlistReviewRow[];
 }
 
@@ -211,6 +215,10 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function matchesFilter(value: string, filter: string | undefined): boolean {
+  return filter === undefined || normalizeText(value) === normalizeText(filter);
+}
+
 function reviewIdentity(row: ShortlistReviewRow): { leadKey: string; website: string; label: string } {
   return {
     leadKey: normalizeText(row.leadKey ?? ""),
@@ -294,8 +302,14 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     .map((lead) => applyReviewState(lead, options.reviewRows ?? []));
   const suppressedRows = reviewedLeads.filter((result) => result.suppressed).length;
   const unsuppressedLeads = reviewedLeads.flatMap((result) => (result.lead ? [result.lead] : []));
-  const eligibleLeads = unsuppressedLeads.filter((lead) =>
-    options.minOpportunityScore === undefined ? true : (lead.opportunityScore ?? -1) >= options.minOpportunityScore
+  const eligibleLeads = unsuppressedLeads.filter(
+    (lead) =>
+      (options.minOpportunityScore === undefined ||
+        (lead.opportunityScore ?? -1) >= options.minOpportunityScore) &&
+      matchesFilter(lead.segment, options.segment) &&
+      matchesFilter(lead.profile, options.profile) &&
+      matchesFilter(lead.priority, options.priority) &&
+      matchesFilter(lead.contactConfidence, options.contactConfidence)
   );
   const filteredRows = unsuppressedLeads.length - eligibleLeads.length;
   const leads = eligibleLeads

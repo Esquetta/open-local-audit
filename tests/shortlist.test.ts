@@ -148,6 +148,28 @@ describe("lead shortlist", () => {
     expect(renderShortlistMarkdown(result)).toContain("- Filtered rows: 2");
   });
 
+  it("filters leads by segment, profile, priority, and contact confidence", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence",
+        "Dental Match,https://match.test,Dental,dental,High,80,92,Missing CTA,High",
+        "Wrong Segment,https://segment.test,beauty,dental,high,90,95,Missing title,High",
+        "Wrong Profile,https://profile.test,dental,clinic,high,90,95,Missing title,High",
+        "Wrong Priority,https://priority.test,dental,dental,medium,90,95,Missing title,High",
+        "Wrong Confidence,https://confidence.test,dental,dental,high,90,95,Missing title,Medium"
+      ].join("\n"),
+      {
+        segment: "dental",
+        profile: "DENTAL",
+        priority: "high",
+        contactConfidence: "HIGH"
+      }
+    );
+
+    expect(result.filteredRows).toBe(4);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Dental Match"]);
+  });
+
   it("requires a header and at least one lead row", () => {
     expect(() => buildLeadShortlist("companyName,website\n")).toThrow(
       "shortlist requires a CSV file with a header and at least one lead row"
