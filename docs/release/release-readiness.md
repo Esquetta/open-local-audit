@@ -232,6 +232,16 @@ Before releasing shortlist opportunity-score filtering:
 - [x] Invalid minimum opportunity score values fail clearly.
 - [x] Docs state that filtering does not mutate source lead files, send outreach, or sync to a CRM.
 
+## Shortlist focus filter readiness
+
+Before releasing shortlist focus filters:
+
+- [x] `shortlist` supports segment, profile, priority, and contact-confidence filters.
+- [x] Supplied filters use case-insensitive exact matching with `AND` semantics.
+- [x] Filtering runs after review suppression and before ranking and top-N selection.
+- [x] CLI and module tests cover combined filtering and filtered counts.
+- [x] Docs state that filtering affects local output only.
+
 Add project-specific commands once implementation starts.
 
 Current project-specific verification:
@@ -240,12 +250,12 @@ Current project-specific verification:
 npm audit
 node dist/cli.js --help
 npm pack
-npx --yes --package ./open-local-audit-0.25.0.tgz open-local-audit --help
+npx --yes --package ./open-local-audit-0.26.0.tgz open-local-audit --help
 ```
 
 ## Current release recommendation
 
-Use `v0.25.0` after:
+Use `v0.26.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -270,6 +280,7 @@ Use `v0.25.0` after:
 - local shortlist review-state suppression is verified for Markdown output, JSON output, suppressed-count reporting, and active review metadata,
 - local shortlist CSV output is verified for spreadsheet-safe cells, review context, and suppressed-row handling,
 - local shortlist opportunity filtering is verified for filtered-count reporting, invalid score handling, and local-only output,
+- local shortlist focus filters are verified for combined matching, filtered counts, and compatibility with all output formats,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

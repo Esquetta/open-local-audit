@@ -386,6 +386,22 @@ Exit criteria:
 - CLI tests cover filtered CSV output and invalid score handling.
 - Release docs state that filtering is local operator guidance only.
 
+## Milestone 22: Shortlist focus filters
+
+Target release:
+- `v0.26.0`.
+
+Deliverables:
+- `--segment`, `--profile`, `--priority`, and `--contact-confidence` for shortlist output.
+- Case-insensitive exact matching with `AND` semantics across supplied filters.
+- Filtering after review suppression and before ranking and top-N selection.
+- Clear docs that filters affect local report output only.
+
+Exit criteria:
+- Module tests cover combined filters and case-insensitive matching.
+- CLI tests cover filtered counts and JSON output.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

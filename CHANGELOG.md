@@ -4,6 +4,13 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.26.0 - 2026-06-05
+
+- Added `shortlist` focus filters for segment, profile, priority, and contact confidence.
+- Combined supplied focus filters with case-insensitive `AND` matching.
+- Applied focus filters after review suppression and before ranking and top-N selection.
+- Kept focus filtering local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.25.0 - 2026-06-04
 
 - Added `shortlist --min-opportunity-score <score>` for local shortlist filtering.
