@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.27.0 - 2026-06-06
+
+- Added `shortlist --review-status <status>` for active review-state filtering.
+- Applied review-status filtering after review-state suppression and before ranking and top-N selection.
+- Kept review-status filtering local-only with no review CSV mutation, source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.26.0 - 2026-06-05
 
 - Added `shortlist` focus filters for segment, profile, priority, and contact confidence.

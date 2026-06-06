@@ -253,9 +253,30 @@ npm pack
 npx --yes --package ./open-local-audit-0.26.0.tgz open-local-audit --help
 ```
 
+## Shortlist review-status filter readiness
+
+Before releasing shortlist review-status filters:
+
+- [x] `shortlist --review-status <status>` filters active local shortlist rows.
+- [x] Review-status matching is case-insensitive and exact.
+- [x] Filtering runs after review suppression and before ranking and top-N selection.
+- [x] CLI and module tests cover suppressed rows, filtered rows, and JSON output.
+- [x] Docs state that review-status filtering affects local output only.
+
+Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js --help
+npm pack
+npx --yes --package ./open-local-audit-0.27.0.tgz open-local-audit --help
+```
+
 ## Current release recommendation
 
-Use `v0.26.0` after:
+Use `v0.27.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -281,6 +302,7 @@ Use `v0.26.0` after:
 - local shortlist CSV output is verified for spreadsheet-safe cells, review context, and suppressed-row handling,
 - local shortlist opportunity filtering is verified for filtered-count reporting, invalid score handling, and local-only output,
 - local shortlist focus filters are verified for combined matching, filtered counts, and compatibility with all output formats,
+- local shortlist review-status filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
