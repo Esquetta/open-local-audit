@@ -9,6 +9,7 @@ export interface ShortlistOptions {
   profile?: string;
   priority?: string;
   contactConfidence?: string;
+  reviewStatus?: string;
   reviewRows?: ShortlistReviewRow[];
 }
 
@@ -309,7 +310,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.segment, options.segment) &&
       matchesFilter(lead.profile, options.profile) &&
       matchesFilter(lead.priority, options.priority) &&
-      matchesFilter(lead.contactConfidence, options.contactConfidence)
+      matchesFilter(lead.contactConfidence, options.contactConfidence) &&
+      matchesFilter(lead.reviewStatus, options.reviewStatus)
   );
   const filteredRows = unsuppressedLeads.length - eligibleLeads.length;
   const leads = eligibleLeads

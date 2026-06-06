@@ -170,6 +170,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Dental Match"]);
   });
 
+  it("filters leads by active review status after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,reviewStatus,leadKey",
+        "Pending Lead,https://pending.test,high,80,92,Missing CTA,High,Pending,",
+        "New Lead,https://new.test,high,80,90,Missing CTA,High,new,",
+        "Contacted Lead,https://contacted.test,high,80,95,Missing CTA,High,new,url:https://contacted.test"
+      ].join("\n"),
+      {
+        reviewStatus: "pending",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nurl:https://contacted.test,contacted,Already contacted,2026-06-05\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Pending Lead"]);
+  });
+
   it("requires a header and at least one lead row", () => {
     expect(() => buildLeadShortlist("companyName,website\n")).toThrow(
       "shortlist requires a CSV file with a header and at least one lead row"

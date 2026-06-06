@@ -359,6 +359,7 @@ const shortlistProgram = program
   .option("--profile <profile>", "include only leads matching a profile")
   .option("--priority <priority>", "include only leads matching a priority")
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
+  .option("--review-status <status>", "include only leads matching an active review status")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
     const options = shortlistProgram.optsWithGlobals() as {
@@ -371,6 +372,7 @@ const shortlistProgram = program
       profile?: string;
       priority?: string;
       contactConfidence?: string;
+      reviewStatus?: string;
       format: string;
     };
     try {
@@ -398,6 +400,7 @@ const shortlistProgram = program
         profile: options.profile,
         priority: options.priority,
         contactConfidence: options.contactConfidence,
+        reviewStatus: options.reviewStatus,
         reviewRows
       });
       await mkdir(dirname(options.out), { recursive: true });
