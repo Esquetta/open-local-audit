@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.28.0 - 2026-06-07
+
+- Added `shortlist --sort <sort>` for local shortlist ranking control.
+- Supported `opportunity-desc`, `score-desc`, `company-asc`, and `last-reviewed-asc` sort modes.
+- Kept sorting local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.27.0 - 2026-06-06
 
 - Added `shortlist --review-status <status>` for active review-state filtering.

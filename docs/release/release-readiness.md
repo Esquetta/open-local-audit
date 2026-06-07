@@ -274,9 +274,30 @@ npm pack
 npx --yes --package ./open-local-audit-0.27.0.tgz open-local-audit --help
 ```
 
+## Shortlist sort mode readiness
+
+Before releasing shortlist sort modes:
+
+- [x] `shortlist --sort <sort>` controls local shortlist ranking.
+- [x] Sort modes include `opportunity-desc`, `score-desc`, `company-asc`, and `last-reviewed-asc`.
+- [x] Sorting runs after review suppression and filters, before top-N selection.
+- [x] CLI and module tests cover supported modes and invalid sort values.
+- [x] Docs state that sorting affects local output only.
+
+Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js shortlist --help
+npm pack
+npx --yes --package ./open-local-audit-0.28.0.tgz open-local-audit shortlist --help
+```
+
 ## Current release recommendation
 
-Use `v0.27.0` after:
+Use `v0.28.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -303,6 +324,7 @@ Use `v0.27.0` after:
 - local shortlist opportunity filtering is verified for filtered-count reporting, invalid score handling, and local-only output,
 - local shortlist focus filters are verified for combined matching, filtered counts, and compatibility with all output formats,
 - local shortlist review-status filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
+- local shortlist sort modes are verified for supported modes, invalid sort errors, and top-N ordering,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

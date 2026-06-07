@@ -242,6 +242,7 @@ Create a local lead shortlist from a discovery or CRM CSV export:
 ```bash
 open-local-audit shortlist --input leads.csv --out shortlist.md --top 20
 open-local-audit shortlist --input leads.csv --out shortlist.md --min-opportunity-score 80
+open-local-audit shortlist --input leads.csv --sort score-desc --out shortlist.md
 open-local-audit shortlist --input leads.csv --segment dental --priority high --contact-confidence High --out shortlist.csv --format csv
 open-local-audit shortlist --input leads.csv --review-csv review.csv --review-status pending --out shortlist.json --format json
 open-local-audit shortlist --input crm-leads.csv --out shortlist.json --format json
@@ -249,7 +250,7 @@ open-local-audit shortlist --input crm-leads.csv --out shortlist.csv --format cs
 open-local-audit shortlist --input leads.csv --review-csv review.csv --out shortlist.md
 ```
 
-`shortlist` ranks local CSV rows by `opportunityScore`, `priority`, `contactConfidence`, `score`, and company name. Use `--min-opportunity-score` to keep only stronger local opportunities. Use `--segment`, `--profile`, `--priority`, and `--contact-confidence` for case-insensitive exact focus filters; supplied filters are combined with `AND` semantics. Use `--review-status` to keep only active leads with a matching review status after completed or suppressed review rows have been removed. Filtering runs after review-state suppression and before top-N ranking. With `--review-csv`, the command matches review rows by `leadKey`, normalized website, or company label; skips rows marked `rejected`, `contacted`, `not-fit`, `not_a_fit`, `do-not-contact`, or `suppressed`; and carries active `reviewStatus`, `reviewReason`, and `lastReviewedAt` values into Markdown, JSON, and CSV reports. Markdown output is the default; JSON is available for automation; CSV is available for spreadsheet review. The command only reads local CSV files and writes a local report. It does not mutate source files, call APIs, send outreach, or sync to a CRM.
+`shortlist` ranks local CSV rows by `opportunityScore`, `priority`, `contactConfidence`, `score`, and company name. Use `--sort opportunity-desc|score-desc|company-asc|last-reviewed-asc` to change the ranking mode before top-N selection. Use `--min-opportunity-score` to keep only stronger local opportunities. Use `--segment`, `--profile`, `--priority`, and `--contact-confidence` for case-insensitive exact focus filters; supplied filters are combined with `AND` semantics. Use `--review-status` to keep only active leads with a matching review status after completed or suppressed review rows have been removed. Filtering runs after review-state suppression and before top-N ranking. With `--review-csv`, the command matches review rows by `leadKey`, normalized website, or company label; skips rows marked `rejected`, `contacted`, `not-fit`, `not_a_fit`, `do-not-contact`, or `suppressed`; and carries active `reviewStatus`, `reviewReason`, and `lastReviewedAt` values into Markdown, JSON, and CSV reports. Markdown output is the default; JSON is available for automation; CSV is available for spreadsheet review. The command only reads local CSV files and writes a local report. It does not mutate source files, call APIs, send outreach, or sync to a CRM.
 
 Package an existing single-site report folder for local customer sharing:
 
@@ -293,6 +294,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - CRM-ready local CSV export preset for batch and discovery exports.
 - Local CRM export validation with Markdown and JSON issue reports.
 - Local lead shortlist reports from discovery and CRM CSV exports.
+- Local shortlist sort modes with `--sort`.
 - Local shortlist review-state suppression with `--review-csv`.
 - Local shortlist opportunity-score filtering with `--min-opportunity-score`.
 - Local shortlist focus filtering by segment, profile, priority, and contact confidence.
@@ -338,6 +340,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--export-preset crm` changes CSV columns only; it does not create, update, or sync CRM records.
 - `validate-export` checks local CSV files only; it does not create, update, or sync CRM records.
 - `shortlist` ranks local CSV files only; it does not call APIs, send outreach, or sync CRM records.
+- `shortlist --sort` changes local report ordering only; it does not update source or review CSV files.
 - `shortlist --review-csv` reads review state for suppression and report context only; it does not mutate the review CSV.
 - `shortlist --min-opportunity-score` filters local report output only; it does not update source lead files.
 - Shortlist focus filters use case-insensitive exact matching and do not update source lead files.

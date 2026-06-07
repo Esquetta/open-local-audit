@@ -418,6 +418,22 @@ Exit criteria:
 - CLI tests cover suppressed and filtered counts with JSON output.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, and top-N behavior remain compatible.
 
+## Milestone 24: Shortlist sort modes
+
+Target release:
+- `v0.28.0`.
+
+Deliverables:
+- `--sort <sort>` for local shortlist ranking control.
+- Sort modes for `opportunity-desc`, `score-desc`, `company-asc`, and `last-reviewed-asc`.
+- Sorting after review suppression and filters, before top-N selection.
+- Clear docs that sorting affects local report output only.
+
+Exit criteria:
+- Module tests cover supported sort modes and invalid sort values.
+- CLI tests cover score sorting and invalid sort errors.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filter, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.
