@@ -40,7 +40,8 @@ import {
   renderShortlistCsv,
   renderShortlistJson,
   renderShortlistMarkdown,
-  type ShortlistFormat
+  type ShortlistFormat,
+  type ShortlistSort
 } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
 
@@ -360,6 +361,7 @@ const shortlistProgram = program
   .option("--priority <priority>", "include only leads matching a priority")
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
   .option("--review-status <status>", "include only leads matching an active review status")
+  .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
     const options = shortlistProgram.optsWithGlobals() as {
@@ -373,6 +375,7 @@ const shortlistProgram = program
       priority?: string;
       contactConfidence?: string;
       reviewStatus?: string;
+      sort: string;
       format: string;
     };
     try {
@@ -389,6 +392,7 @@ const shortlistProgram = program
         throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
+      const sort = options.sort as ShortlistSort;
       const top = Number(options.top);
       const minOpportunityScore =
         options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
@@ -401,6 +405,7 @@ const shortlistProgram = program
         priority: options.priority,
         contactConfidence: options.contactConfidence,
         reviewStatus: options.reviewStatus,
+        sort,
         reviewRows
       });
       await mkdir(dirname(options.out), { recursive: true });

@@ -937,6 +937,86 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("sorts a lead shortlist by score", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-sort-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+          "Opportunity Lead,https://opportunity.test,high,75,95,Missing CTA,High",
+          "Score Lead,https://score.test,medium,98,70,Missing title,Medium"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--sort",
+          "score-desc"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        selected: 2,
+        leads: [{ companyName: "Score Lead" }, { companyName: "Opportunity Lead" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects invalid shortlist sort modes", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-sort-invalid-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      writeFileSync(inputPath, "companyName,website\nLead A,https://a.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          join(tmp, "shortlist.md"),
+          "--sort",
+          "unsupported"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("runs manual CSV lead discovery in dry-run mode", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-discover-"));
     try {

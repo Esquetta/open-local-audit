@@ -1,6 +1,7 @@
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 
 export type ShortlistFormat = "markdown" | "json" | "csv";
+export type ShortlistSort = "opportunity-desc" | "score-desc" | "company-asc" | "last-reviewed-asc";
 
 export interface ShortlistOptions {
   top?: number;
@@ -10,6 +11,7 @@ export interface ShortlistOptions {
   priority?: string;
   contactConfidence?: string;
   reviewStatus?: string;
+  sort?: ShortlistSort;
   reviewRows?: ShortlistReviewRow[];
 }
 
@@ -68,6 +70,8 @@ const confidenceRank: Record<string, number> = {
   Low: 1,
   None: 0
 };
+
+const shortlistSortModes: ShortlistSort[] = ["opportunity-desc", "score-desc", "company-asc", "last-reviewed-asc"];
 
 const suppressedReviewStatuses = new Set([
   "rejected",
@@ -287,6 +291,27 @@ function sortLeads(left: Omit<ShortlistLead, "rank">, right: Omit<ShortlistLead,
   );
 }
 
+function reviewedAtRank(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function sortByMode(mode: ShortlistSort): (left: Omit<ShortlistLead, "rank">, right: Omit<ShortlistLead, "rank">) => number {
+  if (mode === "score-desc") {
+    return (left, right) => (right.score ?? -1) - (left.score ?? -1) || sortLeads(left, right);
+  }
+
+  if (mode === "company-asc") {
+    return (left, right) => left.companyName.localeCompare(right.companyName) || sortLeads(left, right);
+  }
+
+  if (mode === "last-reviewed-asc") {
+    return (left, right) => reviewedAtRank(left.lastReviewedAt) - reviewedAtRank(right.lastReviewedAt) || sortLeads(left, right);
+  }
+
+  return sortLeads;
+}
+
 export function buildLeadShortlist(content: string, options: ShortlistOptions = {}): ShortlistResult {
   const rows = parseRows(content);
   const top = options.top ?? 20;
@@ -296,6 +321,11 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
 
   if (options.minOpportunityScore !== undefined && !Number.isFinite(options.minOpportunityScore)) {
     throw new Error("shortlist --min-opportunity-score must be a number");
+  }
+
+  const sort = options.sort ?? "opportunity-desc";
+  if (!shortlistSortModes.includes(sort)) {
+    throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
   }
 
   const reviewedLeads = rows
@@ -315,7 +345,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
   );
   const filteredRows = unsuppressedLeads.length - eligibleLeads.length;
   const leads = eligibleLeads
-    .sort(sortLeads)
+    .sort(sortByMode(sort))
     .slice(0, top)
     .map((lead, index) => ({
       rank: index + 1,

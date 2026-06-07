@@ -191,6 +191,37 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Pending Lead"]);
   });
 
+  it("sorts leads by score, company, or last-reviewed date", () => {
+    const content = [
+      "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
+      "Beta Lead,https://beta.test,medium,99,70,Missing CTA,Medium,2026-06-03",
+      "Alpha Lead,https://alpha.test,high,75,95,Missing title,High,2026-06-01",
+      "Gamma Lead,https://gamma.test,low,82,88,Missing meta,Low,"
+    ].join("\n");
+
+    expect(buildLeadShortlist(content, { sort: "score-desc" }).leads.map((lead) => lead.companyName)).toEqual([
+      "Beta Lead",
+      "Gamma Lead",
+      "Alpha Lead"
+    ]);
+    expect(buildLeadShortlist(content, { sort: "company-asc" }).leads.map((lead) => lead.companyName)).toEqual([
+      "Alpha Lead",
+      "Beta Lead",
+      "Gamma Lead"
+    ]);
+    expect(buildLeadShortlist(content, { sort: "last-reviewed-asc" }).leads.map((lead) => lead.companyName)).toEqual([
+      "Alpha Lead",
+      "Beta Lead",
+      "Gamma Lead"
+    ]);
+  });
+
+  it("rejects unsupported shortlist sort modes", () => {
+    expect(() =>
+      buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { sort: "unknown" as never })
+    ).toThrow("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
+  });
+
   it("requires a header and at least one lead row", () => {
     expect(() => buildLeadShortlist("companyName,website\n")).toThrow(
       "shortlist requires a CSV file with a header and at least one lead row"

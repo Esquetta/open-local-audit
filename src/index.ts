@@ -79,7 +79,8 @@ export type {
   ShortlistLead,
   ShortlistOptions,
   ShortlistResult,
-  ShortlistReviewRow
+  ShortlistReviewRow,
+  ShortlistSort
 } from "./shortlist.js";
 export type {
   AuditOptions,
