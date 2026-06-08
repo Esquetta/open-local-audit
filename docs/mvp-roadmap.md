@@ -434,6 +434,22 @@ Exit criteria:
 - CLI tests cover score sorting and invalid sort errors.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filter, and top-N behavior remain compatible.
 
+## Milestone 25: Shortlist automation summary
+
+Target release:
+- `v0.29.0`.
+
+Deliverables:
+- `--summary-json <path>` for separate local shortlist automation summary output.
+- Summary JSON with shortlist counts and selected lead identifiers.
+- Public package renderer for summary JSON.
+- Clear docs that summary output affects local files only.
+
+Exit criteria:
+- Module tests cover summary JSON rendering.
+- CLI tests cover writing a separate summary JSON alongside the main shortlist report.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filter, sort modes, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

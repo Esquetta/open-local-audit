@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.29.0 - 2026-06-08
+
+- Added `shortlist --summary-json <path>` for separate local automation summary output.
+- Added `renderShortlistSummaryJson` for package consumers.
+- Kept summary output local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.28.0 - 2026-06-07
 
 - Added `shortlist --sort <sort>` for local shortlist ranking control.
