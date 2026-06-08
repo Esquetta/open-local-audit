@@ -40,6 +40,7 @@ import {
   renderShortlistCsv,
   renderShortlistJson,
   renderShortlistMarkdown,
+  renderShortlistSummaryJson,
   type ShortlistFormat,
   type ShortlistSort
 } from "./shortlist.js";
@@ -362,6 +363,7 @@ const shortlistProgram = program
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
   .option("--review-status <status>", "include only leads matching an active review status")
   .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
+  .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
     const options = shortlistProgram.optsWithGlobals() as {
@@ -376,6 +378,7 @@ const shortlistProgram = program
       contactConfidence?: string;
       reviewStatus?: string;
       sort: string;
+      summaryJson?: string;
       format: string;
     };
     try {
@@ -416,10 +419,17 @@ const shortlistProgram = program
             ? renderShortlistCsv(result)
             : renderShortlistMarkdown(result);
       await writeFile(options.out, output, "utf8");
+      if (options.summaryJson) {
+        await mkdir(dirname(options.summaryJson), { recursive: true });
+        await writeFile(options.summaryJson, renderShortlistSummaryJson(result), "utf8");
+      }
       process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
       process.stdout.write(`Suppressed: ${result.suppressedRows}\n`);
       process.stdout.write(`Filtered: ${result.filteredRows}\n`);
       process.stdout.write(`Output: ${options.out}\n`);
+      if (options.summaryJson) {
+        process.stdout.write(`Summary: ${options.summaryJson}\n`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);

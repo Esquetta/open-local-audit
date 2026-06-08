@@ -35,7 +35,8 @@ export {
   readShortlistReviewCsv,
   renderShortlistCsv,
   renderShortlistJson,
-  renderShortlistMarkdown
+  renderShortlistMarkdown,
+  renderShortlistSummaryJson
 } from "./shortlist.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {

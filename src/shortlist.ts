@@ -365,6 +365,27 @@ export function renderShortlistJson(result: ShortlistResult): string {
   return `${JSON.stringify(result, null, 2)}\n`;
 }
 
+export function renderShortlistSummaryJson(result: ShortlistResult): string {
+  return `${JSON.stringify(
+    {
+      totalRows: result.totalRows,
+      suppressedRows: result.suppressedRows,
+      filteredRows: result.filteredRows,
+      selected: result.selected,
+      leads: result.leads.map((lead) => ({
+        rank: lead.rank,
+        companyName: lead.companyName,
+        website: lead.website,
+        opportunityScore: lead.opportunityScore,
+        score: lead.score,
+        reviewStatus: lead.reviewStatus
+      }))
+    },
+    null,
+    2
+  )}\n`;
+}
+
 export function renderShortlistCsv(result: ShortlistResult): string {
   const headers = [
     "rank",

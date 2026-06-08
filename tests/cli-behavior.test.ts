@@ -984,6 +984,56 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("writes a separate lead shortlist summary JSON", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-summary-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.md");
+      const summaryPath = join(tmp, "summary.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,reviewStatus",
+          "Lead A,https://a.test,high,80,90,Missing CTA,High,pending"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--summary-json",
+          summaryPath
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`Summary: ${summaryPath}`);
+      expect(JSON.parse(readFileSync(summaryPath, "utf8"))).toMatchObject({
+        totalRows: 1,
+        suppressedRows: 0,
+        filteredRows: 0,
+        selected: 1,
+        leads: [{ companyName: "Lead A", reviewStatus: "pending" }]
+      });
+      expect(readFileSync(outPath, "utf8")).toContain("# Lead Shortlist");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("rejects invalid shortlist sort modes", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-sort-invalid-"));
     try {

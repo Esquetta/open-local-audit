@@ -4,7 +4,8 @@ import {
   readShortlistReviewCsv,
   renderShortlistCsv,
   renderShortlistJson,
-  renderShortlistMarkdown
+  renderShortlistMarkdown,
+  renderShortlistSummaryJson
 } from "../src/shortlist.js";
 
 describe("lead shortlist", () => {
@@ -64,6 +65,32 @@ describe("lead shortlist", () => {
       filteredRows: 0,
       selected: 1,
       leads: [{ companyName: "Lead A" }]
+    });
+  });
+
+  it("renders an automation summary JSON", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,contactConfidence,reviewStatus",
+        "Lead A,https://a.test,high,80,90,High,pending"
+      ].join("\n")
+    );
+
+    expect(JSON.parse(renderShortlistSummaryJson(result))).toEqual({
+      totalRows: 1,
+      suppressedRows: 0,
+      filteredRows: 0,
+      selected: 1,
+      leads: [
+        {
+          rank: 1,
+          companyName: "Lead A",
+          website: "https://a.test",
+          opportunityScore: 90,
+          score: 80,
+          reviewStatus: "pending"
+        }
+      ]
     });
   });
 
