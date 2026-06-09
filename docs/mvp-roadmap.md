@@ -450,6 +450,22 @@ Exit criteria:
 - CLI tests cover writing a separate summary JSON alongside the main shortlist report.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filter, sort modes, and top-N behavior remain compatible.
 
+## Milestone 26: Shortlist review-status exclusion
+
+Target release:
+- `v0.30.0`.
+
+Deliverables:
+- `--exclude-review-status <status>` for local shortlist output.
+- Case-insensitive exact exclusion against active review status values.
+- Exclusion after review suppression and before sorting and top-N selection.
+- Clear docs that review-status exclusion affects local report output only.
+
+Exit criteria:
+- Module tests cover review-status exclusion after suppression.
+- CLI tests cover suppressed and filtered counts with JSON output.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filter, sort modes, summary JSON, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

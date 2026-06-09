@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.30.0 - 2026-06-09
+
+- Added `shortlist --exclude-review-status <status>` for local active-review-status exclusion.
+- Applied review-status exclusion after review suppression and before sorting and top-N selection.
+- Kept exclusion filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.29.0 - 2026-06-08
 
 - Added `shortlist --summary-json <path>` for separate local automation summary output.

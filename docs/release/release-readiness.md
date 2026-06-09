@@ -316,9 +316,30 @@ npm pack
 npx --yes --package ./open-local-audit-0.29.0.tgz open-local-audit shortlist --help
 ```
 
+## Shortlist review-status exclusion readiness
+
+Before releasing shortlist review-status exclusion:
+
+- [x] `shortlist --exclude-review-status <status>` filters active local shortlist rows out.
+- [x] Review-status exclusion is case-insensitive and exact.
+- [x] Exclusion runs after review suppression and before sorting and top-N selection.
+- [x] CLI and module tests cover suppressed rows, filtered rows, and JSON output.
+- [x] Docs state that review-status exclusion affects local output only.
+
+Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js shortlist --help
+npm pack
+npx --yes --package ./open-local-audit-0.30.0.tgz open-local-audit shortlist --help
+```
+
 ## Current release recommendation
 
-Use `v0.29.0` after:
+Use `v0.30.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -347,6 +368,7 @@ Use `v0.29.0` after:
 - local shortlist review-status filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - local shortlist sort modes are verified for supported modes, invalid sort errors, and top-N ordering,
 - local shortlist automation summaries are verified for separate JSON output and local-only behavior,
+- local shortlist review-status exclusion is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
