@@ -11,6 +11,7 @@ export interface ShortlistOptions {
   priority?: string;
   contactConfidence?: string;
   reviewStatus?: string;
+  excludeReviewStatus?: string;
   sort?: ShortlistSort;
   reviewRows?: ShortlistReviewRow[];
 }
@@ -224,6 +225,10 @@ function matchesFilter(value: string, filter: string | undefined): boolean {
   return filter === undefined || normalizeText(value) === normalizeText(filter);
 }
 
+function excludesFilter(value: string, filter: string | undefined): boolean {
+  return filter === undefined || normalizeText(value) !== normalizeText(filter);
+}
+
 function reviewIdentity(row: ShortlistReviewRow): { leadKey: string; website: string; label: string } {
   return {
     leadKey: normalizeText(row.leadKey ?? ""),
@@ -341,7 +346,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.profile, options.profile) &&
       matchesFilter(lead.priority, options.priority) &&
       matchesFilter(lead.contactConfidence, options.contactConfidence) &&
-      matchesFilter(lead.reviewStatus, options.reviewStatus)
+      matchesFilter(lead.reviewStatus, options.reviewStatus) &&
+      excludesFilter(lead.reviewStatus, options.excludeReviewStatus)
   );
   const filteredRows = unsuppressedLeads.length - eligibleLeads.length;
   const leads = eligibleLeads

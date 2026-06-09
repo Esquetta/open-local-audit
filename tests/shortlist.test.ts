@@ -218,6 +218,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Pending Lead"]);
   });
 
+  it("excludes leads by active review status after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,reviewStatus,leadKey",
+        "Pending Lead,https://pending.test,high,80,92,Missing CTA,High,pending,",
+        "Deferred Lead,https://deferred.test,high,80,90,Missing CTA,High,Deferred,",
+        "Contacted Lead,https://contacted.test,high,80,95,Missing CTA,High,pending,url:https://contacted.test"
+      ].join("\n"),
+      {
+        excludeReviewStatus: "deferred",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nurl:https://contacted.test,contacted,Already contacted,2026-06-05\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Pending Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",

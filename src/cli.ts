@@ -362,6 +362,7 @@ const shortlistProgram = program
   .option("--priority <priority>", "include only leads matching a priority")
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
   .option("--review-status <status>", "include only leads matching an active review status")
+  .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
@@ -377,6 +378,7 @@ const shortlistProgram = program
       priority?: string;
       contactConfidence?: string;
       reviewStatus?: string;
+      excludeReviewStatus?: string;
       sort: string;
       summaryJson?: string;
       format: string;
@@ -408,6 +410,7 @@ const shortlistProgram = program
         priority: options.priority,
         contactConfidence: options.contactConfidence,
         reviewStatus: options.reviewStatus,
+        excludeReviewStatus: options.excludeReviewStatus,
         sort,
         reviewRows
       });

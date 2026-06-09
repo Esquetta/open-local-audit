@@ -1034,6 +1034,67 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("excludes a lead shortlist by review status", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-exclude-review-status-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const reviewPath = join(tmp, "review.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,reviewStatus,leadKey",
+          "Pending Lead,https://pending.test,high,80,92,Missing CTA,High,pending,",
+          "Deferred Lead,https://deferred.test,high,80,90,Missing CTA,High,Deferred,",
+          "Contacted Lead,https://contacted.test,high,80,95,Missing CTA,High,pending,url:https://contacted.test"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        reviewPath,
+        "leadKey,reviewStatus,reviewReason,lastReviewedAt\nurl:https://contacted.test,contacted,Already contacted,2026-06-05\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--review-csv",
+          reviewPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--exclude-review-status",
+          "deferred"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 3 leads");
+      expect(result.stdout).toContain("Suppressed: 1");
+      expect(result.stdout).toContain("Filtered: 1");
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        suppressedRows: 1,
+        filteredRows: 1,
+        selected: 1,
+        leads: [{ companyName: "Pending Lead", reviewStatus: "pending" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("rejects invalid shortlist sort modes", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-sort-invalid-"));
     try {
