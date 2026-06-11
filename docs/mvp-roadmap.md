@@ -466,6 +466,21 @@ Exit criteria:
 - CLI tests cover suppressed and filtered counts with JSON output.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filter, sort modes, summary JSON, and top-N behavior remain compatible.
 
+## Milestone 27: Shortlist website-required filter
+
+Target release:
+- `v0.31.0`.
+
+Deliverables:
+- `--require-website` for local shortlist output.
+- Filtering of rows with empty website values after review suppression and before sorting and top-N selection.
+- Clear docs that website-required filtering affects local report output only.
+
+Exit criteria:
+- Module tests cover website-required filtering.
+- CLI tests cover filtered counts with JSON output.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, sort modes, summary JSON, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.
