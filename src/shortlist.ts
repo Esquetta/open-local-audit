@@ -12,6 +12,7 @@ export interface ShortlistOptions {
   contactConfidence?: string;
   reviewStatus?: string;
   excludeReviewStatus?: string;
+  requireWebsite?: boolean;
   sort?: ShortlistSort;
   reviewRows?: ShortlistReviewRow[];
 }
@@ -347,7 +348,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.priority, options.priority) &&
       matchesFilter(lead.contactConfidence, options.contactConfidence) &&
       matchesFilter(lead.reviewStatus, options.reviewStatus) &&
-      excludesFilter(lead.reviewStatus, options.excludeReviewStatus)
+      excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
+      (!options.requireWebsite || lead.website !== "")
   );
   const filteredRows = unsuppressedLeads.length - eligibleLeads.length;
   const leads = eligibleLeads

@@ -239,6 +239,21 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Pending Lead"]);
   });
 
+  it("requires leads to have a website after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+        "Website Lead,https://website.test,high,80,92,Missing CTA,High",
+        "No Website Lead,,high,80,90,Missing CTA,High"
+      ].join("\n"),
+      { requireWebsite: true }
+    );
+
+    expect(result.suppressedRows).toBe(0);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Website Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
