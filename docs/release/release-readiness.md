@@ -357,9 +357,29 @@ npm pack
 npx --yes --package ./open-local-audit-0.31.0.tgz open-local-audit shortlist --help
 ```
 
+## Shortlist contact-required filter readiness
+
+Before releasing shortlist contact-required filtering:
+
+- [x] `shortlist --require-contact` filters out local shortlist rows with no contact confidence.
+- [x] Filtering runs after review suppression and before sorting and top-N selection.
+- [x] CLI and module tests cover filtered rows and JSON output.
+- [x] Docs state that contact-required filtering affects local output only.
+
+Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js shortlist --help
+npm pack
+npx --yes --package ./open-local-audit-0.32.0.tgz open-local-audit shortlist --help
+```
+
 ## Current release recommendation
 
-Use `v0.31.0` after:
+Use `v0.32.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -390,6 +410,7 @@ Use `v0.31.0` after:
 - local shortlist automation summaries are verified for separate JSON output and local-only behavior,
 - local shortlist review-status exclusion is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - local shortlist website-required filtering is verified for filtered-count reporting and local-only output,
+- local shortlist contact-required filtering is verified for filtered-count reporting and local-only output,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.32.0 - 2026-06-12
+
+- Added `shortlist --require-contact` for local contact-ready shortlist filtering.
+- Applied contact-required filtering after review suppression and before sorting and top-N selection.
+- Kept contact-required filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.31.0 - 2026-06-11
 
 - Added `shortlist --require-website` for local website-present shortlist filtering.

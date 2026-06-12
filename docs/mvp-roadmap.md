@@ -481,6 +481,21 @@ Exit criteria:
 - CLI tests cover filtered counts with JSON output.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, sort modes, summary JSON, and top-N behavior remain compatible.
 
+## Milestone 28: Shortlist contact-required filter
+
+Target release:
+- `v0.32.0`.
+
+Deliverables:
+- `--require-contact` for local shortlist output.
+- Filtering of rows with `contactConfidence` set to `None` after review suppression and before sorting and top-N selection.
+- Clear docs that contact-required filtering affects local report output only.
+
+Exit criteria:
+- Module tests cover contact-required filtering.
+- CLI tests cover filtered counts with JSON output.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, website-required filter, sort modes, summary JSON, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.
