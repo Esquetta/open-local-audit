@@ -364,6 +364,7 @@ const shortlistProgram = program
   .option("--review-status <status>", "include only leads matching an active review status")
   .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--require-website", "include only leads with a website")
+  .option("--require-contact", "include only leads with contact confidence")
   .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
@@ -381,6 +382,7 @@ const shortlistProgram = program
       reviewStatus?: string;
       excludeReviewStatus?: string;
       requireWebsite?: boolean;
+      requireContact?: boolean;
       sort: string;
       summaryJson?: string;
       format: string;
@@ -414,6 +416,7 @@ const shortlistProgram = program
         reviewStatus: options.reviewStatus,
         excludeReviewStatus: options.excludeReviewStatus,
         requireWebsite: options.requireWebsite,
+        requireContact: options.requireContact,
         sort,
         reviewRows
       });

@@ -254,6 +254,22 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Website Lead"]);
   });
 
+  it("requires leads to have contact confidence after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+        "Contact Lead,https://contact.test,high,80,92,Missing CTA,Medium",
+        "No Contact Lead,https://none.test,high,80,90,Missing CTA,None",
+        "Blank Contact Lead,https://blank.test,high,80,88,Missing CTA,"
+      ].join("\n"),
+      { requireContact: true }
+    );
+
+    expect(result.suppressedRows).toBe(0);
+    expect(result.filteredRows).toBe(2);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Contact Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",

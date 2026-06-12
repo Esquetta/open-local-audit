@@ -1144,6 +1144,56 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("filters a lead shortlist to rows with contact confidence", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-require-contact-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+          "Contact Lead,https://contact.test,high,80,92,Missing CTA,Medium",
+          "No Contact Lead,https://none.test,high,80,90,Missing CTA,None",
+          "Blank Contact Lead,https://blank.test,high,80,88,Missing CTA,"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--require-contact"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 3 leads");
+      expect(result.stdout).toContain("Filtered: 2");
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        filteredRows: 2,
+        selected: 1,
+        leads: [{ companyName: "Contact Lead", contactConfidence: "Medium" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("rejects invalid shortlist sort modes", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-sort-invalid-"));
     try {
