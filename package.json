@@ -1,6 +1,6 @@
 {
   "name": "open-local-audit",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "description": "Open-source website and local presence auditor for small businesses.",
   "license": "MIT",
   "type": "module",
@@ -55,7 +55,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/pdfkit": "^0.17.6",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.7.2",
     "vitest": "^4.1.5"
   }
