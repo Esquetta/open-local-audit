@@ -270,6 +270,21 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Contact Lead"]);
   });
 
+  it("requires leads to have a report path after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,reportPath",
+        "Report Lead,https://report.test,high,80,92,Missing CTA,High,report/open-local-audit-report.html",
+        "No Report Lead,https://missing.test,high,80,90,Missing CTA,High,"
+      ].join("\n"),
+      { requireReport: true }
+    );
+
+    expect(result.suppressedRows).toBe(0);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Report Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
