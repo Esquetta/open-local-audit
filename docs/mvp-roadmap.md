@@ -511,6 +511,21 @@ Exit criteria:
 - CLI tests cover filtered counts with JSON output.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, website-required filter, contact-required filter, sort modes, summary JSON, and top-N behavior remain compatible.
 
+## Milestone 30: Shortlist preferred contact channel filter
+
+Target release:
+- `v0.34.0`.
+
+Deliverables:
+- `--preferred-contact-channel <channel>` for local shortlist output.
+- Case-insensitive exact filtering of `preferredContactChannel` values after review suppression and before sorting and top-N selection.
+- Clear docs that preferred-contact-channel filtering affects local report output only.
+
+Exit criteria:
+- Module tests cover preferred-contact-channel filtering after suppression.
+- CLI tests cover filtered counts with JSON output.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, website-required filter, contact-required filter, report-required filter, sort modes, summary JSON, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

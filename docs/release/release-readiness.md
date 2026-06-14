@@ -397,9 +397,29 @@ npm pack
 npx --yes --package ./open-local-audit-0.33.0.tgz open-local-audit shortlist --help
 ```
 
+## Shortlist preferred contact channel readiness
+
+Before releasing shortlist preferred-contact-channel filtering:
+
+- [x] `shortlist --preferred-contact-channel <channel>` filters active local shortlist rows by preferred outreach channel.
+- [x] Filtering runs after review suppression and before sorting and top-N selection.
+- [x] CLI and module tests cover filtered rows and JSON output.
+- [x] Docs state that preferred-contact-channel filtering affects local output only.
+
+Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js shortlist --help
+npm pack
+npx --yes --package ./open-local-audit-0.34.0.tgz open-local-audit shortlist --help
+```
+
 ## Current release recommendation
 
-Use `v0.33.0` after:
+Use `v0.34.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -432,6 +452,7 @@ Use `v0.33.0` after:
 - local shortlist website-required filtering is verified for filtered-count reporting and local-only output,
 - local shortlist contact-required filtering is verified for filtered-count reporting and local-only output,
 - local shortlist report-required filtering is verified for filtered-count reporting and local-only output,
+- local shortlist preferred-contact-channel filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
