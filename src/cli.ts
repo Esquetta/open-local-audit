@@ -361,6 +361,7 @@ const shortlistProgram = program
   .option("--profile <profile>", "include only leads matching a profile")
   .option("--priority <priority>", "include only leads matching a priority")
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
+  .option("--preferred-contact-channel <channel>", "include only leads matching a preferred contact channel")
   .option("--review-status <status>", "include only leads matching an active review status")
   .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--require-website", "include only leads with a website")
@@ -380,6 +381,7 @@ const shortlistProgram = program
       profile?: string;
       priority?: string;
       contactConfidence?: string;
+      preferredContactChannel?: string;
       reviewStatus?: string;
       excludeReviewStatus?: string;
       requireWebsite?: boolean;
@@ -415,6 +417,7 @@ const shortlistProgram = program
         profile: options.profile,
         priority: options.priority,
         contactConfidence: options.contactConfidence,
+        preferredContactChannel: options.preferredContactChannel,
         reviewStatus: options.reviewStatus,
         excludeReviewStatus: options.excludeReviewStatus,
         requireWebsite: options.requireWebsite,

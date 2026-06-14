@@ -285,6 +285,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Report Lead"]);
   });
 
+  it("filters leads by preferred contact channel after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,leadKey",
+        "Email Lead,https://email.test,high,80,92,Missing CTA,High,email,email-lead",
+        "Phone Lead,https://phone.test,high,80,90,Missing CTA,High,phone,phone-lead",
+        "Suppressed Email Lead,https://suppressed.test,high,80,95,Missing CTA,High,email,suppressed-lead"
+      ].join("\n"),
+      {
+        preferredContactChannel: "email",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-14\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Email Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",

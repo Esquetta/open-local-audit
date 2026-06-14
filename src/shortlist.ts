@@ -10,6 +10,7 @@ export interface ShortlistOptions {
   profile?: string;
   priority?: string;
   contactConfidence?: string;
+  preferredContactChannel?: string;
   reviewStatus?: string;
   excludeReviewStatus?: string;
   requireWebsite?: boolean;
@@ -349,6 +350,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.profile, options.profile) &&
       matchesFilter(lead.priority, options.priority) &&
       matchesFilter(lead.contactConfidence, options.contactConfidence) &&
+      matchesFilter(lead.preferredContactChannel, options.preferredContactChannel) &&
       matchesFilter(lead.reviewStatus, options.reviewStatus) &&
       excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
       (!options.requireWebsite || lead.website !== "") &&

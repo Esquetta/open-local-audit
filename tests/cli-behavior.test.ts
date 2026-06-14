@@ -1243,6 +1243,56 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("filters a lead shortlist by preferred contact channel", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-preferred-channel-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel",
+          "Email Lead,https://email.test,high,80,92,Missing CTA,High,email",
+          "Phone Lead,https://phone.test,high,80,90,Missing CTA,High,phone"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--preferred-contact-channel",
+          "email"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
+      expect(result.stdout).toContain("Filtered: 1");
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        filteredRows: 1,
+        selected: 1,
+        leads: [{ companyName: "Email Lead", preferredContactChannel: "email" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("rejects invalid shortlist sort modes", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-sort-invalid-"));
     try {
