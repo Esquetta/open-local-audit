@@ -526,6 +526,21 @@ Exit criteria:
 - CLI tests cover filtered counts with JSON output.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, website-required filter, contact-required filter, report-required filter, sort modes, summary JSON, and top-N behavior remain compatible.
 
+## Milestone 31: Shortlist missing-report filter
+
+Target release:
+- `v0.35.0`.
+
+Deliverables:
+- `--missing-report` for local shortlist output.
+- Filtering of rows with empty `reportPath` values after review suppression and before sorting and top-N selection.
+- Clear docs that missing-report filtering affects local report output only.
+
+Exit criteria:
+- Module tests cover missing-report filtering after suppression.
+- CLI tests cover filtered counts with JSON output.
+- Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, website-required filter, contact-required filter, report-required filter, preferred-contact-channel filter, sort modes, summary JSON, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.35.0 - 2026-06-15
+
+- Added `shortlist --missing-report` for local report-backlog shortlist filtering.
+- Applied missing-report filtering after review suppression and before sorting and top-N selection.
+- Kept missing-report filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.34.0 - 2026-06-14
 
 - Added `shortlist --preferred-contact-channel <channel>` for local outreach-channel shortlist filtering.
