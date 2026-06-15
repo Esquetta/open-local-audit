@@ -285,6 +285,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Report Lead"]);
   });
 
+  it("filters leads missing a report path after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,reportPath,leadKey",
+        "Report Lead,https://report.test,high,80,92,Missing CTA,High,report/open-local-audit-report.html,report-lead",
+        "Missing Report Lead,https://missing.test,high,80,90,Missing CTA,High,,missing-report-lead",
+        "Suppressed Missing Report Lead,https://suppressed.test,high,80,95,Missing CTA,High,,suppressed-lead"
+      ].join("\n"),
+      {
+        missingReport: true,
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-15\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Missing Report Lead"]);
+  });
+
   it("filters leads by preferred contact channel after suppression", () => {
     const result = buildLeadShortlist(
       [

@@ -367,6 +367,7 @@ const shortlistProgram = program
   .option("--require-website", "include only leads with a website")
   .option("--require-contact", "include only leads with contact confidence")
   .option("--require-report", "include only leads with a report path")
+  .option("--missing-report", "include only leads without a report path")
   .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
@@ -387,6 +388,7 @@ const shortlistProgram = program
       requireWebsite?: boolean;
       requireContact?: boolean;
       requireReport?: boolean;
+      missingReport?: boolean;
       sort: string;
       summaryJson?: string;
       format: string;
@@ -423,6 +425,7 @@ const shortlistProgram = program
         requireWebsite: options.requireWebsite,
         requireContact: options.requireContact,
         requireReport: options.requireReport,
+        missingReport: options.missingReport,
         sort,
         reviewRows
       });
