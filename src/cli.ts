@@ -366,6 +366,7 @@ const shortlistProgram = program
   .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--require-website", "include only leads with a website")
   .option("--require-contact", "include only leads with contact confidence")
+  .option("--missing-contact", "include only leads without contact confidence")
   .option("--require-report", "include only leads with a report path")
   .option("--missing-report", "include only leads without a report path")
   .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
@@ -387,6 +388,7 @@ const shortlistProgram = program
       excludeReviewStatus?: string;
       requireWebsite?: boolean;
       requireContact?: boolean;
+      missingContact?: boolean;
       requireReport?: boolean;
       missingReport?: boolean;
       sort: string;
@@ -424,6 +426,7 @@ const shortlistProgram = program
         excludeReviewStatus: options.excludeReviewStatus,
         requireWebsite: options.requireWebsite,
         requireContact: options.requireContact,
+        missingContact: options.missingContact,
         requireReport: options.requireReport,
         missingReport: options.missingReport,
         sort,

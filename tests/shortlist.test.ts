@@ -270,6 +270,28 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Contact Lead"]);
   });
 
+  it("filters leads missing contact confidence after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,leadKey",
+        "Contact Lead,https://contact.test,high,80,92,Missing CTA,Medium,contact-lead",
+        "No Contact Lead,https://none.test,high,80,90,Missing CTA,None,no-contact-lead",
+        "Blank Contact Lead,https://blank.test,high,80,88,Missing CTA,,blank-contact-lead",
+        "Suppressed No Contact Lead,https://suppressed.test,high,80,95,Missing CTA,None,suppressed-lead"
+      ].join("\n"),
+      {
+        missingContact: true,
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-16\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["No Contact Lead", "Blank Contact Lead"]);
+  });
+
   it("requires leads to have a report path after suppression", () => {
     const result = buildLeadShortlist(
       [

@@ -15,6 +15,7 @@ export interface ShortlistOptions {
   excludeReviewStatus?: string;
   requireWebsite?: boolean;
   requireContact?: boolean;
+  missingContact?: boolean;
   requireReport?: boolean;
   missingReport?: boolean;
   sort?: ShortlistSort;
@@ -356,6 +357,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
       (!options.requireWebsite || lead.website !== "") &&
       (!options.requireContact || normalizeText(lead.contactConfidence) !== "none") &&
+      (!options.missingContact || normalizeText(lead.contactConfidence) === "none") &&
       (!options.requireReport || lead.reportPath !== "") &&
       (!options.missingReport || lead.reportPath === "")
   );
