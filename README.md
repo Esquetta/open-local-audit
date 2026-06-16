@@ -249,6 +249,7 @@ open-local-audit shortlist --input leads.csv --preferred-contact-channel email -
 open-local-audit shortlist --input leads.csv --exclude-review-status deferred --out shortlist.json --format json
 open-local-audit shortlist --input leads.csv --require-website --out shortlist.json --format json
 open-local-audit shortlist --input leads.csv --require-contact --out shortlist.json --format json
+open-local-audit shortlist --input leads.csv --missing-contact --out shortlist.json --format json
 open-local-audit shortlist --input leads.csv --require-report --out shortlist.json --format json
 open-local-audit shortlist --input leads.csv --missing-report --out shortlist.json --format json
 open-local-audit shortlist --input leads.csv --review-csv review.csv --review-status pending --out shortlist.json --format json
@@ -257,7 +258,7 @@ open-local-audit shortlist --input crm-leads.csv --out shortlist.csv --format cs
 open-local-audit shortlist --input leads.csv --review-csv review.csv --out shortlist.md
 ```
 
-`shortlist` ranks local CSV rows by `opportunityScore`, `priority`, `contactConfidence`, `score`, and company name. Use `--sort opportunity-desc|score-desc|company-asc|last-reviewed-asc` to change the ranking mode before top-N selection. Use `--summary-json` to write a separate automation summary with counts and selected lead identifiers. Use `--require-website` to keep only rows with a website, `--require-contact` to keep only rows with contact confidence above `None`, `--require-report` to keep only rows with a report path, and `--missing-report` to keep only rows without a report path. Use `--min-opportunity-score` to keep only stronger local opportunities. Use `--segment`, `--profile`, `--priority`, `--contact-confidence`, and `--preferred-contact-channel` for case-insensitive exact focus filters; supplied filters are combined with `AND` semantics. Use `--review-status` to keep only active leads with a matching review status after completed or suppressed review rows have been removed, or `--exclude-review-status` to remove a matching active review status from the local report. Filtering runs after review-state suppression and before top-N ranking. With `--review-csv`, the command matches review rows by `leadKey`, normalized website, or company label; skips rows marked `rejected`, `contacted`, `not-fit`, `not_a_fit`, `do-not-contact`, or `suppressed`; and carries active `reviewStatus`, `reviewReason`, and `lastReviewedAt` values into Markdown, JSON, and CSV reports. Markdown output is the default; JSON is available for automation; CSV is available for spreadsheet review. The command only reads local CSV files and writes a local report. It does not mutate source files, call APIs, send outreach, or sync to a CRM.
+`shortlist` ranks local CSV rows by `opportunityScore`, `priority`, `contactConfidence`, `score`, and company name. Use `--sort opportunity-desc|score-desc|company-asc|last-reviewed-asc` to change the ranking mode before top-N selection. Use `--summary-json` to write a separate automation summary with counts and selected lead identifiers. Use `--require-website` to keep only rows with a website, `--require-contact` to keep only rows with contact confidence above `None`, `--missing-contact` to keep only rows with contact confidence set to `None`, `--require-report` to keep only rows with a report path, and `--missing-report` to keep only rows without a report path. Use `--min-opportunity-score` to keep only stronger local opportunities. Use `--segment`, `--profile`, `--priority`, `--contact-confidence`, and `--preferred-contact-channel` for case-insensitive exact focus filters; supplied filters are combined with `AND` semantics. Use `--review-status` to keep only active leads with a matching review status after completed or suppressed review rows have been removed, or `--exclude-review-status` to remove a matching active review status from the local report. Filtering runs after review-state suppression and before top-N ranking. With `--review-csv`, the command matches review rows by `leadKey`, normalized website, or company label; skips rows marked `rejected`, `contacted`, `not-fit`, `not_a_fit`, `do-not-contact`, or `suppressed`; and carries active `reviewStatus`, `reviewReason`, and `lastReviewedAt` values into Markdown, JSON, and CSV reports. Markdown output is the default; JSON is available for automation; CSV is available for spreadsheet review. The command only reads local CSV files and writes a local report. It does not mutate source files, call APIs, send outreach, or sync to a CRM.
 
 Package an existing single-site report folder for local customer sharing:
 
@@ -305,6 +306,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Local shortlist automation summaries with `--summary-json`.
 - Local shortlist website-present filtering with `--require-website`.
 - Local shortlist contact-ready filtering with `--require-contact`.
+- Local shortlist missing-contact filtering with `--missing-contact`.
 - Local shortlist report-ready filtering with `--require-report`.
 - Local shortlist missing-report filtering with `--missing-report`.
 - Local shortlist preferred-contact-channel filtering with `--preferred-contact-channel`.
@@ -358,6 +360,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `shortlist --summary-json` writes local automation metadata only; it does not update source or review CSV files.
 - `shortlist --require-website` filters local report output only; it does not update source or review CSV files.
 - `shortlist --require-contact` filters local report output only; it does not update source or review CSV files.
+- `shortlist --missing-contact` filters local report output only; it does not update source or review CSV files.
 - `shortlist --require-report` filters local report output only; it does not update source or review CSV files.
 - `shortlist --missing-report` filters local report output only; it does not update source or review CSV files.
 - `shortlist --preferred-contact-channel` filters local report output only; it does not update source or review CSV files.
