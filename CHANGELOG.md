@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.37.0 - 2026-06-17
+
+- Added `shortlist --missing-website` for local website-backlog shortlist filtering.
+- Applied missing-website filtering after review suppression and before sorting and top-N selection.
+- Kept missing-website filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.36.0 - 2026-06-16
 
 - Added `shortlist --missing-contact` for local contact-backlog shortlist filtering.
