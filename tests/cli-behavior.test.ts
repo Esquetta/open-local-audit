@@ -1144,6 +1144,55 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("filters a lead shortlist to rows missing websites", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-missing-website-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+          "Website Lead,https://website.test,high,80,92,Missing CTA,High",
+          "No Website Lead,,high,80,90,Missing CTA,High"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--missing-website"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 2 leads");
+      expect(result.stdout).toContain("Filtered: 1");
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        filteredRows: 1,
+        selected: 1,
+        leads: [{ companyName: "No Website Lead", website: "" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("filters a lead shortlist to rows with contact confidence", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-require-contact-"));
     try {

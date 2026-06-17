@@ -254,6 +254,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Website Lead"]);
   });
 
+  it("filters leads missing a website after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,leadKey",
+        "Website Lead,https://website.test,high,80,92,Missing CTA,High,website-lead",
+        "No Website Lead,,high,80,90,Missing CTA,High,no-website-lead",
+        "Suppressed No Website Lead,,high,80,95,Missing CTA,High,suppressed-lead"
+      ].join("\n"),
+      {
+        missingWebsite: true,
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-17\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["No Website Lead"]);
+  });
+
   it("requires leads to have contact confidence after suppression", () => {
     const result = buildLeadShortlist(
       [
