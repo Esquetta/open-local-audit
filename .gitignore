@@ -10,3 +10,4 @@ tmp/
 /reports/
 playwright-report/
 test-results/
+/.worktrees/
