@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.38.0 - 2026-06-19
+
+- Added `shortlist --unreviewed` for local first-review shortlist queues.
+- Applied unreviewed filtering after review suppression and before sorting and top-N selection.
+- Kept unreviewed filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.37.0 - 2026-06-17
 
 - Added `shortlist --missing-website` for local website-backlog shortlist filtering.

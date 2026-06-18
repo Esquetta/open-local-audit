@@ -477,9 +477,29 @@ npm pack
 npx --yes --package ./open-local-audit-0.37.0.tgz open-local-audit shortlist --help
 ```
 
+## Shortlist unreviewed filtering readiness
+
+Before releasing shortlist unreviewed filtering:
+
+- [x] `shortlist --unreviewed` filters local shortlist rows whose normalized `lastReviewedAt` value is empty.
+- [x] Filtering runs after review suppression and before sorting and top-N selection.
+- [x] CLI and module tests cover suppressed counts, filtered counts, and local-only JSON output.
+- [x] Docs state that unreviewed filtering affects local output only.
+
+Add project-specific commands once implementation starts.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js shortlist --help
+npm pack
+npx --yes --package ./open-local-audit-0.38.0.tgz open-local-audit shortlist --help
+```
+
 ## Current release recommendation
 
-Use `v0.37.0` after:
+Use `v0.38.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -516,6 +536,7 @@ Use `v0.37.0` after:
 - local shortlist missing-report filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - local shortlist missing-contact filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - local shortlist missing-website filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
+- local shortlist unreviewed filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,
