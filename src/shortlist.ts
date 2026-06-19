@@ -13,6 +13,7 @@ export interface ShortlistOptions {
   preferredContactChannel?: string;
   reviewStatus?: string;
   excludeReviewStatus?: string;
+  unreviewed?: boolean;
   requireWebsite?: boolean;
   missingWebsite?: boolean;
   requireContact?: boolean;
@@ -356,6 +357,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.preferredContactChannel, options.preferredContactChannel) &&
       matchesFilter(lead.reviewStatus, options.reviewStatus) &&
       excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
+      (!options.unreviewed || lead.lastReviewedAt === "") &&
       (!options.requireWebsite || lead.website !== "") &&
       (!options.missingWebsite || lead.website === "") &&
       (!options.requireContact || normalizeText(lead.contactConfidence) !== "none") &&

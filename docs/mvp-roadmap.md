@@ -571,6 +571,21 @@ Exit criteria:
 - CLI tests cover filtered counts with JSON output.
 - Existing Markdown, JSON, CSV, review suppression, opportunity filter, focus filter, review-status filters, website-required filter, contact-required filter, report-required filter, missing-report filter, missing-contact filter, preferred-contact-channel filter, sort modes, summary JSON, and top-N behavior remain compatible.
 
+## Milestone 34: Shortlist unreviewed filter
+
+Target release:
+- `v0.38.0`.
+
+Deliverables:
+- `--unreviewed` for local shortlist output.
+- Filtering of rows with empty `lastReviewedAt` values after review suppression and before sorting and top-N selection.
+- Clear docs that unreviewed filtering affects local report output only.
+
+Exit criteria:
+- Module tests cover unreviewed filtering after suppression and whitespace normalization.
+- CLI tests cover filtered counts with JSON output.
+- Existing filters, sort modes, summary JSON, report formats, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

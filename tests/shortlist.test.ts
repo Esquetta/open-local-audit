@@ -239,6 +239,28 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Pending Lead"]);
   });
 
+  it("filters leads without a review date after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt,leadKey",
+        "Reviewed Lead,https://reviewed.test,high,80,98,Missing CTA,High,2026-06-10,reviewed-lead",
+        "Unreviewed Lead,https://unreviewed.test,high,80,95,Missing CTA,High,,unreviewed-lead",
+        'Whitespace Review Lead,https://whitespace.test,high,80,92,Missing CTA,High,"   ",whitespace-lead',
+        "Suppressed Unreviewed Lead,https://suppressed.test,high,80,99,Missing CTA,High,,suppressed-lead"
+      ].join("\n"),
+      {
+        unreviewed: true,
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-11\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Unreviewed Lead", "Whitespace Review Lead"]);
+  });
+
   it("requires leads to have a website after suppression", () => {
     const result = buildLeadShortlist(
       [
