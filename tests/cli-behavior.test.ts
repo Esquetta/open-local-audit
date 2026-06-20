@@ -1242,6 +1242,102 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("filters a lead shortlist to rows reviewed before a UTC calendar date", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-reviewed-before-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      const outPath = join(tmp, "shortlist.json");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
+          "Older Lead,https://older.test,high,80,92,Missing CTA,High,2026-06-18",
+          "Zone-less Timestamp Lead,https://zoneless.test,high,79,91,Missing Schema,High,2026-06-18T23:59:59",
+          "Equal Lead,https://equal.test,high,78,91,Missing Meta,High,2026-06-19",
+          "Newer Lead,https://newer.test,high,76,90,Missing Copy,High,2026-06-20"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          outPath,
+          "--format",
+          "json",
+          "--reviewed-before",
+          "2026-06-19"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Shortlisted 1 of 4 leads");
+      expect(result.stdout).toContain("Filtered: 3");
+      expect(JSON.parse(readFileSync(outPath, "utf8"))).toMatchObject({
+        filteredRows: 3,
+        selected: 1,
+        leads: [{ companyName: "Older Lead", lastReviewedAt: "2026-06-18" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects invalid reviewed-before shortlist thresholds", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-reviewed-before-invalid-"));
+    try {
+      const inputPath = join(tmp, "leads.csv");
+      writeFileSync(
+        inputPath,
+        [
+          "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
+          "Lead A,https://a.test,high,80,92,Missing CTA,High,2026-06-18"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "shortlist",
+          "--input",
+          inputPath,
+          "--out",
+          join(tmp, "shortlist.json"),
+          "--format",
+          "json",
+          "--reviewed-before",
+          "2026-02-30"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe(
+        "open-local-audit: shortlist --reviewed-before must be a valid date in YYYY-MM-DD format\n"
+      );
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("filters a lead shortlist to rows with contact confidence", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-require-contact-"));
     try {

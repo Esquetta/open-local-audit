@@ -586,6 +586,21 @@ Exit criteria:
 - CLI tests cover filtered counts with JSON output.
 - Existing filters, sort modes, summary JSON, report formats, and top-N behavior remain compatible.
 
+## Milestone 35: Shortlist reviewed-before filter
+
+Target release:
+- `v0.39.0`.
+
+Deliverables:
+- `--reviewed-before <date>` for local shortlist output.
+- Strict `YYYY-MM-DD` threshold validation and filtering of valid review dates strictly before the threshold.
+- Clear docs that reviewed-before filtering affects local report output only.
+
+Exit criteria:
+- Module tests cover threshold validation, comparison boundaries, malformed and zone-less row dates, suppression, and filter interactions.
+- CLI tests cover JSON output and invalid threshold errors.
+- Existing filters, sort modes, summary JSON, report formats, and top-N behavior remain compatible.
+
 ## Deferred work
 
 - Web UI.

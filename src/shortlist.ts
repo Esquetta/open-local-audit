@@ -14,6 +14,7 @@ export interface ShortlistOptions {
   reviewStatus?: string;
   excludeReviewStatus?: string;
   unreviewed?: boolean;
+  reviewedBefore?: string;
   requireWebsite?: boolean;
   missingWebsite?: boolean;
   requireContact?: boolean;
@@ -81,6 +82,8 @@ const confidenceRank: Record<string, number> = {
 };
 
 const shortlistSortModes: ShortlistSort[] = ["opportunity-desc", "score-desc", "company-asc", "last-reviewed-asc"];
+const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+const explicitZoneTimestampPattern = /^(\d{4}-\d{2}-\d{2})T.+(?:[Zz]|[+-]\d{2}:\d{2})$/;
 
 const suppressedReviewStatuses = new Set([
   "rejected",
@@ -237,6 +240,58 @@ function excludesFilter(value: string, filter: string | undefined): boolean {
   return filter === undefined || normalizeText(value) !== normalizeText(filter);
 }
 
+function parseCalendarDate(value: string): number | undefined {
+  const trimmed = value.trim();
+  const match = dateOnlyPattern.exec(trimmed);
+  if (!match) {
+    return undefined;
+  }
+
+  const parsed = Date.parse(`${trimmed}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return new Date(parsed).toISOString().slice(0, 10) === trimmed ? parsed : undefined;
+}
+
+function parseReviewTimestamp(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const calendarDate = parseCalendarDate(trimmed);
+  if (calendarDate !== undefined) {
+    return calendarDate;
+  }
+
+  const timestampMatch = explicitZoneTimestampPattern.exec(trimmed);
+  if (!timestampMatch) {
+    return undefined;
+  }
+
+  if (parseCalendarDate(timestampMatch[1]) === undefined) {
+    return undefined;
+  }
+
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function reviewedBeforeThreshold(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = parseCalendarDate(value);
+  if (parsed === undefined) {
+    throw new Error("shortlist --reviewed-before must be a valid date in YYYY-MM-DD format");
+  }
+
+  return parsed;
+}
+
 function reviewIdentity(row: ShortlistReviewRow): { leadKey: string; website: string; label: string } {
   return {
     leadKey: normalizeText(row.leadKey ?? ""),
@@ -341,6 +396,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
   }
 
+  const reviewedBefore = reviewedBeforeThreshold(options.reviewedBefore);
+
   const reviewedLeads = rows
     .map(normalizeLead)
     .map((lead) => applyReviewState(lead, options.reviewRows ?? []));
@@ -358,6 +415,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.reviewStatus, options.reviewStatus) &&
       excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
       (!options.unreviewed || lead.lastReviewedAt === "") &&
+      (reviewedBefore === undefined ||
+        (parseReviewTimestamp(lead.lastReviewedAt) ?? Number.POSITIVE_INFINITY) < reviewedBefore) &&
       (!options.requireWebsite || lead.website !== "") &&
       (!options.missingWebsite || lead.website === "") &&
       (!options.requireContact || normalizeText(lead.contactConfidence) !== "none") &&

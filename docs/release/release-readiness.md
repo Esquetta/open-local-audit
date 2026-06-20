@@ -497,9 +497,29 @@ npm pack
 npx --yes --package ./open-local-audit-0.38.0.tgz open-local-audit shortlist --help
 ```
 
+## Shortlist reviewed-before filtering readiness
+
+Before releasing shortlist reviewed-before filtering:
+
+- [x] `shortlist --reviewed-before <date>` requires a valid `YYYY-MM-DD` calendar threshold.
+- [x] Valid date-only and explicit-zone ISO review timestamps strictly before the threshold are included.
+- [x] Equal, blank, invalid, and zone-less review timestamps are excluded without failing the run.
+- [x] Filtering runs after review suppression and before sorting and top-N selection.
+- [x] CLI and module tests cover boundary comparisons, filtered counts, invalid thresholds, and local-only JSON output.
+- [x] Docs state that reviewed-before filtering affects local output only.
+
+Current project-specific verification:
+
+```bash
+npm audit
+node dist/cli.js shortlist --help
+npm pack
+npx --yes --package ./open-local-audit-0.39.0.tgz open-local-audit shortlist --help
+```
+
 ## Current release recommendation
 
-Use `v0.38.0` after:
+Use `v0.39.0` after:
 
 - single URL, rendered URL, screenshot metadata, profile metadata, and CSV batch paths are covered by tests or smoke checks,
 - JSON, Markdown, HTML, and `--format all` outputs build from current code,
@@ -537,6 +557,7 @@ Use `v0.38.0` after:
 - local shortlist missing-contact filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - local shortlist missing-website filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
 - local shortlist unreviewed filtering is verified for suppressed-count reporting, filtered-count reporting, and local-only output,
+- local shortlist reviewed-before filtering is verified for strict threshold validation, boundary comparisons, filtered-count reporting, and local-only output,
 - visual evidence sections render in Markdown and HTML,
 - example reports are regenerated from the current build,
 - GitHub Actions passes on the pushed commit,

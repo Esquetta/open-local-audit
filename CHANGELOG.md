@@ -4,6 +4,12 @@ All notable changes to Open Local Audit will be documented here.
 
 ## Unreleased
 
+## v0.39.0 - 2026-06-20
+
+- Added `shortlist --reviewed-before <date>` for local re-review shortlist queues.
+- Added strict `YYYY-MM-DD` threshold validation and strictly-earlier review-date filtering.
+- Kept reviewed-before filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.38.0 - 2026-06-19
 
 - Added `shortlist --unreviewed` for local first-review shortlist queues.

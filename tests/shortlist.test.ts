@@ -261,6 +261,58 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Unreviewed Lead", "Whitespace Review Lead"]);
   });
 
+  it("filters leads reviewed before a strict UTC calendar threshold after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt,leadKey",
+        "Older Lead,https://older.test,high,90,96,Missing CTA,High,2026-06-18,older-lead",
+        "Older Timestamp Lead,https://older-timestamp.test,medium,85,94,Missing Title,Medium,2026-06-18T23:59:59Z,older-timestamp-lead",
+        "Zone-less Timestamp Lead,https://zoneless.test,medium,84,93,Missing Schema,Medium,2026-06-18T23:59:59,zoneless-timestamp-lead",
+        "Equal Lead,https://equal.test,high,88,93,Missing Meta,High,2026-06-19,equal-lead",
+        "Newer Lead,https://newer.test,high,87,92,Missing Headline,High,2026-06-20,newer-lead",
+        "Blank Review Lead,https://blank.test,high,86,91,Missing Copy,High,,blank-lead",
+        "Invalid Calendar Lead,https://invalid-calendar.test,high,95,97,Missing Hours,High,2026-02-30,invalid-calendar-lead",
+        "Suppressed Older Lead,https://suppressed.test,high,99,99,Missing Footer,High,2026-06-10,suppressed-lead"
+      ].join("\n"),
+      {
+        reviewedBefore: "2026-06-19",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-11\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(5);
+    expect(result.selected).toBe(2);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Older Lead", "Older Timestamp Lead"]);
+  });
+
+  it("rejects invalid reviewed-before thresholds", () => {
+    for (const reviewedBefore of ["2026/06/19", "2026-6-19", "2026-02-30", "not-a-date"]) {
+      expect(() =>
+        buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { reviewedBefore })
+      ).toThrow("shortlist --reviewed-before must be a valid date in YYYY-MM-DD format");
+    }
+  });
+
+  it("combines reviewed-before and unreviewed with AND semantics", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
+        "Older Lead,https://older.test,high,90,96,Missing CTA,High,2026-06-18",
+        "Equal Lead,https://equal.test,high,88,93,Missing Meta,High,2026-06-19"
+      ].join("\n"),
+      {
+        reviewedBefore: "2026-06-19",
+        unreviewed: true
+      }
+    );
+
+    expect(result.filteredRows).toBe(2);
+    expect(result.leads).toEqual([]);
+  });
+
   it("requires leads to have a website after suppression", () => {
     const result = buildLeadShortlist(
       [

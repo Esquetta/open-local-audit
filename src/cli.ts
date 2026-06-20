@@ -365,6 +365,7 @@ const shortlistProgram = program
   .option("--review-status <status>", "include only leads matching an active review status")
   .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--unreviewed", "include only leads without a review date")
+  .option("--reviewed-before <date>", "include only leads reviewed before a YYYY-MM-DD date")
   .option("--require-website", "include only leads with a website")
   .option("--missing-website", "include only leads without a website")
   .option("--require-contact", "include only leads with contact confidence")
@@ -389,6 +390,7 @@ const shortlistProgram = program
       reviewStatus?: string;
       excludeReviewStatus?: string;
       unreviewed?: boolean;
+      reviewedBefore?: string;
       requireWebsite?: boolean;
       missingWebsite?: boolean;
       requireContact?: boolean;
@@ -429,6 +431,7 @@ const shortlistProgram = program
         reviewStatus: options.reviewStatus,
         excludeReviewStatus: options.excludeReviewStatus,
         unreviewed: options.unreviewed,
+        reviewedBefore: options.reviewedBefore,
         requireWebsite: options.requireWebsite,
         missingWebsite: options.missingWebsite,
         requireContact: options.requireContact,
