@@ -29,18 +29,12 @@ Open Local Audit produces evidence-backed mini audits for local businesses. The 
 - Test runner: Vitest.
 - Package manager: npm unless implementation chooses pnpm before first commit.
 
-## Documents
+## Documentation
 
-- [Product brief](./docs/product-brief.md)
 - [Technical architecture](./docs/technical-architecture.md)
-- [MVP roadmap](./docs/mvp-roadmap.md)
 - [Security and ethics](./docs/security-and-ethics.md)
-- [Go-to-market plan](./docs/go-to-market.md)
-- [Audit checklist](./docs/research/audit-checklist.md)
-- [Release readiness](./docs/release/release-readiness.md)
-- [npm publishing plan](./docs/release/npm-publishing.md)
-- [Project operating standard](./docs/operations/project-standard.md)
-- [Decision log](./docs/operations/decision-log.md)
+- [Audit checklist](./docs/audit-checklist.md)
+- [Google Maps API key setup](./docs/google-maps-api-key.md)
 
 ## Local development
 
@@ -275,7 +269,7 @@ The `google-places` provider is opt-in and requires `GOOGLE_MAPS_API_KEY`. It us
 
 Discovery CSV exports include `leadKey`, `opportunityScore`, `opportunityReasons`, `pitchAngle`, `recommendedOffer`, `estimatedNeed`, `outreachPriorityReason`, website-derived public contact columns, manual outreach handoff columns, and review columns for local triage. Contact columns are populated only from audited public website HTML and include `publicEmail`, `publicPhone`, `whatsappUrl`, `contactPageUrl`, `socialProfiles`, `contactConfidence`, and `contactSource`. Handoff columns include `preferredContactChannel`, `outreachAction`, and `contactabilityReason`; they are advisory only and do not send outreach. Duplicate review JSON includes exact `duplicateGroups` and advisory `fuzzyDuplicateGroups` with confidence and matching reasons for local operator review. Fuzzy duplicate candidates do not auto-suppress leads, change review status, send outreach, or sync to a CRM. The CRM export preset writes `companyName`, `website`, `segment`, `profile`, `priority`, `score`, `opportunityScore`, `topFinding`, `contactConfidence`, `preferredContactChannel`, `contactabilityReason`, `publicEmail`, `publicPhone`, `contactPageUrl`, `source`, `leadKey`, and `reportPath`; it is a local import file only and does not call CRM APIs. A suppression list can reuse a prior discovery CSV or a smaller CSV with `leadKey`, `sourceId`, `websiteUrl`, or `label` plus optional `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns. Rows marked `rejected`, `contacted`, `not-fit`, `do-not-contact`, or `suppressed` are skipped before audits run. `--review-csv` preserves prior operator decisions and adds new leads as `pending`. Spreadsheet formula-like cell values are neutralized before export, so values such as phone numbers starting with `+` may be prefixed for spreadsheet safety.
 
-See [Google Maps API key setup](./docs/operations/google-maps-api-key.md) for local environment setup.
+See [Google Maps API key setup](./docs/google-maps-api-key.md) for local environment setup.
 
 Check same-origin links and fail CI when high-severity issues are found:
 
@@ -392,14 +386,6 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - Higher `--concurrency` values can increase network load against audited sites; use conservative values for prospect batches.
 - Rule checks are deterministic heuristics, so they can miss or over-flag site-specific markup.
 
-## GitHub and npm release intent
+## Releases
 
-The project should be prepared for:
-
-- Public GitHub repository.
-- Clear README and examples.
-- MIT license, unless maintainers choose a different license before the first public release.
-- GitHub Actions for lint, tests, build, and release checks.
-- npm package after the CLI has real tests and example reports.
-
-Release work should follow the checklist in `docs/release/release-readiness.md`.
+Open Local Audit is published under the MIT license on GitHub and npm. Release history is available in [CHANGELOG.md](./CHANGELOG.md) and GitHub Releases. Every release runs lint, tests, build, audit, and package-content checks through GitHub Actions.

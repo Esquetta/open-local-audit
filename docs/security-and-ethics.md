@@ -29,7 +29,7 @@ Open Local Audit must be useful without becoming a scraping or spam engine. The 
 
 ## Discovery provider boundary
 
-Discovery providers should support local operator triage, produce local prospect CSV output, and leave contact decisions outside the tool.
+Discovery providers support local operator triage, produce local prospect CSV output, and leave contact decisions outside the tool.
 
 The Google Places provider is explicit and opt-in. It uses official Google Places API endpoints only, reads credentials from `GOOGLE_MAPS_API_KEY`, requests only necessary fields, avoids reviews/photos/ratings, does not store raw place responses, and source-tags derived CSV output. Google Maps scraping remains disallowed.
 
@@ -50,14 +50,14 @@ Default behavior:
 - Neutralize formula-like CSV cells before export.
 - Keep discovery review and suppression state in operator-managed local CSV files.
 
-If future telemetry is added:
-- Make it opt-in.
-- Document exactly what is collected.
-- Provide a disable flag.
+Any telemetry must be:
+- opt-in,
+- documented with the exact collected fields,
+- removable through a disable control.
 
 ## Network safety
 
-The CLI should include:
+The CLI includes:
 - Timeout controls.
 - User-agent string identifying the tool.
 - Crawl depth limit.
@@ -66,7 +66,7 @@ The CLI should include:
 
 ## Outreach ethics
 
-Reports can support manual outreach, but outreach should be:
+Reports support manual outreach, but outreach should be:
 - personalized,
 - low volume,
 - clear about the sender identity,
