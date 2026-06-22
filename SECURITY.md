@@ -2,14 +2,18 @@
 
 ## Supported versions
 
-Open Local Audit is not released yet.
+Security fixes are provided for the latest published minor release of Open Local Audit.
 
 ## Reporting a vulnerability
 
-Until the public repository is created, report security concerns directly to the maintainers.
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/Esquetta/open-local-audit/security/advisories/new).
 
-After repository creation, replace this section with the public security contact and expected response window.
+Do not include vulnerability details, proof-of-concept payloads, secrets, or affected customer data in public issues.
+
+Maintainers will acknowledge a valid report as soon as practical, investigate impact, and coordinate remediation and disclosure with the reporter.
 
 ## Security scope
 
-The MVP should not require secrets, accounts, or persistent customer data. Any future feature that stores data, sends email, or integrates with external APIs requires a security review before release.
+Open Local Audit audits public websites and writes local reports. Most commands require no secrets or accounts. The optional Google Places provider reads `GOOGLE_MAPS_API_KEY` from the local environment and must not write it to reports, logs, examples, or repository files.
+
+Features that store remote customer data, send messages, manage accounts, or sync external systems require a security review before release.

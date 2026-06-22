@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a reliable, small, testable CLI that audits public local-business websites and outputs actionable reports. The architecture should stay modular enough to support a future web UI, but the first product is CLI-first.
+Build a reliable, small, testable CLI that audits public local-business websites and outputs actionable reports. The released product is CLI-first, and the auditing and reporting modules are reusable across its commands.
 
 ## Architecture overview
 
@@ -27,7 +27,7 @@ Responsibilities:
 - Configure crawl depth and timeout.
 - Return useful exit codes.
 
-Initial command shape:
+Primary command shape:
 
 ```bash
 open-local-audit <url> --format json|markdown --out <path>
@@ -52,7 +52,7 @@ Responsibilities:
 - Return structured findings with severity, evidence, and recommendation.
 - Keep checks deterministic and testable.
 
-Initial rule groups:
+Rule groups:
 - Technical basics.
 - Local conversion.
 - SEO metadata.
@@ -82,7 +82,7 @@ Responsibilities:
 
 ### Discovery command
 
-Implemented first slice:
+Manual discovery flow:
 
 ```text
 discover --input places.csv --provider manual-csv
@@ -92,14 +92,14 @@ discover --input places.csv --provider manual-csv
   -> Prospect CSV for local operator triage
 ```
 
-Implemented provider and control extensions:
+Google Places discovery flow:
 
 ```text
 discover "dentists in Boston" --provider google-places
   -> Official Google Places Text Search provider
   -> Website-only candidate extraction
   -> Operator-controlled candidate and audit caps
-  -> Optional summary JSON for release evidence
+  -> Optional summary JSON for automation and review
   -> Local suppression and review-state fields
   -> Optional review CSV and exact/fuzzy duplicate JSON outputs
 ```
@@ -138,7 +138,7 @@ Batch and discovery CSV exports support local-only presets:
 
 The CRM preset changes only the local CSV column shape. It does not create CRM records, call remote CRM APIs, send outreach, or bypass CSV formula hardening.
 
-Out of scope for this slice:
+Out of scope:
 - Google Maps scraping.
 - Raw Google Places response storage beyond the mapped candidate fields.
 - Outreach sending.
@@ -171,11 +171,11 @@ Finding fields:
 | Language | TypeScript | Strong fit with CLI tooling and npm release path. |
 | Runtime | Node.js | Fast CLI delivery and ecosystem fit. |
 | Parser | Cheerio | Simple and fast HTML inspection. |
-| Browser | Playwright | Needed for rendered DOM and screenshots later. |
+| Browser | Playwright | Used for rendered DOM and screenshot evidence. |
 | Validation | Zod | Keeps inputs and report schema explicit. |
 | Tests | Vitest | Lightweight TypeScript test runner. |
 
-## Non-goals for MVP
+## Non-goals
 
 - No hosted SaaS.
 - No login or accounts.
@@ -184,14 +184,3 @@ Finding fields:
 - No backlink analysis.
 - No full Core Web Vitals replacement.
 - No customer data storage by default.
-
-## Future extension points
-
-- Batch audit from CSV.
-- Manual CSV discovery via `discover --input places.csv --provider manual-csv`.
-- Google Places pagination and richer operator review queues.
-- Screenshot capture.
-- Web UI using the same rule engine.
-- GitHub Action mode.
-- Branded report templates.
-- Vertical-specific scoring for clinics, salons, real estate, and education.
