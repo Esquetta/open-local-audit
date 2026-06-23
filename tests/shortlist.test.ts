@@ -444,6 +444,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Email Lead"]);
   });
 
+  it("filters leads by discovery source after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,source,leadKey",
+        "Manual Lead,https://manual.test,high,80,92,Missing CTA,High,manual-csv,manual-lead",
+        "Places Lead,https://places.test,high,80,90,Missing CTA,High,google-places,places-lead",
+        "Suppressed Manual Lead,https://suppressed.test,high,80,95,Missing CTA,High,manual-csv,suppressed-lead"
+      ].join("\n"),
+      {
+        source: "manual-csv",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-13\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Manual Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",

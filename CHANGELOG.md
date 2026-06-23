@@ -2,7 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
-## Unreleased
+## v0.40.0 - 2026-06-23
+
+- Added `shortlist --source <source>` for local discovery-source shortlist filtering.
+- Applied source filtering after review suppression and before sorting and top-N selection.
+- Kept source filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
 
 ## v0.39.0 - 2026-06-20
 
