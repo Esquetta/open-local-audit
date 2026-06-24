@@ -534,6 +534,89 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("updates local review CSV state from the CLI", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-review-"));
+    try {
+      const reviewPath = join(tmp, "review.csv");
+      writeFileSync(
+        reviewPath,
+        [
+          "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
+          "url:https://lead.test,Lead Test,pending,Needs review,2026-06-20"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "review",
+          "--review-csv",
+          reviewPath,
+          "--lead-key",
+          "url:https://lead.test",
+          "--status",
+          "contacted",
+          "--reason",
+          "Email sent",
+          "--reviewed-at",
+          "2026-06-24T09:00:00Z"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Review updated for url:https://lead.test");
+      expect(readFileSync(reviewPath, "utf8")).toBe(
+        [
+          "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
+          "url:https://lead.test,Lead Test,contacted,Email sent,2026-06-24T09:00:00.000Z",
+          ""
+        ].join("\n")
+      );
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects unsupported review statuses from the CLI", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-review-invalid-"));
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "review",
+          "--review-csv",
+          join(tmp, "review.csv"),
+          "--lead-key",
+          "lead-1",
+          "--status",
+          "maybe-later"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "review --status must be one of: new, pending, in-review, qualified, contacted, rejected, not-fit, do-not-contact, suppressed"
+      );
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("writes a markdown lead shortlist from a CSV export", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-"));
     try {
