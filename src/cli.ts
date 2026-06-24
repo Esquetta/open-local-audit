@@ -32,6 +32,7 @@ import {
 } from "./export-validation.js";
 import { writeReportOutputs } from "./output.js";
 import { packageReport } from "./report-pack.js";
+import { upsertReviewCsvFile } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import {
@@ -463,6 +464,53 @@ const shortlistProgram = program
       if (options.summaryJson) {
         process.stdout.write(`Summary: ${options.summaryJson}\n`);
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+const reviewProgram = program
+  .command("review")
+  .description("Update local lead review state in a review CSV.")
+  .option("--review-csv <path>", "read and update the local review CSV")
+  .option("--lead-key <key>", "lead key to update")
+  .option("--status <status>", "review status to write")
+  .option("--reason <text>", "operator review reason")
+  .option("--reviewed-at <timestamp>", "review timestamp; defaults to the current time")
+  .action(async () => {
+    try {
+      const options = reviewProgram.optsWithGlobals() as {
+        reviewCsv?: string;
+        leadKey?: string;
+        status?: string;
+        reason?: string;
+        reviewedAt?: string;
+      };
+
+      if (!options.reviewCsv) {
+        throw new Error("--review-csv is required for review");
+      }
+
+      if (!options.leadKey) {
+        throw new Error("review --lead-key is required");
+      }
+
+      if (!options.status) {
+        throw new Error("review --status is required");
+      }
+
+      const result = await upsertReviewCsvFile(options.reviewCsv, {
+        leadKey: options.leadKey,
+        status: options.status,
+        reason: options.reason,
+        reviewedAt: options.reviewedAt
+      });
+      process.stdout.write(`Review ${result.action} for ${result.leadKey}\n`);
+      process.stdout.write(`Status: ${result.reviewStatus}\n`);
+      process.stdout.write(`Last reviewed: ${result.lastReviewedAt}\n`);
+      process.stdout.write(`Review CSV: ${options.reviewCsv}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);
