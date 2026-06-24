@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.41.0 - 2026-06-24
+
+- Added `review --review-csv <path> --lead-key <key> --status <status>` for local review CSV upserts.
+- Preserved existing review CSV columns while adding missing review-state columns and writing ISO review timestamps.
+- Kept review updates local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.40.0 - 2026-06-23
 
 - Added `shortlist --source <source>` for local discovery-source shortlist filtering.
