@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.42.0 - 2026-06-24
+
+- Added `shortlist --min-score <score>` for local audit-score shortlist filtering.
+- Applied min-score filtering after review suppression and before sorting and top-N selection.
+- Kept min-score filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.41.0 - 2026-06-24
 
 - Added `review --review-csv <path> --lead-key <key> --status <status>` for local review CSV upserts.

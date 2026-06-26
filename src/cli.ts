@@ -358,6 +358,7 @@ const shortlistProgram = program
   .option("--review-csv <path>", "read local review state and suppress completed leads")
   .option("--top <count>", "number of leads to include", "20")
   .option("--min-opportunity-score <score>", "include only leads at or above an opportunity score")
+  .option("--min-score <score>", "include only leads at or above an audit score")
   .option("--segment <segment>", "include only leads matching a segment")
   .option("--profile <profile>", "include only leads matching a profile")
   .option("--priority <priority>", "include only leads matching a priority")
@@ -384,6 +385,7 @@ const shortlistProgram = program
       reviewCsv?: string;
       top: string;
       minOpportunityScore?: string;
+      minScore?: string;
       segment?: string;
       profile?: string;
       priority?: string;
@@ -422,10 +424,13 @@ const shortlistProgram = program
       const top = Number(options.top);
       const minOpportunityScore =
         options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
+      const minScore =
+        options.minScore === undefined ? undefined : Number(options.minScore);
       const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
       const result = buildLeadShortlist(await readFile(options.input, "utf8"), {
         top,
         minOpportunityScore,
+        minScore,
         segment: options.segment,
         profile: options.profile,
         priority: options.priority,

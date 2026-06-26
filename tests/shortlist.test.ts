@@ -513,4 +513,28 @@ describe("lead shortlist", () => {
       buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { minOpportunityScore: Number.NaN })
     ).toThrow("shortlist --min-opportunity-score must be a number");
   });
+
+  it("requires a numeric minimum score", () => {
+    expect(() =>
+      buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { minScore: Number.NaN })
+    ).toThrow("shortlist --min-score must be a number");
+  });
+
+  it("filters leads below the minimum audit score before ranking", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence",
+        "Low Audit,https://low.test,high,55,92,Missing title,High",
+        "Strong Audit,https://strong.test,medium,88,70,Missing CTA,Medium",
+        "No Audit Score,https://unknown.test,high,,95,Missing meta,High"
+      ].join("\n"),
+      { minScore: 80 }
+    );
+
+    expect(result.totalRows).toBe(3);
+    expect(result.suppressedRows).toBe(0);
+    expect(result.filteredRows).toBe(2);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Strong Audit"]);
+    expect(renderShortlistMarkdown(result)).toContain("- Filtered rows: 2");
+  });
 });

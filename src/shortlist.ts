@@ -6,6 +6,7 @@ export type ShortlistSort = "opportunity-desc" | "score-desc" | "company-asc" | 
 export interface ShortlistOptions {
   top?: number;
   minOpportunityScore?: number;
+  minScore?: number;
   segment?: string;
   profile?: string;
   priority?: string;
@@ -394,6 +395,10 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     throw new Error("shortlist --min-opportunity-score must be a number");
   }
 
+  if (options.minScore !== undefined && !Number.isFinite(options.minScore)) {
+    throw new Error("shortlist --min-score must be a number");
+  }
+
   const sort = options.sort ?? "opportunity-desc";
   if (!shortlistSortModes.includes(sort)) {
     throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
@@ -410,6 +415,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     (lead) =>
       (options.minOpportunityScore === undefined ||
         (lead.opportunityScore ?? -1) >= options.minOpportunityScore) &&
+      (options.minScore === undefined ||
+        (lead.score ?? -1) >= options.minScore) &&
       matchesFilter(lead.segment, options.segment) &&
       matchesFilter(lead.profile, options.profile) &&
       matchesFilter(lead.priority, options.priority) &&
