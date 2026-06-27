@@ -13,6 +13,7 @@ export interface ShortlistOptions {
   contactConfidence?: string;
   preferredContactChannel?: string;
   source?: string;
+  auditStatus?: string;
   reviewStatus?: string;
   excludeReviewStatus?: string;
   unreviewed?: boolean;
@@ -46,6 +47,7 @@ export interface ShortlistLead {
   segment: string;
   profile: string;
   priority: string;
+  auditStatus: string;
   source: string;
   score?: number;
   opportunityScore?: number;
@@ -202,6 +204,7 @@ function normalizeLead(row: RawLeadRow): Omit<ShortlistLead, "rank"> {
     segment: value(row, "segment"),
     profile: value(row, "profile"),
     priority: value(row, "priority"),
+    auditStatus: value(row, "auditStatus", "status"),
     source: value(row, "source"),
     score: numberValue(row, "score"),
     opportunityScore: numberValue(row, "opportunityScore"),
@@ -423,6 +426,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.contactConfidence, options.contactConfidence) &&
       matchesFilter(lead.preferredContactChannel, options.preferredContactChannel) &&
       matchesFilter(lead.source, options.source) &&
+      matchesFilter(lead.auditStatus, options.auditStatus) &&
       matchesFilter(lead.reviewStatus, options.reviewStatus) &&
       excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
       (!options.unreviewed || lead.lastReviewedAt === "") &&

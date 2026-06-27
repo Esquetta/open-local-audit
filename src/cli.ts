@@ -365,6 +365,7 @@ const shortlistProgram = program
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
   .option("--preferred-contact-channel <channel>", "include only leads matching a preferred contact channel")
   .option("--source <source>", "include only leads matching a discovery source")
+  .option("--audit-status <status>", "include only leads matching an audit status")
   .option("--review-status <status>", "include only leads matching an active review status")
   .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--unreviewed", "include only leads without a review date")
@@ -392,6 +393,7 @@ const shortlistProgram = program
       contactConfidence?: string;
       preferredContactChannel?: string;
       source?: string;
+      auditStatus?: string;
       reviewStatus?: string;
       excludeReviewStatus?: string;
       unreviewed?: boolean;
@@ -437,6 +439,7 @@ const shortlistProgram = program
         contactConfidence: options.contactConfidence,
         preferredContactChannel: options.preferredContactChannel,
         source: options.source,
+        auditStatus: options.auditStatus,
         reviewStatus: options.reviewStatus,
         excludeReviewStatus: options.excludeReviewStatus,
         unreviewed: options.unreviewed,

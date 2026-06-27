@@ -465,6 +465,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Manual Lead"]);
   });
 
+  it("filters leads by audit status after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,status,leadKey",
+        "Success Lead,https://success.test,high,80,92,Missing CTA,High,success,success-lead",
+        "Failed Lead,https://failed.test,high,80,90,Missing CTA,High,Failed,failed-lead",
+        "Suppressed Success Lead,https://suppressed.test,high,80,95,Missing CTA,High,success,suppressed-lead"
+      ].join("\n"),
+      {
+        auditStatus: "success",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-12\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Success Lead"]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
