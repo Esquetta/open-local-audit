@@ -11,6 +11,7 @@ export interface ShortlistOptions {
   profile?: string;
   priority?: string;
   contactConfidence?: string;
+  minContactConfidence?: string;
   preferredContactChannel?: string;
   source?: string;
   auditStatus?: string;
@@ -402,6 +403,20 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
     throw new Error("shortlist --min-score must be a number");
   }
 
+  const minConfidenceRank =
+    options.minContactConfidence === undefined
+      ? undefined
+      : (() => {
+          const normalized =
+            options.minContactConfidence.charAt(0).toUpperCase() +
+            options.minContactConfidence.slice(1).toLowerCase();
+          const rank = confidenceRank[normalized];
+          if (rank === undefined) {
+            throw new Error("shortlist --min-contact-confidence must be high, medium, low, or none");
+          }
+          return rank;
+        })();
+
   const sort = options.sort ?? "opportunity-desc";
   if (!shortlistSortModes.includes(sort)) {
     throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
@@ -424,6 +439,8 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.profile, options.profile) &&
       matchesFilter(lead.priority, options.priority) &&
       matchesFilter(lead.contactConfidence, options.contactConfidence) &&
+      (minConfidenceRank === undefined ||
+        (confidenceRank[lead.contactConfidence] ?? 0) >= minConfidenceRank) &&
       matchesFilter(lead.preferredContactChannel, options.preferredContactChannel) &&
       matchesFilter(lead.source, options.source) &&
       matchesFilter(lead.auditStatus, options.auditStatus) &&

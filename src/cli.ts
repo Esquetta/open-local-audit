@@ -363,6 +363,7 @@ const shortlistProgram = program
   .option("--profile <profile>", "include only leads matching a profile")
   .option("--priority <priority>", "include only leads matching a priority")
   .option("--contact-confidence <level>", "include only leads matching a contact confidence level")
+  .option("--min-contact-confidence <level>", "include only leads at or above a contact confidence level")
   .option("--preferred-contact-channel <channel>", "include only leads matching a preferred contact channel")
   .option("--source <source>", "include only leads matching a discovery source")
   .option("--audit-status <status>", "include only leads matching an audit status")
@@ -391,6 +392,7 @@ const shortlistProgram = program
       profile?: string;
       priority?: string;
       contactConfidence?: string;
+      minContactConfidence?: string;
       preferredContactChannel?: string;
       source?: string;
       auditStatus?: string;
@@ -437,6 +439,7 @@ const shortlistProgram = program
         profile: options.profile,
         priority: options.priority,
         contactConfidence: options.contactConfidence,
+        minContactConfidence: options.minContactConfidence,
         preferredContactChannel: options.preferredContactChannel,
         source: options.source,
         auditStatus: options.auditStatus,
