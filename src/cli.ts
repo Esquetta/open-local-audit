@@ -368,6 +368,7 @@ const shortlistProgram = program
   .option("--source <source>", "include only leads matching a discovery source")
   .option("--audit-status <status>", "include only leads matching an audit status")
   .option("--has-website <status>", "include only leads matching a website presence status")
+  .option("--top-finding <finding>", "include only leads matching a top finding")
   .option("--review-status <status>", "include only leads matching an active review status")
   .option("--exclude-review-status <status>", "exclude leads matching an active review status")
   .option("--unreviewed", "include only leads without a review date")
@@ -398,6 +399,7 @@ const shortlistProgram = program
       source?: string;
       auditStatus?: string;
       hasWebsite?: string;
+      topFinding?: string;
       reviewStatus?: string;
       excludeReviewStatus?: string;
       unreviewed?: boolean;
@@ -446,6 +448,7 @@ const shortlistProgram = program
         source: options.source,
         auditStatus: options.auditStatus,
         hasWebsite: options.hasWebsite,
+        topFinding: options.topFinding,
         reviewStatus: options.reviewStatus,
         excludeReviewStatus: options.excludeReviewStatus,
         unreviewed: options.unreviewed,

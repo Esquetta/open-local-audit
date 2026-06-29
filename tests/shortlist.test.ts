@@ -532,6 +532,27 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["Yes Lead"]);
   });
 
+  it("filters leads by top finding after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,leadKey",
+        "CTA Lead,https://cta.test,high,80,92,Missing CTA,High,cta-lead",
+        "Meta Lead,https://meta.test,high,80,90,Missing meta,High,meta-lead",
+        "Suppressed CTA Lead,https://suppressed.test,high,80,95,Missing CTA,High,suppressed-lead"
+      ].join("\n"),
+      {
+        topFinding: "Missing CTA",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-09\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(1);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["CTA Lead"]);
+  });
+
   it("rejects invalid min-contact-confidence thresholds", () => {
     for (const level of ["highest", "unknown", ""]) {
       expect(() =>

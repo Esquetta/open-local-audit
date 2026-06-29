@@ -16,6 +16,7 @@ export interface ShortlistOptions {
   source?: string;
   auditStatus?: string;
   hasWebsite?: string;
+  topFinding?: string;
   reviewStatus?: string;
   excludeReviewStatus?: string;
   unreviewed?: boolean;
@@ -448,6 +449,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
       matchesFilter(lead.source, options.source) &&
       matchesFilter(lead.auditStatus, options.auditStatus) &&
       matchesFilter(lead.hasWebsite, options.hasWebsite) &&
+      matchesFilter(lead.topFinding, options.topFinding) &&
       matchesFilter(lead.reviewStatus, options.reviewStatus) &&
       excludesFilter(lead.reviewStatus, options.excludeReviewStatus) &&
       (!options.unreviewed || lead.lastReviewedAt === "") &&
