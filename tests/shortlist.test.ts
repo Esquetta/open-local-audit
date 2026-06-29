@@ -57,7 +57,7 @@ describe("lead shortlist", () => {
     );
 
     expect(renderShortlistMarkdown(result)).toContain(
-      "| 1 | Lead A | https://a.test | high | 90 | 80 | High | email | Missing CTA | new |  |  | a/open-local-audit-report.html |"
+      "| 1 | Lead A | https://a.test |  |  |  | high | 90 | 80 | High | email | Missing CTA | new |  |  | a/open-local-audit-report.html |"
     );
     expect(JSON.parse(renderShortlistJson(result))).toMatchObject({
       totalRows: 1,
@@ -104,8 +104,8 @@ describe("lead shortlist", () => {
 
     expect(renderShortlistCsv(result)).toBe(
       [
-        "rank,companyName,website,segment,profile,priority,opportunityScore,score,contactConfidence,preferredContactChannel,reason,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath",
-        "1,Lead A,https://a.test,dental,dental,high,90,80,High,email,Missing CTA,pending,'=Needs review,2026-06-03,url:https://a.test,a/open-local-audit-report.html",
+        "rank,companyName,website,segment,profile,priority,source,auditStatus,hasWebsite,opportunityScore,score,contactConfidence,preferredContactChannel,reason,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath",
+        "1,Lead A,https://a.test,dental,dental,high,,,,90,80,High,email,Missing CTA,pending,'=Needs review,2026-06-03,url:https://a.test,a/open-local-audit-report.html",
         ""
       ].join("\n")
     );

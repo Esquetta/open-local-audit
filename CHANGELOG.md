@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.47.0 - 2026-06-29
+
+- Added `source`, `auditStatus`, and `hasWebsite` columns to shortlist CSV and Markdown reports.
+- Kept shortlist rendering local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.46.0 - 2026-06-29
 
 - Added `shortlist --top-finding <finding>` for local top-finding shortlist filtering.
