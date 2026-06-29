@@ -510,6 +510,28 @@ describe("lead shortlist", () => {
     expect(result.leads.map((lead) => lead.companyName)).toEqual(["High Lead", "Medium Lead"]);
   });
 
+  it("filters leads by website presence status after suppression", () => {
+    const result = buildLeadShortlist(
+      [
+        "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,hasWebsite,leadKey",
+        "Yes Lead,https://yes.test,high,80,92,Missing CTA,High,yes,yes-lead",
+        "No Lead,,high,80,90,Missing CTA,High,no,no-lead",
+        "Unknown Lead,,high,80,88,Missing CTA,High,unknown,unknown-lead",
+        "Suppressed Yes Lead,https://suppressed.test,high,80,99,Missing CTA,High,yes,suppressed-lead"
+      ].join("\n"),
+      {
+        hasWebsite: "yes",
+        reviewRows: readShortlistReviewCsv(
+          "leadKey,reviewStatus,reviewReason,lastReviewedAt\nsuppressed-lead,contacted,Already contacted,2026-06-10\n"
+        )
+      }
+    );
+
+    expect(result.suppressedRows).toBe(1);
+    expect(result.filteredRows).toBe(2);
+    expect(result.leads.map((lead) => lead.companyName)).toEqual(["Yes Lead"]);
+  });
+
   it("rejects invalid min-contact-confidence thresholds", () => {
     for (const level of ["highest", "unknown", ""]) {
       expect(() =>

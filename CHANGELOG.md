@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.45.0 - 2026-06-29
+
+- Added `shortlist --has-website <status>` for local website-presence shortlist filtering.
+- Applied has-website filtering after review suppression and before sorting and top-N selection.
+- Kept has-website filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.44.0 - 2026-06-28
 
 - Added `shortlist --min-contact-confidence <level>` for local ordinal contact-confidence shortlist filtering.
