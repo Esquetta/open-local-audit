@@ -16,6 +16,10 @@ function categoryScores(categories: Record<string, { score?: number | null } | u
   };
 }
 
+export function lighthouseChromeFlags(): string[] {
+  return ["--headless=new", "--disable-gpu"];
+}
+
 export async function runLighthouseAudit(url: string, options: { timeoutMs: number }): Promise<LighthouseSummary> {
   const [{ default: lighthouse }, chromeLauncher]: [LighthouseModule, ChromeLauncherModule] = await Promise.all([
     import("lighthouse"),
@@ -25,7 +29,7 @@ export async function runLighthouseAudit(url: string, options: { timeoutMs: numb
 
   try {
     chrome = await chromeLauncher.launch({
-      chromeFlags: ["--headless=new", "--disable-gpu", "--no-sandbox"]
+      chromeFlags: lighthouseChromeFlags()
     });
     const result = await lighthouse(url, {
       port: chrome.port,
