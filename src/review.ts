@@ -24,10 +24,27 @@ export interface ReviewUpsertInput {
   reviewedAt?: string;
 }
 
+export interface ReviewBulkUpsertInput {
+  leadKeys: string[];
+  status: string;
+  reason?: string;
+  reviewedAt?: string;
+}
+
 export interface ReviewUpsertResult {
   action: ReviewUpsertAction;
   content: string;
   leadKey: string;
+  reviewStatus: ReviewStatus;
+  lastReviewedAt: string;
+}
+
+export interface ReviewBulkUpsertResult {
+  added: number;
+  updated: number;
+  skipped: number;
+  total: number;
+  content: string;
   reviewStatus: ReviewStatus;
   lastReviewedAt: string;
 }
@@ -37,6 +54,15 @@ const requiredHeaders = ["leadKey", "reviewStatus", "reviewReason", "lastReviewe
 function normalizeStatus(value: string): ReviewStatus | undefined {
   const normalized = value.trim().toLowerCase();
   return reviewStatuses.find((status) => status === normalized);
+}
+
+function parseReviewStatus(input: { status: string }): ReviewStatus {
+  const reviewStatus = normalizeStatus(input.status);
+  if (!reviewStatus) {
+    throw new Error(`review --status must be one of: ${reviewStatuses.join(", ")}`);
+  }
+
+  return reviewStatus;
 }
 
 function isoTimestamp(value: string | undefined, now: Date): string {
@@ -79,6 +105,16 @@ function ensureHeaders(headers: string[]): string[] {
   return next;
 }
 
+function normalizeRows(rows: string[][], headers: string[]): string[][] {
+  return rows.map((row) => {
+    const next = [...row];
+    while (next.length < headers.length) {
+      next.push("");
+    }
+    return next;
+  });
+}
+
 function setCell(row: string[], headers: string[], header: string, value: string): void {
   const index = headers.indexOf(header);
   row[index] = value;
@@ -89,42 +125,45 @@ function renderCsv(headers: string[], rows: string[][]): string {
   return `${[headers.join(","), ...renderedRows].join("\n")}\n`;
 }
 
-export function upsertReviewCsv(content: string, input: ReviewUpsertInput, now = new Date()): ReviewUpsertResult {
-  const leadKey = input.leadKey.trim();
-  if (!leadKey) {
-    throw new Error("review --lead-key is required");
-  }
-
-  const reviewStatus = normalizeStatus(input.status);
-  if (!reviewStatus) {
-    throw new Error(`review --status must be one of: ${reviewStatuses.join(", ")}`);
-  }
-
-  const { headers: rawHeaders, rows: rawRows } = readRows(content);
-  const headers = ensureHeaders(rawHeaders);
+function upsertRow(
+  rows: string[][],
+  headers: string[],
+  leadKey: string,
+  reviewStatus: ReviewStatus,
+  reason: string | undefined,
+  lastReviewedAt: string
+): ReviewUpsertAction {
   const leadKeyIndex = headers.indexOf("leadKey");
-  const rows = rawRows.map((row) => {
-    const next = [...row];
-    while (next.length < headers.length) {
-      next.push("");
-    }
-    return next;
-  });
-  const lastReviewedAt = isoTimestamp(input.reviewedAt, now);
   const existing = rows.find((row) => (row[leadKeyIndex] ?? "").trim() === leadKey);
   const row = existing ?? Array.from({ length: headers.length }, () => "");
 
   setCell(row, headers, "leadKey", leadKey);
   setCell(row, headers, "reviewStatus", reviewStatus);
-  setCell(row, headers, "reviewReason", input.reason?.trim() ?? "");
+  setCell(row, headers, "reviewReason", reason?.trim() ?? "");
   setCell(row, headers, "lastReviewedAt", lastReviewedAt);
 
   if (!existing) {
     rows.push(row);
   }
 
+  return existing ? "updated" : "added";
+}
+
+export function upsertReviewCsv(content: string, input: ReviewUpsertInput, now = new Date()): ReviewUpsertResult {
+  const leadKey = input.leadKey.trim();
+  if (!leadKey) {
+    throw new Error("review --lead-key is required");
+  }
+
+  const reviewStatus = parseReviewStatus(input);
+  const { headers: rawHeaders, rows: rawRows } = readRows(content);
+  const headers = ensureHeaders(rawHeaders);
+  const rows = normalizeRows(rawRows, headers);
+  const lastReviewedAt = isoTimestamp(input.reviewedAt, now);
+  const action = upsertRow(rows, headers, leadKey, reviewStatus, input.reason, lastReviewedAt);
+
   return {
-    action: existing ? "updated" : "added",
+    action,
     content: renderCsv(headers, rows),
     leadKey,
     reviewStatus,
@@ -132,25 +171,126 @@ export function upsertReviewCsv(content: string, input: ReviewUpsertInput, now =
   };
 }
 
-export async function upsertReviewCsvFile(path: string, input: ReviewUpsertInput): Promise<ReviewUpsertResult> {
-  let content = "";
-  try {
-    content = await readFile(path, "utf8");
-  } catch (error) {
-    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
-      throw error;
+export function upsertReviewCsvMany(content: string, input: ReviewBulkUpsertInput, now = new Date()): ReviewBulkUpsertResult {
+  const reviewStatus = parseReviewStatus(input);
+  const seen = new Set<string>();
+  const leadKeys = input.leadKeys.flatMap((leadKey) => {
+    const trimmed = leadKey.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return [];
+    }
+
+    seen.add(trimmed);
+    return [trimmed];
+  });
+  const skipped = input.leadKeys.length - leadKeys.length;
+
+  if (leadKeys.length === 0) {
+    throw new Error("review --input must contain at least one leadKey");
+  }
+
+  const { headers: rawHeaders, rows: rawRows } = readRows(content);
+  const headers = ensureHeaders(rawHeaders);
+  const rows = normalizeRows(rawRows, headers);
+  const lastReviewedAt = isoTimestamp(input.reviewedAt, now);
+  let added = 0;
+  let updated = 0;
+
+  for (const leadKey of leadKeys) {
+    const action = upsertRow(rows, headers, leadKey, reviewStatus, input.reason, lastReviewedAt);
+    if (action === "added") {
+      added += 1;
+    } else {
+      updated += 1;
     }
   }
 
-  const result = upsertReviewCsv(content, input);
+  return {
+    added,
+    updated,
+    skipped,
+    total: leadKeys.length,
+    content: renderCsv(headers, rows),
+    reviewStatus,
+    lastReviewedAt
+  };
+}
+
+export function readLeadKeysFromReviewInput(content: string): string[] {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    const parsed = JSON.parse(trimmed) as unknown;
+    const rows = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && "leads" in parsed && Array.isArray(parsed.leads)
+        ? parsed.leads
+        : [];
+
+    return rows.flatMap((row) => {
+      if (!row || typeof row !== "object" || !("leadKey" in row) || typeof row.leadKey !== "string") {
+        return [];
+      }
+
+      return [row.leadKey];
+    });
+  }
+
+  const lines = cleanInputLines(content);
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const headers = parseCsvLine(lines[0]);
+  const leadKeyIndex = headers.indexOf("leadKey");
+  if (leadKeyIndex < 0) {
+    throw new Error("review --input CSV requires a leadKey column");
+  }
+
+  return lines.slice(1).map((line) => parseCsvLine(line)[leadKeyIndex] ?? "");
+}
+
+async function readReviewCsvFile(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      return "";
+    }
+
+    throw error;
+  }
+}
+
+async function writeReviewCsvFile(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const tempPath = `${path}.${process.pid}.tmp`;
-  await writeFile(tempPath, result.content, "utf8");
+  await writeFile(tempPath, content, "utf8");
   try {
     await rename(tempPath, path);
   } catch (error) {
     await rm(tempPath, { force: true });
     throw error;
+  }
+}
+
+export async function upsertReviewCsvFile(path: string, input: ReviewUpsertInput): Promise<ReviewUpsertResult> {
+  const result = upsertReviewCsv(await readReviewCsvFile(path), input);
+  await writeReviewCsvFile(path, result.content);
+  return result;
+}
+
+export async function upsertReviewCsvFileMany(
+  path: string,
+  input: ReviewBulkUpsertInput,
+  dryRun = false
+): Promise<ReviewBulkUpsertResult> {
+  const result = upsertReviewCsvMany(await readReviewCsvFile(path), input);
+  if (!dryRun) {
+    await writeReviewCsvFile(path, result.content);
   }
 
   return result;

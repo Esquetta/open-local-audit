@@ -617,6 +617,113 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("updates local review CSV state from a shortlist CSV", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-review-bulk-"));
+    try {
+      const inputPath = join(tmp, "shortlist.csv");
+      const reviewPath = join(tmp, "review.csv");
+      writeFileSync(
+        inputPath,
+        [
+          "rank,companyName,leadKey",
+          "1,Existing Lead,existing-lead",
+          "2,New Lead,new-lead"
+        ].join("\n"),
+        "utf8"
+      );
+      writeFileSync(
+        reviewPath,
+        "leadKey,label,reviewStatus,reviewReason,lastReviewedAt\nexisting-lead,Existing Lead,pending,Needs review,2026-06-20\n",
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "review",
+          "--review-csv",
+          reviewPath,
+          "--input",
+          inputPath,
+          "--status",
+          "in-review",
+          "--reason",
+          "Selected from shortlist",
+          "--reviewed-at",
+          "2026-06-30T10:00:00Z"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Updated 2 review rows");
+      expect(result.stdout).toContain("Added: 1");
+      expect(result.stdout).toContain("Updated: 1");
+      expect(readFileSync(reviewPath, "utf8")).toBe(
+        [
+          "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
+          "existing-lead,Existing Lead,in-review,Selected from shortlist,2026-06-30T10:00:00.000Z",
+          "new-lead,,in-review,Selected from shortlist,2026-06-30T10:00:00.000Z",
+          ""
+        ].join("\n")
+      );
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("previews local review CSV updates from shortlist JSON", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-review-bulk-dry-run-"));
+    try {
+      const inputPath = join(tmp, "shortlist.json");
+      const reviewPath = join(tmp, "review.csv");
+      const reviewCsv = "leadKey,reviewStatus,reviewReason,lastReviewedAt\nexisting-lead,pending,Needs review,2026-06-20\n";
+      writeFileSync(
+        inputPath,
+        JSON.stringify({
+          leads: [{ leadKey: "existing-lead" }, { leadKey: "new-lead" }]
+        }),
+        "utf8"
+      );
+      writeFileSync(reviewPath, reviewCsv, "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "review",
+          "--review-csv",
+          reviewPath,
+          "--input",
+          inputPath,
+          "--status",
+          "qualified",
+          "--dry-run"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Would update 2 review rows");
+      expect(result.stdout).toContain("Added: 1");
+      expect(result.stdout).toContain("Updated: 1");
+      expect(readFileSync(reviewPath, "utf8")).toBe(reviewCsv);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("writes a markdown lead shortlist from a CSV export", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-shortlist-"));
     try {
@@ -646,7 +753,7 @@ describe("CLI behavior helpers", () => {
       const markdown = readFileSync(outPath, "utf8");
       expect(markdown).toContain("# Lead Shortlist");
       expect(markdown).toContain(
-        "| 1 | Best Lead | https://best.test | high | 95 | 70 | Medium | phone | Missing CTA | new |  |  | best/open-local-audit-report.html |"
+        "| 1 | Best Lead | https://best.test | manual-csv |  |  | high | 95 | 70 | Medium | phone | Missing CTA | new |  |  | best/open-local-audit-report.html |"
       );
       expect(markdown).not.toContain("Lower Lead");
     } finally {
@@ -810,7 +917,7 @@ describe("CLI behavior helpers", () => {
       expect(result.stdout).toContain("Suppressed: 1");
       const csv = readFileSync(outPath, "utf8");
       expect(csv.split(/\r?\n/)[0]).toBe(
-        "rank,companyName,website,segment,profile,priority,opportunityScore,score,contactConfidence,preferredContactChannel,reason,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath"
+        "rank,companyName,website,segment,profile,priority,source,auditStatus,hasWebsite,opportunityScore,score,contactConfidence,preferredContactChannel,reason,reviewStatus,reviewReason,lastReviewedAt,leadKey,reportPath"
       );
       expect(csv).toContain("Fresh Lead");
       expect(csv).toContain("pending");
