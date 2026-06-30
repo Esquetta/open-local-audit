@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.49.0 - 2026-06-30
+
+- Removed the default `--no-sandbox` Chrome launch flag from Lighthouse audits.
+- Raised the Cheerio dependency floor so fresh installs resolve a patched `undici` transitive dependency.
+- Documented the upgrade path for old consuming projects that still have vulnerable transitive dependency locks.
+
 ## v0.48.0 - 2026-06-30
 
 - Added bulk `review --input <path>` updates from shortlist CSV and JSON files.

@@ -1,6 +1,6 @@
 {
   "name": "open-local-audit",
-  "version": "0.48.0",
+  "version": "0.49.0",
   "description": "Open-source website and local presence auditor for small businesses.",
   "license": "MIT",
   "type": "module",
@@ -45,7 +45,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "cheerio": "^1.0.0",
+    "cheerio": "^1.2.0",
     "chrome-launcher": "^1.2.1",
     "commander": "^12.1.0",
     "lighthouse": "12.6.1",
