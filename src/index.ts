@@ -27,7 +27,14 @@ export {
 export { auditProfiles } from "./profiles.js";
 export { writeReportOutputs } from "./output.js";
 export { packageReport } from "./report-pack.js";
-export { reviewStatuses, upsertReviewCsv, upsertReviewCsvFile } from "./review.js";
+export {
+  readLeadKeysFromReviewInput,
+  reviewStatuses,
+  upsertReviewCsv,
+  upsertReviewCsvFile,
+  upsertReviewCsvFileMany,
+  upsertReviewCsvMany
+} from "./review.js";
 export { runLighthouseAudit } from "./lighthouse.js";
 export { renderPdfReport } from "./pdf.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
@@ -76,7 +83,14 @@ export type {
   ExportValidationSummary
 } from "./export-validation.js";
 export type { ReportPackManifest, ReportPackOptions, ReportPackResult } from "./report-pack.js";
-export type { ReviewStatus, ReviewUpsertAction, ReviewUpsertInput, ReviewUpsertResult } from "./review.js";
+export type {
+  ReviewBulkUpsertInput,
+  ReviewBulkUpsertResult,
+  ReviewStatus,
+  ReviewUpsertAction,
+  ReviewUpsertInput,
+  ReviewUpsertResult
+} from "./review.js";
 export type {
   ShortlistFormat,
   ShortlistLead,

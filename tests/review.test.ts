@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { upsertReviewCsv } from "../src/review.js";
+import { readLeadKeysFromReviewInput, upsertReviewCsv, upsertReviewCsvMany } from "../src/review.js";
 
 describe("review CSV upsert", () => {
   it("updates an existing review row by lead key while preserving extra columns", () => {
@@ -73,5 +73,63 @@ describe("review CSV upsert", () => {
         status: "maybe-later"
       })
     ).toThrow("review --status must be one of:");
+  });
+
+  it("upserts multiple review rows with one timestamp", () => {
+    const result = upsertReviewCsvMany(
+      [
+        "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
+        "existing-lead,Existing Lead,pending,Needs review,2026-06-20"
+      ].join("\n"),
+      {
+        leadKeys: ["existing-lead", "new-lead", "", "new-lead"],
+        status: "in-review",
+        reason: "Selected from shortlist",
+        reviewedAt: "2026-06-30T10:00:00+03:00"
+      }
+    );
+
+    expect(result).toMatchObject({
+      added: 1,
+      updated: 1,
+      skipped: 2,
+      total: 2,
+      reviewStatus: "in-review",
+      lastReviewedAt: "2026-06-30T07:00:00.000Z"
+    });
+    expect(result.content).toBe(
+      [
+        "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
+        "existing-lead,Existing Lead,in-review,Selected from shortlist,2026-06-30T07:00:00.000Z",
+        "new-lead,,in-review,Selected from shortlist,2026-06-30T07:00:00.000Z",
+        ""
+      ].join("\n")
+    );
+  });
+
+  it("reads lead keys from shortlist CSV and JSON input", () => {
+    expect(
+      readLeadKeysFromReviewInput(
+        [
+          "rank,companyName,leadKey",
+          "1,Lead A,url:https://a.test",
+          "2,Lead B,url:https://b.test"
+        ].join("\n")
+      )
+    ).toEqual(["url:https://a.test", "url:https://b.test"]);
+
+    expect(
+      readLeadKeysFromReviewInput(
+        JSON.stringify({
+          leads: [{ leadKey: "url:https://a.test" }, { leadKey: "url:https://b.test" }, { companyName: "No Key" }]
+        })
+      )
+    ).toEqual(["url:https://a.test", "url:https://b.test"]);
+  });
+
+  it("rejects CSV review input without a lead key column", () => {
+    expect(() => readLeadKeysFromReviewInput("companyName\nLead A\n")).toThrow(
+      "review --input CSV requires a leadKey column"
+    );
   });
 });

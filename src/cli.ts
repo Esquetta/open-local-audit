@@ -32,7 +32,7 @@ import {
 } from "./export-validation.js";
 import { writeReportOutputs } from "./output.js";
 import { packageReport } from "./report-pack.js";
-import { upsertReviewCsvFile } from "./review.js";
+import { readLeadKeysFromReviewInput, upsertReviewCsvFile, upsertReviewCsvFileMany } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import {
@@ -492,30 +492,65 @@ const reviewProgram = program
   .command("review")
   .description("Update local lead review state in a review CSV.")
   .option("--review-csv <path>", "read and update the local review CSV")
+  .option("--input <path>", "read lead keys from a shortlist CSV or JSON file")
   .option("--lead-key <key>", "lead key to update")
   .option("--status <status>", "review status to write")
   .option("--reason <text>", "operator review reason")
   .option("--reviewed-at <timestamp>", "review timestamp; defaults to the current time")
+  .option("--dry-run", "show the bulk review update without writing the review CSV", false)
   .action(async () => {
     try {
       const options = reviewProgram.optsWithGlobals() as {
         reviewCsv?: string;
+        input?: string;
         leadKey?: string;
         status?: string;
         reason?: string;
         reviewedAt?: string;
+        dryRun?: boolean;
       };
 
       if (!options.reviewCsv) {
         throw new Error("--review-csv is required for review");
       }
 
-      if (!options.leadKey) {
-        throw new Error("review --lead-key is required");
-      }
-
       if (!options.status) {
         throw new Error("review --status is required");
+      }
+
+      if (options.input && options.leadKey) {
+        throw new Error("Use either review --input or --lead-key, not both");
+      }
+
+      if (options.input) {
+        const result = await upsertReviewCsvFileMany(
+          options.reviewCsv,
+          {
+            leadKeys: readLeadKeysFromReviewInput(await readFile(options.input, "utf8")),
+            status: options.status,
+            reason: options.reason,
+            reviewedAt: options.reviewedAt
+          },
+          options.dryRun
+        );
+        process.stdout.write(
+          `${options.dryRun ? "Would update" : "Updated"} ${result.total} review row${result.total === 1 ? "" : "s"}\n`
+        );
+        process.stdout.write(`Added: ${result.added}\n`);
+        process.stdout.write(`Updated: ${result.updated}\n`);
+        process.stdout.write(`Skipped: ${result.skipped}\n`);
+        process.stdout.write(`Status: ${result.reviewStatus}\n`);
+        process.stdout.write(`Last reviewed: ${result.lastReviewedAt}\n`);
+        process.stdout.write(`Review CSV: ${options.reviewCsv}\n`);
+        return;
+      }
+
+      if (options.dryRun) {
+        throw new Error("review --dry-run is only supported with --input");
+      }
+
+      if (!options.leadKey) {
+        throw new Error("review --lead-key is required unless --input is used");
       }
 
       const result = await upsertReviewCsvFile(options.reviewCsv, {
