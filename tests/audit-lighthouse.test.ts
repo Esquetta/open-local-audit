@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { auditUrl } from "../src/audit.js";
+import { lighthouseChromeFlags } from "../src/lighthouse.js";
 
 let server: Server | undefined;
 
@@ -37,6 +38,11 @@ afterEach(async () => {
 });
 
 describe("Lighthouse audits", () => {
+  it("keeps the Chrome sandbox enabled by default", () => {
+    expect(lighthouseChromeFlags()).toEqual(["--headless=new", "--disable-gpu"]);
+    expect(lighthouseChromeFlags()).not.toContain("--no-sandbox");
+  });
+
   it("attaches Lighthouse category scores when requested", async () => {
     const url = await startServer();
     const calls: string[] = [];
