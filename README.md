@@ -4,7 +4,7 @@ Open Local Audit is an open-source website and local presence auditor for small 
 
 ## Current stage
 
-Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections and contact/outreach rollups to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates. CRM-ready CSV exports can be validated locally before import, lead CSVs can be ranked into local shortlist reports with optional local review-state suppression, local review CSV state can be updated by lead key, and single-site report folders can be packaged for local customer sharing.
+Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections and contact/outreach rollups to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates. CRM-ready CSV exports can be validated locally before import, lead CSVs can be ranked into local shortlist reports with optional local review-state suppression, local review CSV state can be updated by lead key or shortlist input, and single-site report folders can be packaged for local customer sharing.
 
 ## Business purpose
 
@@ -262,9 +262,11 @@ Update local review state by lead key:
 ```bash
 open-local-audit review --review-csv review.csv --lead-key url:https://lead.test --status contacted --reason "Email sent"
 open-local-audit review --review-csv review.csv --lead-key url:https://lead.test --status in-review --reviewed-at 2026-06-24T09:00:00Z
+open-local-audit review --review-csv review.csv --input shortlist.csv --status in-review --reason "Selected from shortlist"
+open-local-audit review --review-csv review.csv --input shortlist.json --status qualified --dry-run
 ```
 
-`review` updates the exact `leadKey` row in a local review CSV, or appends a new row when the key is not present. It preserves existing columns, adds missing `leadKey`, `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns, and accepts `new`, `pending`, `in-review`, `qualified`, `contacted`, `rejected`, `not-fit`, `do-not-contact`, or `suppressed`. `--reviewed-at` defaults to the current time and is written as an ISO timestamp. The command only mutates the supplied local review CSV. It does not change lead source files, call APIs, send outreach, or sync to a CRM.
+`review` updates the exact `leadKey` row in a local review CSV, or appends a new row when the key is not present. Use `--input` with a shortlist CSV or JSON file to update every row that has a `leadKey`; duplicate and blank keys are skipped. Use `--dry-run` with `--input` to preview added and updated counts without writing the review CSV. The command preserves existing columns, adds missing `leadKey`, `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns, and accepts `new`, `pending`, `in-review`, `qualified`, `contacted`, `rejected`, `not-fit`, `do-not-contact`, or `suppressed`. `--reviewed-at` defaults to the current time and is written as an ISO timestamp. The command only mutates the supplied local review CSV. It does not change lead source files, call APIs, send outreach, or sync to a CRM.
 
 Package an existing single-site report folder for local customer sharing:
 
@@ -326,6 +328,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Local shortlist active review-status exclusion with `--exclude-review-status`.
 - Spreadsheet-ready local shortlist CSV output with `--format csv`.
 - Local review CSV status upserts with `review`.
+- Bulk local review CSV status upserts from shortlist CSV and JSON files.
 - Local report packaging with shareable summaries and copied report artifacts.
 - Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
@@ -383,7 +386,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `shortlist --review-status` filters local report output only; it does not update source or review CSV files.
 - `shortlist --exclude-review-status` filters local report output only; it does not update source or review CSV files.
 - `shortlist --format csv` writes a local spreadsheet review file only; it does not import or sync records.
-- `review` mutates only the supplied local review CSV by exact `leadKey`; it does not update source lead files, call APIs, send outreach, or sync CRM records.
+- `review` mutates only the supplied local review CSV by exact `leadKey`; bulk `--input` mode reads shortlist CSV or JSON files for lead keys only. It does not update source lead files, call APIs, send outreach, or sync CRM records.
 - `package-report` packages local files only; it does not upload reports, send outreach, or sync CRM records.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.

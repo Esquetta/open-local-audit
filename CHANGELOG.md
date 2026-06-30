@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.48.0 - 2026-06-30
+
+- Added bulk `review --input <path>` updates from shortlist CSV and JSON files.
+- Added `review --dry-run` previews for bulk review CSV updates.
+- Kept bulk review updates local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.47.0 - 2026-06-29
 
 - Added `source`, `auditStatus`, and `hasWebsite` columns to shortlist CSV and Markdown reports.
