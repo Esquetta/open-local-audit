@@ -264,9 +264,10 @@ open-local-audit review --review-csv review.csv --lead-key url:https://lead.test
 open-local-audit review --review-csv review.csv --lead-key url:https://lead.test --status in-review --reviewed-at 2026-06-24T09:00:00Z
 open-local-audit review --review-csv review.csv --input shortlist.csv --status in-review --reason "Selected from shortlist"
 open-local-audit review --review-csv review.csv --input shortlist.json --status qualified --dry-run
+open-local-audit review --review-csv review.csv --summary --summary-json review-summary.json
 ```
 
-`review` updates the exact `leadKey` row in a local review CSV, or appends a new row when the key is not present. Use `--input` with a shortlist CSV or JSON file to update every row that has a `leadKey`; duplicate and blank keys are skipped. Use `--dry-run` with `--input` to preview added and updated counts without writing the review CSV. The command preserves existing columns, adds missing `leadKey`, `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns, and accepts `new`, `pending`, `in-review`, `qualified`, `contacted`, `rejected`, `not-fit`, `do-not-contact`, or `suppressed`. `--reviewed-at` defaults to the current time and is written as an ISO timestamp. The command only mutates the supplied local review CSV. It does not change lead source files, call APIs, send outreach, or sync to a CRM.
+`review` updates the exact `leadKey` row in a local review CSV, or appends a new row when the key is not present. Use `--input` with a shortlist CSV or JSON file to update every row that has a `leadKey`; duplicate and blank keys are skipped. Use `--dry-run` with `--input` to preview added and updated counts without writing the review CSV. Use `--summary` to print local queue counts by status, reviewed/unreviewed rows, invalid review dates, and oldest/newest review timestamps without updating the CSV. Use `--summary-json` to write the same summary for automation. The command preserves existing columns, adds missing `leadKey`, `reviewStatus`, `reviewReason`, and `lastReviewedAt` columns, and accepts `new`, `pending`, `in-review`, `qualified`, `contacted`, `rejected`, `not-fit`, `do-not-contact`, or `suppressed`. `--reviewed-at` defaults to the current time and is written as an ISO timestamp. The command only mutates the supplied local review CSV when summary mode is not used. It does not change lead source files, call APIs, send outreach, or sync to a CRM.
 
 Package an existing single-site report folder for local customer sharing:
 
@@ -329,6 +330,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Spreadsheet-ready local shortlist CSV output with `--format csv`.
 - Local review CSV status upserts with `review`.
 - Bulk local review CSV status upserts from shortlist CSV and JSON files.
+- Local review CSV queue summaries with `review --summary`.
 - Local report packaging with shareable summaries and copied report artifacts.
 - Industry profiles for generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, and auto-service audits.
 - Profile-specific findings for dental, beauty, restaurant, and contractor conversion/trust signals.
@@ -386,7 +388,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `shortlist --review-status` filters local report output only; it does not update source or review CSV files.
 - `shortlist --exclude-review-status` filters local report output only; it does not update source or review CSV files.
 - `shortlist --format csv` writes a local spreadsheet review file only; it does not import or sync records.
-- `review` mutates only the supplied local review CSV by exact `leadKey`; bulk `--input` mode reads shortlist CSV or JSON files for lead keys only. It does not update source lead files, call APIs, send outreach, or sync CRM records.
+- `review` mutates only the supplied local review CSV by exact `leadKey`; bulk `--input` mode reads shortlist CSV or JSON files for lead keys only. `review --summary` and `--summary-json` read local review state only. The command does not update source lead files, call APIs, send outreach, or sync CRM records.
 - `package-report` packages local files only; it does not upload reports, send outreach, or sync CRM records.
 - `--export-csv` is supported for batch audits and discovery exports.
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
