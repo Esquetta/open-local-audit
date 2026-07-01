@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.50.0 - 2026-07-01
+
+- Added `review --summary` for local review CSV queue counts by status, review coverage, invalid review dates, and oldest/newest review timestamps.
+- Added `review --summary-json <path>` for automation-friendly review queue summaries.
+- Kept review summaries read-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.49.0 - 2026-06-30
 
 - Removed the default `--no-sandbox` Chrome launch flag from Lighthouse audits.

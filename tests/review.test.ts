@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readLeadKeysFromReviewInput, upsertReviewCsv, upsertReviewCsvMany } from "../src/review.js";
+import { readLeadKeysFromReviewInput, summarizeReviewCsv, upsertReviewCsv, upsertReviewCsvMany } from "../src/review.js";
 
 describe("review CSV upsert", () => {
   it("updates an existing review row by lead key while preserving extra columns", () => {
@@ -131,5 +131,31 @@ describe("review CSV upsert", () => {
     expect(() => readLeadKeysFromReviewInput("companyName\nLead A\n")).toThrow(
       "review --input CSV requires a leadKey column"
     );
+  });
+
+  it("summarizes review queue status and review dates", () => {
+    const summary = summarizeReviewCsv(
+      [
+        "leadKey,reviewStatus,lastReviewedAt",
+        "a,pending,2026-06-20",
+        "b,contacted,2026-06-24T09:00:00Z",
+        "c,,",
+        "d,maybe,not-a-date"
+      ].join("\n")
+    );
+
+    expect(summary).toMatchObject({
+      totalRows: 4,
+      reviewedRows: 3,
+      unreviewedRows: 1,
+      invalidReviewedAtRows: 1,
+      oldestReviewedAt: "2026-06-20T00:00:00.000Z",
+      newestReviewedAt: "2026-06-24T09:00:00.000Z"
+    });
+    expect(summary.statusCounts).toMatchObject({
+      pending: 1,
+      contacted: 1,
+      unknown: 2
+    });
   });
 });

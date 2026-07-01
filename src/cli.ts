@@ -32,7 +32,13 @@ import {
 } from "./export-validation.js";
 import { writeReportOutputs } from "./output.js";
 import { packageReport } from "./report-pack.js";
-import { readLeadKeysFromReviewInput, upsertReviewCsvFile, upsertReviewCsvFileMany } from "./review.js";
+import {
+  readLeadKeysFromReviewInput,
+  summarizeReviewCsvFile,
+  upsertReviewCsvFile,
+  upsertReviewCsvFileMany,
+  type ReviewSummary
+} from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import {
@@ -488,6 +494,21 @@ const shortlistProgram = program
     }
   });
 
+function renderReviewSummary(summary: ReviewSummary): string {
+  const nonZeroStatuses = Object.entries(summary.statusCounts).filter(([, count]) => count > 0);
+  return [
+    `Rows: ${summary.totalRows}`,
+    `Reviewed: ${summary.reviewedRows}`,
+    `Unreviewed: ${summary.unreviewedRows}`,
+    `Invalid review dates: ${summary.invalidReviewedAtRows}`,
+    `Oldest reviewed: ${summary.oldestReviewedAt ?? "N/A"}`,
+    `Newest reviewed: ${summary.newestReviewedAt ?? "N/A"}`,
+    "Status counts:",
+    ...(nonZeroStatuses.length > 0 ? nonZeroStatuses.map(([status, count]) => `- ${status}: ${count}`) : ["- none: 0"]),
+    ""
+  ].join("\n");
+}
+
 const reviewProgram = program
   .command("review")
   .description("Update local lead review state in a review CSV.")
@@ -497,6 +518,8 @@ const reviewProgram = program
   .option("--status <status>", "review status to write")
   .option("--reason <text>", "operator review reason")
   .option("--reviewed-at <timestamp>", "review timestamp; defaults to the current time")
+  .option("--summary", "print review CSV queue summary without updating rows", false)
+  .option("--summary-json <path>", "write review CSV queue summary JSON")
   .option("--dry-run", "show the bulk review update without writing the review CSV", false)
   .action(async () => {
     try {
@@ -507,11 +530,24 @@ const reviewProgram = program
         status?: string;
         reason?: string;
         reviewedAt?: string;
+        summary?: boolean;
+        summaryJson?: string;
         dryRun?: boolean;
       };
 
       if (!options.reviewCsv) {
         throw new Error("--review-csv is required for review");
+      }
+
+      if (options.summary || options.summaryJson) {
+        const summary = await summarizeReviewCsvFile(options.reviewCsv);
+        process.stdout.write(renderReviewSummary(summary));
+        if (options.summaryJson) {
+          await mkdir(dirname(options.summaryJson), { recursive: true });
+          await writeFile(options.summaryJson, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+          process.stdout.write(`Summary JSON: ${options.summaryJson}\n`);
+        }
+        return;
       }
 
       if (!options.status) {

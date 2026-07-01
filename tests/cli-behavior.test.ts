@@ -585,6 +585,57 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("prints and writes local review CSV summaries from the CLI", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-review-summary-"));
+    try {
+      const reviewPath = join(tmp, "review.csv");
+      const summaryPath = join(tmp, "summary.json");
+      writeFileSync(
+        reviewPath,
+        [
+          "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
+          "url:https://lead.test,Lead Test,pending,Needs review,2026-06-20",
+          "url:https://done.test,Done Lead,contacted,Email sent,2026-06-24T09:00:00Z",
+          "url:https://fresh.test,Fresh Lead,new,,"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "review",
+          "--review-csv",
+          reviewPath,
+          "--summary",
+          "--summary-json",
+          summaryPath
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Rows: 3");
+      expect(result.stdout).toContain("- pending: 1");
+      expect(result.stdout).toContain(`Summary JSON: ${summaryPath}`);
+      expect(JSON.parse(readFileSync(summaryPath, "utf8"))).toMatchObject({
+        totalRows: 3,
+        reviewedRows: 2,
+        unreviewedRows: 1,
+        newestReviewedAt: "2026-06-24T09:00:00.000Z"
+      });
+      expect(readFileSync(reviewPath, "utf8")).toContain("url:https://fresh.test,Fresh Lead,new,,");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("rejects unsupported review statuses from the CLI", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-review-invalid-"));
     try {

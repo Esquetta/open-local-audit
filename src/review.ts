@@ -49,6 +49,16 @@ export interface ReviewBulkUpsertResult {
   lastReviewedAt: string;
 }
 
+export interface ReviewSummary {
+  totalRows: number;
+  reviewedRows: number;
+  unreviewedRows: number;
+  invalidReviewedAtRows: number;
+  oldestReviewedAt?: string;
+  newestReviewedAt?: string;
+  statusCounts: Record<ReviewStatus | "unknown", number>;
+}
+
 const requiredHeaders = ["leadKey", "reviewStatus", "reviewReason", "lastReviewedAt"];
 
 function normalizeStatus(value: string): ReviewStatus | undefined {
@@ -118,6 +128,11 @@ function normalizeRows(rows: string[][], headers: string[]): string[][] {
 function setCell(row: string[], headers: string[], header: string, value: string): void {
   const index = headers.indexOf(header);
   row[index] = value;
+}
+
+function cell(row: string[], headers: string[], header: string): string {
+  const index = headers.indexOf(header);
+  return index < 0 ? "" : (row[index] ?? "").trim();
 }
 
 function renderCsv(headers: string[], rows: string[][]): string {
@@ -253,6 +268,57 @@ export function readLeadKeysFromReviewInput(content: string): string[] {
   return lines.slice(1).map((line) => parseCsvLine(line)[leadKeyIndex] ?? "");
 }
 
+export function summarizeReviewCsv(content: string): ReviewSummary {
+  const { headers, rows } = readRows(content);
+  const statusCounts = Object.fromEntries([...reviewStatuses, "unknown"].map((status) => [status, 0])) as Record<
+    ReviewStatus | "unknown",
+    number
+  >;
+  let unreviewedRows = 0;
+  let invalidReviewedAtRows = 0;
+  let oldestReviewedAt: string | undefined;
+  let newestReviewedAt: string | undefined;
+  let oldestTime = Number.POSITIVE_INFINITY;
+  let newestTime = Number.NEGATIVE_INFINITY;
+
+  for (const row of rows) {
+    const status = normalizeStatus(cell(row, headers, "reviewStatus")) ?? "unknown";
+    statusCounts[status] += 1;
+
+    const reviewedAt = cell(row, headers, "lastReviewedAt");
+    if (!reviewedAt) {
+      unreviewedRows += 1;
+      continue;
+    }
+
+    const time = Date.parse(reviewedAt);
+    if (!Number.isFinite(time)) {
+      invalidReviewedAtRows += 1;
+      continue;
+    }
+
+    const normalized = new Date(time).toISOString();
+    if (time < oldestTime) {
+      oldestTime = time;
+      oldestReviewedAt = normalized;
+    }
+    if (time > newestTime) {
+      newestTime = time;
+      newestReviewedAt = normalized;
+    }
+  }
+
+  return {
+    totalRows: rows.length,
+    reviewedRows: rows.length - unreviewedRows,
+    unreviewedRows,
+    invalidReviewedAtRows,
+    oldestReviewedAt,
+    newestReviewedAt,
+    statusCounts
+  };
+}
+
 async function readReviewCsvFile(path: string): Promise<string> {
   try {
     return await readFile(path, "utf8");
@@ -275,6 +341,10 @@ async function writeReviewCsvFile(path: string, content: string): Promise<void> 
     await rm(tempPath, { force: true });
     throw error;
   }
+}
+
+export async function summarizeReviewCsvFile(path: string): Promise<ReviewSummary> {
+  return summarizeReviewCsv(await readReviewCsvFile(path));
 }
 
 export async function upsertReviewCsvFile(path: string, input: ReviewUpsertInput): Promise<ReviewUpsertResult> {
