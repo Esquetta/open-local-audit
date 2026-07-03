@@ -54,12 +54,15 @@ export interface ReviewSummary {
   reviewedRows: number;
   unreviewedRows: number;
   invalidReviewedAtRows: number;
+  staleRows: number;
+  staleBefore?: string;
   oldestReviewedAt?: string;
   newestReviewedAt?: string;
   statusCounts: Record<ReviewStatus | "unknown", number>;
 }
 
 const requiredHeaders = ["leadKey", "reviewStatus", "reviewReason", "lastReviewedAt"];
+const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function normalizeStatus(value: string): ReviewStatus | undefined {
   const normalized = value.trim().toLowerCase();
@@ -87,6 +90,29 @@ function isoTimestamp(value: string | undefined, now: Date): string {
   }
 
   return new Date(parsed).toISOString();
+}
+
+function parseCalendarDate(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!dateOnlyPattern.test(trimmed)) {
+    return undefined;
+  }
+
+  const parsed = Date.parse(`${trimmed}T00:00:00.000Z`);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === trimmed ? parsed : undefined;
+}
+
+function staleBeforeThreshold(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = parseCalendarDate(value);
+  if (parsed === undefined) {
+    throw new Error("review --stale-before must be a valid date in YYYY-MM-DD format");
+  }
+
+  return parsed;
 }
 
 function readRows(content: string): { headers: string[]; rows: string[][] } {
@@ -268,14 +294,17 @@ export function readLeadKeysFromReviewInput(content: string): string[] {
   return lines.slice(1).map((line) => parseCsvLine(line)[leadKeyIndex] ?? "");
 }
 
-export function summarizeReviewCsv(content: string): ReviewSummary {
+export function summarizeReviewCsv(content: string, options: { staleBefore?: string } = {}): ReviewSummary {
   const { headers, rows } = readRows(content);
+  const staleBefore = staleBeforeThreshold(options.staleBefore);
+  const staleBeforeDate = options.staleBefore?.trim();
   const statusCounts = Object.fromEntries([...reviewStatuses, "unknown"].map((status) => [status, 0])) as Record<
     ReviewStatus | "unknown",
     number
   >;
   let unreviewedRows = 0;
   let invalidReviewedAtRows = 0;
+  let staleRows = 0;
   let oldestReviewedAt: string | undefined;
   let newestReviewedAt: string | undefined;
   let oldestTime = Number.POSITIVE_INFINITY;
@@ -297,6 +326,10 @@ export function summarizeReviewCsv(content: string): ReviewSummary {
       continue;
     }
 
+    if (staleBefore !== undefined && time < staleBefore) {
+      staleRows += 1;
+    }
+
     const normalized = new Date(time).toISOString();
     if (time < oldestTime) {
       oldestTime = time;
@@ -313,6 +346,8 @@ export function summarizeReviewCsv(content: string): ReviewSummary {
     reviewedRows: rows.length - unreviewedRows,
     unreviewedRows,
     invalidReviewedAtRows,
+    staleRows,
+    staleBefore: staleBeforeDate,
     oldestReviewedAt,
     newestReviewedAt,
     statusCounts
@@ -343,8 +378,8 @@ async function writeReviewCsvFile(path: string, content: string): Promise<void> 
   }
 }
 
-export async function summarizeReviewCsvFile(path: string): Promise<ReviewSummary> {
-  return summarizeReviewCsv(await readReviewCsvFile(path));
+export async function summarizeReviewCsvFile(path: string, options: { staleBefore?: string } = {}): Promise<ReviewSummary> {
+  return summarizeReviewCsv(await readReviewCsvFile(path), options);
 }
 
 export async function upsertReviewCsvFile(path: string, input: ReviewUpsertInput): Promise<ReviewUpsertResult> {
