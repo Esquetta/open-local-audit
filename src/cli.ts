@@ -501,6 +501,7 @@ function renderReviewSummary(summary: ReviewSummary): string {
     `Reviewed: ${summary.reviewedRows}`,
     `Unreviewed: ${summary.unreviewedRows}`,
     `Invalid review dates: ${summary.invalidReviewedAtRows}`,
+    ...(summary.staleBefore ? [`Stale before ${summary.staleBefore}: ${summary.staleRows}`] : []),
     `Oldest reviewed: ${summary.oldestReviewedAt ?? "N/A"}`,
     `Newest reviewed: ${summary.newestReviewedAt ?? "N/A"}`,
     "Status counts:",
@@ -520,6 +521,7 @@ const reviewProgram = program
   .option("--reviewed-at <timestamp>", "review timestamp; defaults to the current time")
   .option("--summary", "print review CSV queue summary without updating rows", false)
   .option("--summary-json <path>", "write review CSV queue summary JSON")
+  .option("--stale-before <date>", "count review rows older than a YYYY-MM-DD date in summary output")
   .option("--dry-run", "show the bulk review update without writing the review CSV", false)
   .action(async () => {
     try {
@@ -532,6 +534,7 @@ const reviewProgram = program
         reviewedAt?: string;
         summary?: boolean;
         summaryJson?: string;
+        staleBefore?: string;
         dryRun?: boolean;
       };
 
@@ -539,8 +542,12 @@ const reviewProgram = program
         throw new Error("--review-csv is required for review");
       }
 
+      if (options.staleBefore && !options.summary && !options.summaryJson) {
+        throw new Error("review --stale-before is only supported with --summary or --summary-json");
+      }
+
       if (options.summary || options.summaryJson) {
-        const summary = await summarizeReviewCsvFile(options.reviewCsv);
+        const summary = await summarizeReviewCsvFile(options.reviewCsv, { staleBefore: options.staleBefore });
         process.stdout.write(renderReviewSummary(summary));
         if (options.summaryJson) {
           await mkdir(dirname(options.summaryJson), { recursive: true });

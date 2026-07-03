@@ -611,6 +611,8 @@ describe("CLI behavior helpers", () => {
           "--review-csv",
           reviewPath,
           "--summary",
+          "--stale-before",
+          "2026-06-22",
           "--summary-json",
           summaryPath
         ],
@@ -622,12 +624,15 @@ describe("CLI behavior helpers", () => {
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("Rows: 3");
+      expect(result.stdout).toContain("Stale before 2026-06-22: 1");
       expect(result.stdout).toContain("- pending: 1");
       expect(result.stdout).toContain(`Summary JSON: ${summaryPath}`);
       expect(JSON.parse(readFileSync(summaryPath, "utf8"))).toMatchObject({
         totalRows: 3,
         reviewedRows: 2,
         unreviewedRows: 1,
+        staleRows: 1,
+        staleBefore: "2026-06-22",
         newestReviewedAt: "2026-06-24T09:00:00.000Z"
       });
       expect(readFileSync(reviewPath, "utf8")).toContain("url:https://fresh.test,Fresh Lead,new,,");

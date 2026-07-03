@@ -133,7 +133,7 @@ describe("review CSV upsert", () => {
     );
   });
 
-  it("summarizes review queue status and review dates", () => {
+  it("summarizes review queue status, stale rows, and review dates", () => {
     const summary = summarizeReviewCsv(
       [
         "leadKey,reviewStatus,lastReviewedAt",
@@ -141,7 +141,8 @@ describe("review CSV upsert", () => {
         "b,contacted,2026-06-24T09:00:00Z",
         "c,,",
         "d,maybe,not-a-date"
-      ].join("\n")
+      ].join("\n"),
+      { staleBefore: "2026-06-22" }
     );
 
     expect(summary).toMatchObject({
@@ -149,6 +150,8 @@ describe("review CSV upsert", () => {
       reviewedRows: 3,
       unreviewedRows: 1,
       invalidReviewedAtRows: 1,
+      staleRows: 1,
+      staleBefore: "2026-06-22",
       oldestReviewedAt: "2026-06-20T00:00:00.000Z",
       newestReviewedAt: "2026-06-24T09:00:00.000Z"
     });
@@ -157,5 +160,11 @@ describe("review CSV upsert", () => {
       contacted: 1,
       unknown: 2
     });
+  });
+
+  it("rejects invalid stale-before summary dates", () => {
+    expect(() => summarizeReviewCsv("leadKey\nlead-a\n", { staleBefore: "2026-02-30" })).toThrow(
+      "review --stale-before must be a valid date in YYYY-MM-DD format"
+    );
   });
 });
