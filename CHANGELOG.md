@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.51.0 - 2026-07-03
+
+- Added `review --stale-before YYYY-MM-DD` for read-only stale review counts in local review CSV summaries.
+- Included stale review counts in `review --summary-json` output.
+- Kept stale review summary checks local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.50.0 - 2026-07-01
 
 - Added `review --summary` for local review CSV queue counts by status, review coverage, invalid review dates, and oldest/newest review timestamps.
