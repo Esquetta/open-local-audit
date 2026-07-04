@@ -18,8 +18,9 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "fresh-install-check": "node scripts/fresh-install-check.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "release-check": "npm run lint && npm test && npm run build && npm audit && npm pack --dry-run",
+    "release-check": "npm run lint && npm test && npm run build && npm audit && npm pack --dry-run && npm run fresh-install-check",
     "test": "vitest run",
     "start": "tsx src/cli.ts"
   },
