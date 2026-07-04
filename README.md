@@ -48,6 +48,8 @@ npm run build
 npm run release-check
 ```
 
+`release-check` also packs the package, installs it into a temporary consumer project, verifies the published package version can be resolved, and runs `npm audit --omit=dev` in that consumer project.
+
 Run the CLI locally:
 
 ```bash
@@ -406,4 +408,4 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 
 ## Releases
 
-Open Local Audit is published under the MIT license on GitHub and npm. Release history is available in [CHANGELOG.md](./CHANGELOG.md) and GitHub Releases. Every release runs lint, tests, build, audit, and package-content checks through GitHub Actions.
+Open Local Audit is published under the MIT license on GitHub and npm. Release history is available in [CHANGELOG.md](./CHANGELOG.md) and GitHub Releases. Every release runs lint, tests, build, audit, package-content checks, and a fresh consumer install audit through GitHub Actions.

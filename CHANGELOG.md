@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.52.0 - 2026-07-04
+
+- Added a fresh consumer install audit to `npm run release-check`.
+- Verified release tarballs install as the current package version before publish.
+- Kept the release gate local and dependency-free by using npm and Node standard library only.
+
 ## v0.51.0 - 2026-07-03
 
 - Added `review --stale-before YYYY-MM-DD` for read-only stale review counts in local review CSV summaries.

@@ -1,6 +1,6 @@
 {
   "name": "open-local-audit",
-  "version": "0.51.0",
+  "version": "0.52.0",
   "description": "Open-source website and local presence auditor for small businesses.",
   "license": "MIT",
   "type": "module",
@@ -18,8 +18,9 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "fresh-install-check": "node scripts/fresh-install-check.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "release-check": "npm run lint && npm test && npm run build && npm audit && npm pack --dry-run",
+    "release-check": "npm run lint && npm test && npm run build && npm audit && npm pack --dry-run && npm run fresh-install-check",
     "test": "vitest run",
     "start": "tsx src/cli.ts"
   },
