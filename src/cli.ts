@@ -385,7 +385,7 @@ const shortlistProgram = program
   .option("--missing-contact", "include only leads without contact confidence")
   .option("--require-report", "include only leads with a report path")
   .option("--missing-report", "include only leads without a report path")
-  .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, or last-reviewed-asc", "opportunity-desc")
+  .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, last-reviewed-asc, contact-confidence-desc, priority-desc, or source-asc", "opportunity-desc")
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {

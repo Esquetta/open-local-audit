@@ -561,6 +561,31 @@ describe("lead shortlist", () => {
     }
   });
 
+  it("sorts leads by contact confidence, priority, and source", () => {
+    const content = [
+      "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,source",
+      "Low Conf,https://low.test,medium,80,90,Missing CTA,Low,manual-csv",
+      "High Conf,https://high.test,low,80,88,Missing CTA,High,google-places",
+      "Medium Conf,https://medium.test,high,80,86,Missing CTA,Medium,batch"
+    ].join("\n");
+
+    expect(buildLeadShortlist(content, { sort: "contact-confidence-desc" }).leads.map((lead) => lead.companyName)).toEqual([
+      "High Conf",
+      "Medium Conf",
+      "Low Conf"
+    ]);
+    expect(buildLeadShortlist(content, { sort: "priority-desc" }).leads.map((lead) => lead.companyName)).toEqual([
+      "Medium Conf",
+      "Low Conf",
+      "High Conf"
+    ]);
+    expect(buildLeadShortlist(content, { sort: "source-asc" }).leads.map((lead) => lead.companyName)).toEqual([
+      "Medium Conf",
+      "High Conf",
+      "Low Conf"
+    ]);
+  });
+
   it("sorts leads by score, company, or last-reviewed date", () => {
     const content = [
       "companyName,website,priority,score,opportunityScore,topFinding,contactConfidence,lastReviewedAt",
@@ -589,7 +614,7 @@ describe("lead shortlist", () => {
   it("rejects unsupported shortlist sort modes", () => {
     expect(() =>
       buildLeadShortlist("companyName,website\nLead A,https://a.test\n", { sort: "unknown" as never })
-    ).toThrow("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
+    ).toThrow("shortlist --sort must be opportunity-desc, score-desc, company-asc, last-reviewed-asc, contact-confidence-desc, priority-desc, or source-asc");
   });
 
   it("requires a header and at least one lead row", () => {

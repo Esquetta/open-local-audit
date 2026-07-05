@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.53.0 - 2026-07-05
+
+- Added `contact-confidence-desc`, `priority-desc`, and `source-asc` sort modes to `shortlist --sort`.
+- Kept shortlist sorting local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.52.0 - 2026-07-04
 
 - Added a fresh consumer install audit to `npm run release-check`.

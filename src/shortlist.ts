@@ -1,7 +1,7 @@
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 
 export type ShortlistFormat = "markdown" | "json" | "csv";
-export type ShortlistSort = "opportunity-desc" | "score-desc" | "company-asc" | "last-reviewed-asc";
+export type ShortlistSort = "opportunity-desc" | "score-desc" | "company-asc" | "last-reviewed-asc" | "contact-confidence-desc" | "priority-desc" | "source-asc";
 
 export interface ShortlistOptions {
   top?: number;
@@ -90,7 +90,7 @@ const confidenceRank: Record<string, number> = {
   None: 0
 };
 
-const shortlistSortModes: ShortlistSort[] = ["opportunity-desc", "score-desc", "company-asc", "last-reviewed-asc"];
+const shortlistSortModes: ShortlistSort[] = ["opportunity-desc", "score-desc", "company-asc", "last-reviewed-asc", "contact-confidence-desc", "priority-desc", "source-asc"];
 const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const explicitZoneTimestampPattern = /^(\d{4}-\d{2}-\d{2})T.+(?:[Zz]|[+-]\d{2}:\d{2})$/;
 
@@ -389,6 +389,22 @@ function sortByMode(mode: ShortlistSort): (left: Omit<ShortlistLead, "rank">, ri
     return (left, right) => reviewedAtRank(left.lastReviewedAt) - reviewedAtRank(right.lastReviewedAt) || sortLeads(left, right);
   }
 
+  if (mode === "contact-confidence-desc") {
+    return (left, right) =>
+      (confidenceRank[right.contactConfidence] ?? 0) - (confidenceRank[left.contactConfidence] ?? 0) ||
+      sortLeads(left, right);
+  }
+
+  if (mode === "priority-desc") {
+    return (left, right) =>
+      (priorityRank[right.priority.toLowerCase()] ?? 0) - (priorityRank[left.priority.toLowerCase()] ?? 0) ||
+      sortLeads(left, right);
+  }
+
+  if (mode === "source-asc") {
+    return (left, right) => left.source.localeCompare(right.source) || sortLeads(left, right);
+  }
+
   return sortLeads;
 }
 
@@ -423,7 +439,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
 
   const sort = options.sort ?? "opportunity-desc";
   if (!shortlistSortModes.includes(sort)) {
-    throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
+    throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, last-reviewed-asc, contact-confidence-desc, priority-desc, or source-asc");
   }
 
   const reviewedBefore = reviewedBeforeThreshold(options.reviewedBefore);

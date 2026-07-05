@@ -1858,7 +1858,7 @@ describe("CLI behavior helpers", () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("shortlist --sort must be opportunity-desc, score-desc, company-asc, or last-reviewed-asc");
+      expect(result.stderr).toContain("shortlist --sort must be opportunity-desc, score-desc, company-asc, last-reviewed-asc, contact-confidence-desc, priority-desc, or source-asc");
     } finally {
       removeTempDir(tmp);
     }
