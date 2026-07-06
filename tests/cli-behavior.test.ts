@@ -632,6 +632,7 @@ describe("CLI behavior helpers", () => {
         reviewedRows: 2,
         unreviewedRows: 1,
         staleRows: 1,
+        staleLeadKeys: ["url:https://lead.test"],
         staleBefore: "2026-06-22",
         newestReviewedAt: "2026-06-24T09:00:00.000Z"
       });

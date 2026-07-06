@@ -151,6 +151,7 @@ describe("review CSV upsert", () => {
       unreviewedRows: 1,
       invalidReviewedAtRows: 1,
       staleRows: 1,
+      staleLeadKeys: ["a"],
       staleBefore: "2026-06-22",
       oldestReviewedAt: "2026-06-20T00:00:00.000Z",
       newestReviewedAt: "2026-06-24T09:00:00.000Z"
