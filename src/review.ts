@@ -55,6 +55,7 @@ export interface ReviewSummary {
   unreviewedRows: number;
   invalidReviewedAtRows: number;
   staleRows: number;
+  staleLeadKeys: string[];
   staleBefore?: string;
   oldestReviewedAt?: string;
   newestReviewedAt?: string;
@@ -305,6 +306,7 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
   let unreviewedRows = 0;
   let invalidReviewedAtRows = 0;
   let staleRows = 0;
+  const staleLeadKeys: string[] = [];
   let oldestReviewedAt: string | undefined;
   let newestReviewedAt: string | undefined;
   let oldestTime = Number.POSITIVE_INFINITY;
@@ -328,6 +330,10 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
 
     if (staleBefore !== undefined && time < staleBefore) {
       staleRows += 1;
+      const leadKey = cell(row, headers, "leadKey");
+      if (leadKey) {
+        staleLeadKeys.push(leadKey);
+      }
     }
 
     const normalized = new Date(time).toISOString();
@@ -347,6 +353,7 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
     unreviewedRows,
     invalidReviewedAtRows,
     staleRows,
+    staleLeadKeys,
     staleBefore: staleBeforeDate,
     oldestReviewedAt,
     newestReviewedAt,
