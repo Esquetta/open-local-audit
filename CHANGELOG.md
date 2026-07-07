@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.55.0 - 2026-07-07
+
+- Added `invalidReviewedAtLeadKeys` to `review --summary-json` output when invalid review date rows have lead keys.
+- Kept invalid review date summaries read-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.54.0 - 2026-07-06
 
 - Added `staleLeadKeys` to `review --summary-json` output when stale review rows have lead keys.
