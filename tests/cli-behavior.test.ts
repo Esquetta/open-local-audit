@@ -596,7 +596,8 @@ describe("CLI behavior helpers", () => {
           "leadKey,label,reviewStatus,reviewReason,lastReviewedAt",
           "url:https://lead.test,Lead Test,pending,Needs review,2026-06-20",
           "url:https://done.test,Done Lead,contacted,Email sent,2026-06-24T09:00:00Z",
-          "url:https://fresh.test,Fresh Lead,new,,"
+          "url:https://fresh.test,Fresh Lead,new,,",
+          "url:https://bad-date.test,Bad Date,qualified,Needs repair,not-a-date"
         ].join("\n"),
         "utf8"
       );
@@ -623,14 +624,16 @@ describe("CLI behavior helpers", () => {
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("Rows: 3");
+      expect(result.stdout).toContain("Rows: 4");
       expect(result.stdout).toContain("Stale before 2026-06-22: 1");
       expect(result.stdout).toContain("- pending: 1");
       expect(result.stdout).toContain(`Summary JSON: ${summaryPath}`);
       expect(JSON.parse(readFileSync(summaryPath, "utf8"))).toMatchObject({
-        totalRows: 3,
-        reviewedRows: 2,
+        totalRows: 4,
+        reviewedRows: 3,
         unreviewedRows: 1,
+        invalidReviewedAtRows: 1,
+        invalidReviewedAtLeadKeys: ["url:https://bad-date.test"],
         staleRows: 1,
         staleLeadKeys: ["url:https://lead.test"],
         staleBefore: "2026-06-22",
