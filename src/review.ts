@@ -53,6 +53,7 @@ export interface ReviewSummary {
   totalRows: number;
   reviewedRows: number;
   unreviewedRows: number;
+  unreviewedLeadKeys: string[];
   invalidReviewedAtRows: number;
   invalidReviewedAtLeadKeys: string[];
   staleRows: number;
@@ -305,6 +306,7 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
     number
   >;
   let unreviewedRows = 0;
+  const unreviewedLeadKeys: string[] = [];
   let invalidReviewedAtRows = 0;
   const invalidReviewedAtLeadKeys: string[] = [];
   let staleRows = 0;
@@ -321,6 +323,10 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
     const reviewedAt = cell(row, headers, "lastReviewedAt");
     if (!reviewedAt) {
       unreviewedRows += 1;
+      const leadKey = cell(row, headers, "leadKey");
+      if (leadKey) {
+        unreviewedLeadKeys.push(leadKey);
+      }
       continue;
     }
 
@@ -357,6 +363,7 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
     totalRows: rows.length,
     reviewedRows: rows.length - unreviewedRows,
     unreviewedRows,
+    unreviewedLeadKeys,
     invalidReviewedAtRows,
     invalidReviewedAtLeadKeys,
     staleRows,
