@@ -149,6 +149,7 @@ describe("review CSV upsert", () => {
       totalRows: 4,
       reviewedRows: 3,
       unreviewedRows: 1,
+      unreviewedLeadKeys: ["c"],
       invalidReviewedAtRows: 1,
       invalidReviewedAtLeadKeys: ["d"],
       staleRows: 1,
