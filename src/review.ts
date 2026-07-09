@@ -54,6 +54,7 @@ export interface ReviewSummary {
   reviewedRows: number;
   unreviewedRows: number;
   unreviewedLeadKeys: string[];
+  actionableLeadKeys: string[];
   invalidReviewedAtRows: number;
   invalidReviewedAtLeadKeys: string[];
   staleRows: number;
@@ -364,6 +365,7 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
     reviewedRows: rows.length - unreviewedRows,
     unreviewedRows,
     unreviewedLeadKeys,
+    actionableLeadKeys: [...new Set([...unreviewedLeadKeys, ...invalidReviewedAtLeadKeys, ...staleLeadKeys])],
     invalidReviewedAtRows,
     invalidReviewedAtLeadKeys,
     staleRows,

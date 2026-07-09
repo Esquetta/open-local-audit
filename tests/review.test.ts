@@ -140,26 +140,28 @@ describe("review CSV upsert", () => {
         "a,pending,2026-06-20",
         "b,contacted,2026-06-24T09:00:00Z",
         "c,,",
+        "c,pending,2026-06-20",
         "d,maybe,not-a-date"
       ].join("\n"),
       { staleBefore: "2026-06-22" }
     );
 
     expect(summary).toMatchObject({
-      totalRows: 4,
-      reviewedRows: 3,
+      totalRows: 5,
+      reviewedRows: 4,
       unreviewedRows: 1,
       unreviewedLeadKeys: ["c"],
+      actionableLeadKeys: ["c", "d", "a"],
       invalidReviewedAtRows: 1,
       invalidReviewedAtLeadKeys: ["d"],
-      staleRows: 1,
-      staleLeadKeys: ["a"],
+      staleRows: 2,
+      staleLeadKeys: ["a", "c"],
       staleBefore: "2026-06-22",
       oldestReviewedAt: "2026-06-20T00:00:00.000Z",
       newestReviewedAt: "2026-06-24T09:00:00.000Z"
     });
     expect(summary.statusCounts).toMatchObject({
-      pending: 1,
+      pending: 2,
       contacted: 1,
       unknown: 2
     });
