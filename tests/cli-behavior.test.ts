@@ -633,6 +633,7 @@ describe("CLI behavior helpers", () => {
         reviewedRows: 3,
         unreviewedRows: 1,
         unreviewedLeadKeys: ["url:https://fresh.test"],
+        actionableLeadKeys: ["url:https://fresh.test", "url:https://bad-date.test", "url:https://lead.test"],
         invalidReviewedAtRows: 1,
         invalidReviewedAtLeadKeys: ["url:https://bad-date.test"],
         staleRows: 1,
