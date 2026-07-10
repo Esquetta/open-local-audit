@@ -16,6 +16,7 @@ export const reviewStatuses = [
 
 export type ReviewStatus = (typeof reviewStatuses)[number];
 export type ReviewUpsertAction = "added" | "updated";
+type ReviewActionReason = "unreviewed" | "invalid-reviewed-at" | "stale";
 
 export interface ReviewUpsertInput {
   leadKey: string;
@@ -55,6 +56,7 @@ export interface ReviewSummary {
   unreviewedRows: number;
   unreviewedLeadKeys: string[];
   actionableLeadKeys: string[];
+  actionableLeads: Array<{ leadKey: string; reasons: ReviewActionReason[] }>;
   invalidReviewedAtRows: number;
   invalidReviewedAtLeadKeys: string[];
   staleRows: number;
@@ -360,12 +362,29 @@ export function summarizeReviewCsv(content: string, options: { staleBefore?: str
     }
   }
 
+  const actionableLeadReasons = new Map<string, ReviewActionReason[]>();
+  for (const [reason, leadKeys] of [
+    ["unreviewed", unreviewedLeadKeys],
+    ["invalid-reviewed-at", invalidReviewedAtLeadKeys],
+    ["stale", staleLeadKeys]
+  ] as const) {
+    for (const leadKey of leadKeys) {
+      const reasons = actionableLeadReasons.get(leadKey) ?? [];
+      if (!reasons.includes(reason)) {
+        reasons.push(reason);
+      }
+      actionableLeadReasons.set(leadKey, reasons);
+    }
+  }
+  const actionableLeads = [...actionableLeadReasons].map(([leadKey, reasons]) => ({ leadKey, reasons }));
+
   return {
     totalRows: rows.length,
     reviewedRows: rows.length - unreviewedRows,
     unreviewedRows,
     unreviewedLeadKeys,
-    actionableLeadKeys: [...new Set([...unreviewedLeadKeys, ...invalidReviewedAtLeadKeys, ...staleLeadKeys])],
+    actionableLeadKeys: actionableLeads.map(({ leadKey }) => leadKey),
+    actionableLeads,
     invalidReviewedAtRows,
     invalidReviewedAtLeadKeys,
     staleRows,

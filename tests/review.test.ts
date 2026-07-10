@@ -152,6 +152,11 @@ describe("review CSV upsert", () => {
       unreviewedRows: 1,
       unreviewedLeadKeys: ["c"],
       actionableLeadKeys: ["c", "d", "a"],
+      actionableLeads: [
+        { leadKey: "c", reasons: ["unreviewed", "stale"] },
+        { leadKey: "d", reasons: ["invalid-reviewed-at"] },
+        { leadKey: "a", reasons: ["stale"] }
+      ],
       invalidReviewedAtRows: 1,
       invalidReviewedAtLeadKeys: ["d"],
       staleRows: 2,
