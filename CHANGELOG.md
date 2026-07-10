@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.58.0 - 2026-07-10
+
+- Added `actionableLeads` to `review --summary-json` output with deduplicated lead keys and their `unreviewed`, `invalid-reviewed-at`, or `stale` reasons.
+- Preserved `actionableLeadKeys` for existing consumers and kept review summaries read-only.
+
 ## v0.57.0 - 2026-07-09
 
 - Added `actionableLeadKeys` to `review --summary-json` output as a deduplicated unreviewed, invalid-date, and stale review queue.
