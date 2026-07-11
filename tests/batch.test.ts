@@ -993,6 +993,45 @@ describe("batch reports", () => {
     }
   });
 
+  it("filters the aggregate batch index by source, audit status, and website presence", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      const result = await runBatchReports(
+        [
+          { url: "https://src-a.test", source: "manual-csv" },
+          { url: "https://src-b.test", source: "google-places" },
+          { url: "https://fail.test", source: "manual-csv" }
+        ],
+        {
+          format: "json",
+          outDir: dir,
+          pretty: true,
+          index: {
+            source: "manual-csv",
+            auditStatus: "success",
+            hasWebsite: "yes"
+          },
+          audit: async (url) => {
+            if (url === "https://fail.test") {
+              throw new Error("audit failed");
+            }
+            return scoredReportFor(url, 85, ["low"]);
+          }
+        }
+      );
+
+      const index = JSON.parse(await readFile(join(dir, "open-local-audit-batch-index.json"), "utf8"));
+      expect(index.summary).toMatchObject({
+        total: 1,
+        succeeded: 1,
+        failed: 0
+      });
+      expect(index.entries.map((entry: { url: string }) => entry.url)).toEqual(["https://src-a.test"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("copies per-site visual evidence metadata into all batch report formats", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
     try {

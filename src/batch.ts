@@ -11,6 +11,7 @@ export interface BatchInputEntry {
   label?: string;
   segment?: string;
   profile?: AuditProfile;
+  source?: string;
 }
 
 export interface BatchReportOptions {
@@ -41,6 +42,9 @@ export interface BatchIndexOptions {
   minScore?: number;
   top?: number;
   sort?: BatchIndexSort;
+  source?: string;
+  auditStatus?: string;
+  hasWebsite?: string;
 }
 
 export interface SuccessfulBatchReportResult extends BatchInputEntry {
@@ -153,6 +157,7 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
   const labelIndex = headers.indexOf("label");
   const segmentIndex = headers.indexOf("segment");
   const profileIndex = headers.indexOf("profile");
+  const sourceIndex = headers.indexOf("source");
 
   if (urlIndex < 0) {
     throw new Error("CSV batch input requires a url column");
@@ -174,6 +179,10 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
 
     if (profileIndex >= 0 && cells[profileIndex]) {
       entry.profile = auditProfileSchema.parse(cells[profileIndex]);
+    }
+
+    if (sourceIndex >= 0 && cells[sourceIndex]) {
+      entry.source = cells[sourceIndex];
     }
 
     return entry;
@@ -346,6 +355,21 @@ function filterBatchIndexResults(results: BatchReportResult[], options: BatchInd
 
     if (options.minScore !== undefined && (result.status !== "success" || totalScore(result.report) < options.minScore)) {
       return false;
+    }
+
+    if (options.source !== undefined && result.source !== options.source) {
+      return false;
+    }
+
+    if (options.auditStatus !== undefined && result.status !== options.auditStatus) {
+      return false;
+    }
+
+    if (options.hasWebsite !== undefined) {
+      const hasWebsite = result.status === "success" ? "yes" : "no";
+      if (hasWebsite !== options.hasWebsite.toLowerCase()) {
+        return false;
+      }
     }
 
     return true;

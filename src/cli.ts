@@ -626,6 +626,9 @@ program
   .option("--min-score <score>", "include only successful batch index entries at or above a score")
   .option("--top <count>", "limit the batch index to the top N entries after filtering and sorting")
   .option("--sort <sort>", "batch index sort: score-asc or severity-desc")
+  .option("--source <source>", "include only batch index entries matching a source")
+  .option("--audit-status <status>", "include only batch index entries matching an audit status")
+  .option("--has-website <status>", "include only batch index entries matching a website presence status")
   .option("--concurrency <count>", "maximum concurrent batch audits", "1")
   .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, or auto-service")
   .option("--export-csv <path>", "write a batch prospect CSV export")
@@ -681,7 +684,10 @@ program
             segment: options.segment,
             minScore: options.minScore,
             top: options.top,
-            sort: options.sort
+            sort: options.sort,
+            source: options.source,
+            auditStatus: options.auditStatus,
+            hasWebsite: options.hasWebsite
           },
           audit: (url, context) =>
             auditUrl(url, {

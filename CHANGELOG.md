@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.59.0 - 2026-07-11
+
+- Added `--source`, `--audit-status`, and `--has-website` batch index filters to the main audit command.
+- Applied batch index filtering before sorting and top-N selection.
+- Kept batch filtering local-only with no source CSV mutation, review CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.58.0 - 2026-07-10
 
 - Added `actionableLeads` to `review --summary-json` output with deduplicated lead keys and their `unreviewed`, `invalid-reviewed-at`, or `stale` reasons.
