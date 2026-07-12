@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.60.0 - 2026-07-12
+
+- Added `source`, `auditStatus`, and `hasWebsite` columns to batch standard and CRM prospect CSV exports.
+- Kept batch CSV rendering local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.59.0 - 2026-07-11
 
 - Added `--source`, `--audit-status`, and `--has-website` batch index filters to the main audit command.
