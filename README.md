@@ -164,6 +164,12 @@ Run a focused batch triage index:
 open-local-audit --input sites.csv --format all --out-dir reports --segment dental --sort score-asc --top 25
 ```
 
+Write the selected batch index to an explicit automation JSON path:
+
+```bash
+open-local-audit --input sites.csv --format markdown --out-dir reports --summary-json automation/batch-summary.json
+```
+
 Run a controlled parallel batch audit:
 
 ```bash
@@ -176,7 +182,7 @@ Capture screenshots during batch audits:
 open-local-audit --input sites.csv --screenshot --format all --out-dir reports
 ```
 
-Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, frequent finding sections, contact rollups, and advisory outreach channel rollups. Batch CSV exports include contact confidence, preferred contact channel, and contactability reason when reports were audited successfully. Use `--export-preset crm` with `--export-csv` to write a CRM-ready local import CSV instead of the standard operator CSV.
+Batch triage supports `--segment <segment>`, `--min-score <score>`, `--top <count>`, `--sort score-asc|severity-desc`, and `--concurrency <count>`. Use `--summary-json <path>` to write the same selected aggregate batch index as JSON independently of the report format. Batch runs can also write `--export-csv <path>` for prospect triage. Batch index reports include aggregate average score, profile breakdown, segment breakdown, frequent finding sections, contact rollups, and advisory outreach channel rollups. Batch CSV exports include contact confidence, preferred contact channel, and contactability reason when reports were audited successfully. Use `--export-preset crm` with `--export-csv` to write a CRM-ready local import CSV instead of the standard operator CSV.
 
 Supported CSV columns:
 
@@ -308,6 +314,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - CSV batch input with optional labels and segments.
 - Aggregate batch index reports for prospect triage.
 - Batch index filtering, sorting, and top-N triage controls.
+- Explicit batch automation JSON output with `--summary-json`.
 - Controlled parallel batch audits with `--concurrency`.
 - Batch index insights for average score, profile breakdown, segment breakdown, and frequent findings.
 - Batch contact and outreach rollups for audited public website contact readiness.
@@ -371,6 +378,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `--format pdf` is supported for single URL audits and requires `--out` or `--out-dir`.
 - `--brand-config` reads local JSON only; it does not fetch remote assets or upload report data.
 - Batch triage options apply to the aggregate batch index, not individual per-site report contents.
+- Batch `--summary-json` writes the selected local aggregate index only and requires `--input`.
 - Batch contact and outreach rollups are advisory local triage metadata; they do not send outreach or sync to a CRM.
 - `--export-preset crm` changes CSV columns only; it does not create, update, or sync CRM records.
 - `validate-export` checks local CSV files only; it does not create, update, or sync CRM records.

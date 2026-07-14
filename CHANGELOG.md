@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.61.0 - 2026-07-14
+
+- Added batch `--summary-json <path>` output using the existing aggregate batch index JSON contract independently of report format.
+- Kept explicit batch summary output local-only and additive to standard batch index files.
+
 ## v0.60.0 - 2026-07-12
 
 - Added `source`, `auditStatus`, and `hasWebsite` columns to batch standard and CRM prospect CSV exports.
