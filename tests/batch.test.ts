@@ -875,16 +875,23 @@ describe("batch reports", () => {
   it("writes the aggregate batch index matching a single requested format", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
     try {
+      const summaryPath = join(dir, "automation", "summary.json");
       await runBatchReports(["https://example.com"], {
         format: "markdown",
         outDir: dir,
         pretty: true,
+        summaryJson: summaryPath,
         audit: async (url) => reportFor(url)
       });
 
       const markdown = await readFile(join(dir, "open-local-audit-batch-index.md"), "utf8");
+      const summary = JSON.parse(await readFile(summaryPath, "utf8"));
       expect(markdown).toContain("# Open Local Audit Batch Index");
       expect(markdown).toContain("https://example.com");
+      expect(summary.summary).toMatchObject({ total: 1, succeeded: 1, failed: 0 });
+      expect(summary.entries).toEqual([
+        expect.objectContaining({ url: "https://example.com", status: "success" })
+      ]);
       await expect(readFile(join(dir, "open-local-audit-batch-index.json"), "utf8")).rejects.toThrow();
     } finally {
       await rm(dir, { recursive: true, force: true });

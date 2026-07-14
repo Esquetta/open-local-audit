@@ -203,6 +203,63 @@ describe("CLI behavior helpers", () => {
     }
   });
 
+  it("writes explicit batch summary JSON independently of report format", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-batch-summary-"));
+    try {
+      const inputPath = join(tmp, "sites.txt");
+      const outDir = join(tmp, "reports");
+      const summaryPath = join(tmp, "automation", "summary.json");
+      writeFileSync(inputPath, "https://example.test\n", "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "src/cli.ts",
+          "--input",
+          inputPath,
+          "--out-dir",
+          outDir,
+          "--format",
+          "markdown",
+          "--summary-json",
+          summaryPath,
+          "--timeout",
+          "1"
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8"
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).not.toContain("unknown option");
+      expect(JSON.parse(readFileSync(summaryPath, "utf8"))).toMatchObject({
+        summary: { total: 1, succeeded: 0, failed: 1 },
+        entries: [{ url: "https://example.test", status: "failed" }]
+      });
+      expect(existsSync(join(outDir, "open-local-audit-batch-index.json"))).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects batch summary JSON for a single URL audit", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "https://example.test", "--summary-json", "summary.json"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8"
+      }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--summary-json is only supported when --input is used");
+  });
+
   it("requires an output directory when screenshot capture is requested", () => {
     const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "https://example.test", "--screenshot"], {
       cwd: process.cwd(),

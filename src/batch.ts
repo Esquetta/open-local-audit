@@ -20,6 +20,7 @@ export interface BatchReportOptions {
   pretty?: boolean;
   audit?: (url: string, context: BatchAuditContext) => Promise<AuditReport>;
   index?: BatchIndexOptions;
+  summaryJson?: string;
   exportCsv?: string;
   exportPreset?: BatchCsvExportPreset;
   concurrency?: number;
@@ -771,6 +772,11 @@ async function writeBatchIndex(results: BatchReportResult[], options: BatchRepor
 
   for (const format of formatsFor(options.format)) {
     await writeFile(join(options.outDir, fileNames[format]), writers[format](), "utf8");
+  }
+
+  if (options.summaryJson) {
+    await mkdir(dirname(options.summaryJson), { recursive: true });
+    await writeFile(options.summaryJson, writers.json(), "utf8");
   }
 }
 
