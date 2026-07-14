@@ -633,6 +633,7 @@ program
   .option("--profile <profile>", "industry profile: generic, dental, beauty, restaurant, contractor, lawyer, clinic, gym, hotel, or auto-service")
   .option("--export-csv <path>", "write a batch prospect CSV export")
   .option("--export-preset <preset>", "CSV export preset for --export-csv: standard or crm", "standard")
+  .option("--summary-json <path>", "write batch index JSON output to an explicit path")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--max-redirects <count>", "maximum redirects to follow", "5")
   .option("--check-links", "check same-origin links found on the audited page", false)
@@ -675,6 +676,7 @@ program
           format: options.format,
           outDir: options.outDir,
           pretty: options.pretty,
+          summaryJson: options.summaryJson,
           exportCsv: options.exportCsv,
           exportPreset: options.exportPreset,
           concurrency: options.concurrency,
@@ -707,6 +709,10 @@ program
           process.exitCode = 1;
         }
         return;
+      }
+
+      if (options.summaryJson) {
+        throw new Error("--summary-json is only supported when --input is used");
       }
 
       if (!rawUrl) {
