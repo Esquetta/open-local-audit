@@ -326,7 +326,7 @@ describe("CLI behavior helpers", () => {
 
       expect(result.status).toBe(0);
       expect(readFileSync(exportCsv, "utf8").split(/\r?\n/)[0]).toBe(
-        "companyName,website,segment,profile,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,source,leadKey,reportPath"
+        "companyName,website,segment,profile,source,auditStatus,hasWebsite,priority,score,opportunityScore,topFinding,contactConfidence,preferredContactChannel,contactabilityReason,publicEmail,publicPhone,contactPageUrl,leadKey,reportPath"
       );
     } finally {
       removeTempDir(tmp);
