@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { shortlistSortValues } from "../src/shortlist.js";
 import { readWorkflowConfig } from "../src/workflow-config.js";
 
 describe("workflow configuration", () => {
@@ -208,7 +207,17 @@ describe("workflow configuration", () => {
   });
 
   it("accepts all seven shortlist sort values and rejects unsupported values", async () => {
-    for (const [index, sort] of shortlistSortValues.entries()) {
+    const sortValues = [
+      "opportunity-desc",
+      "score-desc",
+      "company-asc",
+      "last-reviewed-asc",
+      "contact-confidence-desc",
+      "priority-desc",
+      "source-asc"
+    ];
+
+    for (const [index, sort] of sortValues.entries()) {
       configPath = join(directory, `sort-${index}.json`);
       await writeConfig({ ...validManualConfig(), shortlist: { sort } });
       await expect(readWorkflowConfig(configPath)).resolves.toMatchObject({ shortlist: { sort } });

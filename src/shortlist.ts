@@ -1,16 +1,7 @@
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 
 export type ShortlistFormat = "markdown" | "json" | "csv";
-export const shortlistSortValues = [
-  "opportunity-desc",
-  "score-desc",
-  "company-asc",
-  "last-reviewed-asc",
-  "contact-confidence-desc",
-  "priority-desc",
-  "source-asc"
-] as const;
-export type ShortlistSort = (typeof shortlistSortValues)[number];
+export type ShortlistSort = "opportunity-desc" | "score-desc" | "company-asc" | "last-reviewed-asc" | "contact-confidence-desc" | "priority-desc" | "source-asc";
 
 export interface ShortlistOptions {
   top?: number;
@@ -99,6 +90,7 @@ const confidenceRank: Record<string, number> = {
   None: 0
 };
 
+const shortlistSortModes: ShortlistSort[] = ["opportunity-desc", "score-desc", "company-asc", "last-reviewed-asc", "contact-confidence-desc", "priority-desc", "source-asc"];
 const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const explicitZoneTimestampPattern = /^(\d{4}-\d{2}-\d{2})T.+(?:[Zz]|[+-]\d{2}:\d{2})$/;
 
@@ -446,7 +438,7 @@ export function buildLeadShortlist(content: string, options: ShortlistOptions = 
         })();
 
   const sort = options.sort ?? "opportunity-desc";
-  if (!shortlistSortValues.includes(sort)) {
+  if (!shortlistSortModes.includes(sort)) {
     throw new Error("shortlist --sort must be opportunity-desc, score-desc, company-asc, last-reviewed-asc, contact-confidence-desc, priority-desc, or source-asc");
   }
 

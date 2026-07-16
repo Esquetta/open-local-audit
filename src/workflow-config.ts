@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { auditProfileSchema } from "./schema.js";
-import { shortlistSortValues } from "./shortlist.js";
+import type { ShortlistSort } from "./shortlist.js";
 
 const nonblankStringSchema = z.string().trim().min(1);
 
@@ -28,6 +28,19 @@ const googleDiscoverySchema = z
     limit: z.number().int().positive().max(50).default(10)
   })
   .strict();
+
+const shortlistSortValues = [
+  "opportunity-desc",
+  "score-desc",
+  "company-asc",
+  "last-reviewed-asc",
+  "contact-confidence-desc",
+  "priority-desc",
+  "source-asc"
+] as const satisfies readonly ShortlistSort[];
+
+function assertNoMissingShortlistSort<T extends never>(): void {}
+assertNoMissingShortlistSort<Exclude<ShortlistSort, (typeof shortlistSortValues)[number]>>();
 
 const shortlistSchema = z
   .object({
