@@ -361,6 +361,18 @@ export async function runWorkflow(
   };
   const config = await resolvedDependencies.readWorkflowConfig(configPath);
 
+  return await runResolvedWorkflow(config, resolvedDependencies);
+}
+
+export async function runResolvedWorkflow(
+  config: ResolvedWorkflowConfig,
+  dependencies: Partial<WorkflowDependencies> = {}
+): Promise<WorkflowSummary> {
+  const resolvedDependencies: WorkflowDependencies = {
+    ...defaultDependencies,
+    ...dependencies
+  };
+
   await mkdir(config.outDir, { recursive: true });
   const summary = createInitialSummary(config);
   const knownSecrets: string[] = [];

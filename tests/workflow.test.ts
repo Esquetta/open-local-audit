@@ -8,7 +8,8 @@ import type { DiscoveryRunResult } from "../src/discovery-runner.js";
 import { packageReport as packageReportReal, type ReportPackResult } from "../src/report-pack.js";
 import type { ReviewSummary } from "../src/review.js";
 import type { ShortlistLead, ShortlistResult } from "../src/shortlist.js";
-import { WorkflowRunError, runWorkflow, safeLeadSlug, type WorkflowSummary } from "../src/workflow.js";
+import { readWorkflowConfig } from "../src/workflow-config.js";
+import { WorkflowRunError, runResolvedWorkflow, runWorkflow, safeLeadSlug, type WorkflowSummary } from "../src/workflow.js";
 
 const fsValidationMock = vi.hoisted(() => ({
   linkedPath: "",
@@ -455,6 +456,26 @@ describe("workflow orchestrator", () => {
     expect(JSON.parse(readFileSync(paths.reviewSummaryJson, "utf8"))).toEqual(reviewSummary);
     expect(readSummaryFile().summary).toEqual(summary);
     expect(readSummaryFile().content.endsWith("\n")).toBe(true);
+  });
+
+  it("runs an already resolved configuration without reading the config file again", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    const config = await readWorkflowConfig(configPath);
+    const readConfigAgain = vi.fn(async () => {
+      throw new Error("config must not be read twice");
+    });
+
+    const summary = await runResolvedWorkflow(config, {
+      readWorkflowConfig: readConfigAgain,
+      runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+      runShortlistReport: vi.fn(async () => makeShortlistResult([makeLead()])),
+      resolveGoogleMapsApiKey: vi.fn(() => "unused-secret")
+    });
+
+    expect(readConfigAgain).not.toHaveBeenCalled();
+    expect(summary.status).toBe("success");
+    expect(summary.discoveredLeads).toBe(1);
+    expect(summary.selectedLeads).toBe(1);
   });
 
   it("calls the Google API key resolver only for Google discovery and passes the key to discovery", async () => {

@@ -29,6 +29,8 @@ import { resolveGoogleMapsApiKey } from "./secrets.js";
 import { runShortlistReport } from "./shortlist-runner.js";
 import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
+import { readWorkflowConfig } from "./workflow-config.js";
+import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command();
 
@@ -125,6 +127,35 @@ discoveryProgram.action(async (query?: string) => {
     });
     process.stdout.write(`Discovered ${rows.length} lead${rows.length === 1 ? "" : "s"}\n`);
     process.stdout.write(`${renderDiscoverySummary(summary)}\n`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    process.stderr.write(`open-local-audit: ${message}\n`);
+    process.exitCode = 1;
+  }
+});
+
+const workflowProgram = program
+  .command("workflow")
+  .description("Run a versioned local discovery, shortlist, review, and report packaging workflow.")
+  .option("--config <path>", "read workflow configuration from a JSON file");
+
+workflowProgram.action(async () => {
+  try {
+    const options = workflowProgram.optsWithGlobals() as { config?: string };
+    if (!options.config) {
+      throw new Error("--config is required for workflow");
+    }
+
+    const config = await readWorkflowConfig(options.config);
+    if (config.discovery.provider === "google-places") {
+      process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
+    }
+
+    const summary = await runResolvedWorkflow(config);
+    process.stdout.write("Workflow completed\n");
+    process.stdout.write(`Discovered: ${summary.discoveredLeads}\n`);
+    process.stdout.write(`Selected: ${summary.selectedLeads}\n`);
+    process.stdout.write(`Summary: ${summary.outputs.workflowSummaryJson}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     process.stderr.write(`open-local-audit: ${message}\n`);
