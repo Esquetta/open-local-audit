@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { auditSnapshot } from "../src/audit.js";
 import type { DiscoveryRunResult } from "../src/discovery-runner.js";
 import type { ReportPackResult } from "../src/report-pack.js";
 import type { ReviewSummary } from "../src/review.js";
@@ -210,6 +211,30 @@ describe("workflow orchestrator", () => {
     };
   }
 
+  async function createReportDirectories(leads: ShortlistLead[]): Promise<void> {
+    for (const lead of leads) {
+      if (lead.reportPath.trim() && !lead.reportPath.startsWith("..")) {
+        await mkdir(dirname(join(resolvedWorkflowPaths().reportsDir, lead.reportPath)), { recursive: true });
+      }
+    }
+  }
+
+  async function writeAuditReport(reportDir: string): Promise<void> {
+    await mkdir(reportDir, { recursive: true });
+    const report = auditSnapshot(
+      {
+        url: "https://clinic.test",
+        finalUrl: "https://clinic.test",
+        statusCode: 200,
+        headers: { "content-type": "text/html" },
+        html: "<html><head><title>Clinic</title></head><body><h1>Clinic</h1></body></html>"
+      },
+      "2026-07-16T00:00:00.000Z"
+    );
+    await writeFile(join(reportDir, "open-local-audit-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    await writeFile(join(reportDir, "open-local-audit-report.html"), "<!doctype html>\n", "utf8");
+  }
+
   function readSummaryFile(): { content: string; summary: WorkflowSummary } {
     const workflowSummaryJson = resolvedWorkflowPaths().workflowSummaryJson;
     const content = readFileSync(workflowSummaryJson, "utf8");
@@ -223,13 +248,13 @@ describe("workflow orchestrator", () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const discovery = vi.fn(async () => makeDiscoveryResult(3));
-    const shortlist = vi.fn(async () =>
-      makeShortlistResult([
-        makeLead({ companyName: "Acme / Dental", leadKey: "url:https://acme-a.test", reportPath: "acme-a/open-local-audit-report.html" }),
-        makeLead({ companyName: "Acme / Dental", leadKey: "url:https://acme-b.test", reportPath: "acme-b/open-local-audit-report.html" }),
-        makeLead({ companyName: "!!!", leadKey: "url:https://www.example.com/path", reportPath: "example/open-local-audit-report.html" })
-      ])
-    );
+    const leads = [
+      makeLead({ companyName: "Acme / Dental", leadKey: "url:https://acme-a.test", reportPath: "acme-a/open-local-audit-report.html" }),
+      makeLead({ companyName: "Acme / Dental", leadKey: "url:https://acme-b.test", reportPath: "acme-b/open-local-audit-report.html" }),
+      makeLead({ companyName: "!!!", leadKey: "url:https://www.example.com/path", reportPath: "example/open-local-audit-report.html" })
+    ];
+    await createReportDirectories(leads);
+    const shortlist = vi.fn(async () => makeShortlistResult(leads));
     const packageReport = vi.fn(async ({ outDir }: { inputDir: string; outDir: string }) => makePackResult(outDir));
 
     expect(safeLeadSlug("url:https://www.example.com/path", "Acme / Dental")).toBe("acme-dental");
@@ -244,10 +269,15 @@ describe("workflow orchestrator", () => {
 
     const { packagesDir } = resolvedWorkflowPaths();
 
-    expect(packageReport.mock.calls.map(([options]) => options.outDir)).toEqual([
-      join(packagesDir, "acme-dental"),
-      join(packagesDir, "acme-dental-2"),
-      join(packagesDir, "example-com-path")
+    expect(packageReport.mock.calls.map(([options]) => options.outDir.startsWith(packagesDir))).toEqual([
+      true,
+      true,
+      true
+    ]);
+    expect(packageReport.mock.calls.map(([options]) => options.outDir.slice(packagesDir.length + 1))).toEqual([
+      expect.stringMatching(/^\.acme-dental-tmp-/),
+      expect.stringMatching(/^\.acme-dental-2-tmp-/),
+      expect.stringMatching(/^\.example-com-path-tmp-/)
     ]);
   });
 
@@ -276,6 +306,7 @@ describe("workflow orchestrator", () => {
         reportPath: ""
       })
     ]);
+    await createReportDirectories(shortlistResult.leads);
     const reviewSummary = makeReviewSummary();
     const reviewCsvPath = join(dirname(resolve(configPath)), "operator", "review.csv");
 
@@ -322,7 +353,7 @@ describe("workflow orchestrator", () => {
     });
     expect(packageReport).toHaveBeenCalledWith({
       inputDir: join(paths.reportsDir, "acme-health"),
-      outDir: join(paths.packagesDir, "acme-health")
+      outDir: expect.stringContaining(join(paths.packagesDir, ".acme-health-tmp-"))
     });
 
     expect(summary).toMatchObject({
@@ -641,25 +672,25 @@ describe("workflow orchestrator", () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const discovery = vi.fn(async () => makeDiscoveryResult(3));
-    const shortlist = vi.fn(async () =>
-      makeShortlistResult([
-        makeLead({
+    const leads = [
+      makeLead({
           companyName: "Pack Success",
           leadKey: "url:https://success.test",
           reportPath: "success/open-local-audit-report.html"
         }),
-        makeLead({
+      makeLead({
           companyName: "Pack Failure",
           leadKey: "url:https://failure.test",
           reportPath: "failure/open-local-audit-report.html"
         }),
-        makeLead({
+      makeLead({
           companyName: "Pack Skipped",
           leadKey: "url:https://skipped.test",
           reportPath: ""
-        })
-      ])
-    );
+      })
+    ];
+    await createReportDirectories(leads);
+    const shortlist = vi.fn(async () => makeShortlistResult(leads));
     const packageReport = vi
       .fn()
       .mockImplementationOnce(async ({ outDir }: { inputDir: string; outDir: string }) => makePackResult(outDir))
@@ -713,20 +744,20 @@ describe("workflow orchestrator", () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const discovery = vi.fn(async () => makeDiscoveryResult(2));
-    const shortlist = vi.fn(async () =>
-      makeShortlistResult([
-        makeLead({
+    const leads = [
+      makeLead({
           companyName: "Good Lead",
           leadKey: "url:https://good.test",
           reportPath: "good/open-local-audit-report.html"
         }),
-        makeLead({
+      makeLead({
           companyName: "Escaping Lead",
           leadKey: "url:https://escape.test",
           reportPath: "../outside/open-local-audit-report.html"
-        })
-      ])
-    );
+      })
+    ];
+    await createReportDirectories(leads);
+    const shortlist = vi.fn(async () => makeShortlistResult(leads));
     const packageReport = vi.fn(async ({ outDir }: { inputDir: string; outDir: string }) => makePackResult(outDir));
 
     await expect(
@@ -754,25 +785,152 @@ describe("workflow orchestrator", () => {
     ]);
   });
 
-  it("writes summaries without leaking the API key, config object, stack, or cause", async () => {
-    await writeWorkflowConfig(googleWorkflowConfig());
+  it("rejects a report directory link that resolves outside reportsDir", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
-    const discovery = vi.fn(async () => {
-      throw new Error("Network denied");
-    });
-    const shortlist = vi.fn();
-    const resolveGoogleMapsApiKey = vi.fn(() => "super-secret-key");
+    const paths = resolvedWorkflowPaths();
+    const outsideDir = join(directory, "outside-reports", "escaped");
+    const linkedDir = join(paths.reportsDir, "linked");
+    await mkdir(outsideDir, { recursive: true });
+    await mkdir(paths.reportsDir, { recursive: true });
+    await symlink(outsideDir, linkedDir, process.platform === "win32" ? "junction" : "dir");
 
+    const packageReport = vi.fn();
     await expect(
       runWorkflow(configPath, {
-        runDiscovery: discovery,
-        runShortlistReport: shortlist,
-        resolveGoogleMapsApiKey
+        runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+        runShortlistReport: vi.fn(async () =>
+          makeShortlistResult([
+            makeLead({
+              companyName: "Linked Escape",
+              leadKey: "url:https://linked.test",
+              reportPath: "linked/open-local-audit-report.html"
+            })
+          ])
+        ),
+        packageReport
       })
     ).rejects.toBeInstanceOf(WorkflowRunError);
 
+    expect(packageReport).not.toHaveBeenCalled();
+    expect(readSummaryFile().summary.packages.entries[0]).toMatchObject({
+      status: "failed",
+      error: "Report path escapes reports directory"
+    });
+  });
+
+  it("replaces a stale final package only after the real package completes", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+
+    const paths = resolvedWorkflowPaths();
+    const reportDir = join(paths.reportsDir, "clinic");
+    const finalDir = join(paths.packagesDir, "clinic");
+    await writeAuditReport(reportDir);
+    await mkdir(finalDir, { recursive: true });
+    await writeFile(join(finalDir, "stale.txt"), "stale\n", "utf8");
+
+    const summary = await runWorkflow(configPath, {
+      runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+      runShortlistReport: vi.fn(async () =>
+        makeShortlistResult([
+          makeLead({
+            companyName: "Clinic",
+            leadKey: "url:https://clinic.test",
+            reportPath: "clinic/open-local-audit-report.html"
+          })
+        ])
+      )
+    });
+
+    expect(existsSync(join(finalDir, "stale.txt"))).toBe(false);
+    expect(existsSync(join(finalDir, "manifest.json"))).toBe(true);
+    expect(summary.packages.entries[0]).toMatchObject({ status: "packaged", outDir: finalDir });
+    expect((await readdir(paths.packagesDir)).filter((name) => name.includes("-tmp-"))).toEqual([]);
+  });
+
+  it("cleans partial temporary package output and preserves the prior final package on dependency failure", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+
+    const paths = resolvedWorkflowPaths();
+    const lead = makeLead({
+      companyName: "Existing Clinic",
+      leadKey: "url:https://existing.test",
+      reportPath: "existing/open-local-audit-report.html"
+    });
+    await createReportDirectories([lead]);
+    const finalDir = join(paths.packagesDir, "existing-clinic");
+    await mkdir(finalDir, { recursive: true });
+    await writeFile(join(finalDir, "prior.txt"), "prior\n", "utf8");
+
+    const packageReport = vi.fn(async ({ outDir }: { inputDir: string; outDir: string }) => {
+      await writeFile(join(outDir, "partial.txt"), "partial\n", "utf8");
+      throw new Error("Packaging stopped halfway");
+    });
+
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+        runShortlistReport: vi.fn(async () => makeShortlistResult([lead])),
+        packageReport
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    expect(readFileSync(join(finalDir, "prior.txt"), "utf8")).toBe("prior\n");
+    expect(existsSync(join(finalDir, "partial.txt"))).toBe(false);
+    expect(await readdir(paths.packagesDir)).toEqual(["existing-clinic"]);
+  });
+
+  it("preserves the original stage failure when writing its summary also fails", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+
+    const paths = resolvedWorkflowPaths();
+    let capturedError: unknown;
+    try {
+      await runWorkflow(configPath, {
+        runDiscovery: vi.fn(async () => {
+          await rm(paths.outDir, { recursive: true, force: true });
+          await writeFile(paths.outDir, "not a directory\n", "utf8");
+          throw new Error("Original discovery failure");
+        })
+      });
+    } catch (error) {
+      capturedError = error;
+    }
+
+    expect(capturedError).toBeInstanceOf(WorkflowRunError);
+    expect((capturedError as WorkflowRunError).summary.error).toEqual({
+      stage: "discovery",
+      message: "Original discovery failure"
+    });
+  });
+
+  it("writes summaries without leaking the API key, config object, stack, or cause", async () => {
+    await writeWorkflowConfig(googleWorkflowConfig());
+
+    const apiKey = "super-secret-key";
+    const discovery = vi.fn(async () => {
+      throw new Error(`Network denied for key ${apiKey}`);
+    });
+    const shortlist = vi.fn();
+    const resolveGoogleMapsApiKey = vi.fn(() => apiKey);
+
+    let capturedError: WorkflowRunError | undefined;
+    try {
+      await runWorkflow(configPath, {
+        runDiscovery: discovery,
+        runShortlistReport: shortlist,
+        resolveGoogleMapsApiKey
+      });
+    } catch (error) {
+      capturedError = error as WorkflowRunError;
+    }
+
     const { content } = readSummaryFile();
-    expect(content).not.toContain("super-secret-key");
+    expect(capturedError).toBeInstanceOf(WorkflowRunError);
+    expect(JSON.stringify(capturedError?.summary)).not.toContain(apiKey);
+    expect(JSON.stringify(capturedError?.summary)).toContain("[REDACTED]");
+    expect(content).not.toContain(apiKey);
+    expect(content).toContain("[REDACTED]");
     expect(content).not.toContain("\"config\"");
     expect(content).not.toContain("\"stack\"");
     expect(content).not.toContain("\"cause\"");

@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { runDiscovery, type DiscoveryRunResult } from "./discovery-runner.js";
 import { packageReport, type ReportPackResult } from "./report-pack.js";
@@ -145,10 +146,12 @@ export function safeLeadSlug(leadKey: string, companyName: string): string {
   return leadSlug || "lead";
 }
 
-function sanitizeErrorMessage(error: unknown): string {
+function sanitizeErrorMessage(error: unknown, knownSecrets: readonly string[] = []): string {
   if (error instanceof Error) {
     const message = error.message.trim();
-    return message || "Unknown error";
+    return knownSecrets
+      .filter((secret) => secret.length > 0)
+      .reduce((sanitized, secret) => sanitized.split(secret).join("[REDACTED]"), message || "Unknown error");
   }
 
   return "Unknown error";
@@ -185,6 +188,26 @@ async function writeWorkflowSummary(summary: WorkflowSummary): Promise<void> {
   await writePrettyJson(summary.outputs.workflowSummaryJson, summary);
 }
 
+async function throwPersistedWorkflowFailure(summary: WorkflowSummary): Promise<never> {
+  try {
+    await writeWorkflowSummary(summary);
+  } catch {
+    // The workflow failure remains authoritative if its summary cannot be persisted.
+  }
+
+  throw new WorkflowRunError(summary);
+}
+
+async function throwStageFailure(
+  summary: WorkflowSummary,
+  stage: WorkflowStageName,
+  error: unknown,
+  knownSecrets: readonly string[]
+): Promise<never> {
+  markStageFailure(summary, stage, sanitizeErrorMessage(error, knownSecrets));
+  return throwPersistedWorkflowFailure(summary);
+}
+
 function markStageFailure(summary: WorkflowSummary, stage: WorkflowStageName, message: string): void {
   summary.status = "failed";
   summary.stages[stage].status = "failed";
@@ -194,7 +217,7 @@ function markStageFailure(summary: WorkflowSummary, stage: WorkflowStageName, me
   };
 }
 
-function resolvePackageInputDir(reportsDir: string, reportPath: string): string {
+async function resolvePackageInputDir(reportsDir: string, reportPath: string): Promise<string> {
   const resolvedReportPath = resolve(reportsDir, reportPath);
   const relativePath = relative(reportsDir, resolvedReportPath);
 
@@ -202,7 +225,49 @@ function resolvePackageInputDir(reportsDir: string, reportPath: string): string 
     throw new Error("Report path escapes reports directory");
   }
 
-  return dirname(resolvedReportPath);
+  const inputDir = dirname(resolvedReportPath);
+  const [realReportsDir, realInputDir] = await Promise.all([realpath(reportsDir), realpath(inputDir)]);
+  const realRelativePath = relative(realReportsDir, realInputDir);
+  if (realRelativePath.startsWith("..") || isAbsolute(realRelativePath)) {
+    throw new Error("Report path escapes reports directory");
+  }
+
+  return inputDir;
+}
+
+async function promotePackage(tempDir: string, finalDir: string): Promise<void> {
+  const backupDir = `${finalDir}.backup-${randomUUID()}`;
+  let hasBackup = false;
+  let promoted = false;
+
+  try {
+    await rename(finalDir, backupDir);
+    hasBackup = true;
+  } catch (error) {
+    if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
+      throw error;
+    }
+  }
+
+  try {
+    await rename(tempDir, finalDir);
+    promoted = true;
+    if (hasBackup) {
+      await rm(backupDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    }
+  } catch (error) {
+    if (hasBackup) {
+      try {
+        if (promoted) {
+          await rename(finalDir, tempDir);
+        }
+        await rename(backupDir, finalDir);
+      } catch {
+        // Best-effort rollback; the original promotion error remains authoritative.
+      }
+    }
+    throw error;
+  }
 }
 
 function updateDiscoveryStage(summary: WorkflowSummary, result: DiscoveryRunResult): void {
@@ -265,8 +330,15 @@ export async function runWorkflow(
 
   await mkdir(config.outDir, { recursive: true });
   const summary = createInitialSummary(config);
+  const knownSecrets: string[] = [];
 
   try {
+    const googleApiKey =
+      config.discovery.provider === "google-places" ? resolvedDependencies.resolveGoogleMapsApiKey() : undefined;
+    if (googleApiKey) {
+      knownSecrets.push(googleApiKey);
+    }
+
     const discoveryResult = await resolvedDependencies.runDiscovery({
       provider: config.discovery.provider,
       ...(config.discovery.provider === "manual-csv" ? { input: config.discovery.input } : {}),
@@ -280,9 +352,7 @@ export async function runWorkflow(
       concurrency: config.discovery.concurrency,
       ...(config.discovery.maxAudits !== undefined ? { maxAudits: config.discovery.maxAudits } : {}),
       ...(config.discovery.provider === "google-places" ? { limit: config.discovery.limit } : {}),
-      ...(config.discovery.provider === "google-places"
-        ? { apiKey: resolvedDependencies.resolveGoogleMapsApiKey() }
-        : {})
+      ...(googleApiKey !== undefined ? { apiKey: googleApiKey } : {})
     });
     updateDiscoveryStage(summary, discoveryResult);
 
@@ -307,7 +377,13 @@ export async function runWorkflow(
     if (config.packageReports) {
       const slugCounts = new Map<string, number>();
       for (const lead of shortlistResult.leads) {
-        const packageEntry = await packageLead(config.paths, lead, slugCounts, resolvedDependencies.packageReport);
+        const packageEntry = await packageLead(
+          config.paths,
+          lead,
+          slugCounts,
+          resolvedDependencies.packageReport,
+          knownSecrets
+        );
         summary.packages.entries.push(packageEntry);
         if (packageEntry.status === "packaged") {
           summary.packages.packaged += 1;
@@ -325,8 +401,7 @@ export async function runWorkflow(
           stage: "packaging",
           message: `${summary.packages.failed} package ${summary.packages.failed === 1 ? "entry" : "entries"} failed`
         };
-        await writeWorkflowSummary(summary);
-        throw new WorkflowRunError(summary);
+        await throwPersistedWorkflowFailure(summary);
       }
     }
   } catch (error) {
@@ -334,7 +409,6 @@ export async function runWorkflow(
       throw error;
     }
 
-    const message = sanitizeErrorMessage(error);
     const failedStage =
       summary.stages.discovery.status !== "success"
         ? "discovery"
@@ -343,9 +417,7 @@ export async function runWorkflow(
           : summary.stages.review.status === "not-run"
             ? "review"
             : "packaging";
-    markStageFailure(summary, failedStage, message);
-    await writeWorkflowSummary(summary);
-    throw new WorkflowRunError(summary);
+    await throwStageFailure(summary, failedStage, error, knownSecrets);
   }
 
   await writeWorkflowSummary(summary);
@@ -356,7 +428,8 @@ async function packageLead(
   paths: WorkflowManagedPaths,
   lead: ShortlistLead,
   slugCounts: Map<string, number>,
-  packageReportDependency: WorkflowDependencies["packageReport"]
+  packageReportDependency: WorkflowDependencies["packageReport"],
+  knownSecrets: readonly string[]
 ): Promise<WorkflowPackageEntry> {
   const reportPath = lead.reportPath.trim();
   if (!reportPath) {
@@ -367,27 +440,40 @@ async function packageLead(
     };
   }
 
+  const slug = nextUniqueSlug(safeLeadSlug(lead.leadKey, lead.companyName), slugCounts);
+  const outDir = join(paths.packagesDir, slug);
+  let tempDir: string | undefined;
+
   try {
-    const inputDir = resolvePackageInputDir(paths.reportsDir, reportPath);
-    const slug = nextUniqueSlug(safeLeadSlug(lead.leadKey, lead.companyName), slugCounts);
-    const outDir = join(paths.packagesDir, slug);
-    const result = await packageReportDependency({
+    const inputDir = await resolvePackageInputDir(paths.reportsDir, reportPath);
+    await mkdir(paths.packagesDir, { recursive: true });
+    tempDir = await mkdtemp(join(paths.packagesDir, `.${slug}-tmp-`));
+    await packageReportDependency({
       inputDir,
-      outDir
+      outDir: tempDir
     });
+    await promotePackage(tempDir, outDir);
+    tempDir = undefined;
 
     return {
       leadKey: lead.leadKey,
       companyName: lead.companyName,
       status: "packaged",
-      outDir: result.outDir
+      outDir
     };
   } catch (error) {
+    if (tempDir) {
+      try {
+        await rm(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+      } catch {
+        // Keep the package failure useful even if temporary output cannot be removed.
+      }
+    }
     return {
       leadKey: lead.leadKey,
       companyName: lead.companyName,
       status: "failed",
-      error: sanitizeErrorMessage(error)
+      error: sanitizeErrorMessage(error, knownSecrets)
     };
   }
 }
