@@ -46,6 +46,8 @@ export {
   renderShortlistMarkdown,
   renderShortlistSummaryJson
 } from "./shortlist.js";
+export { readWorkflowConfig } from "./workflow-config.js";
+export { WorkflowRunError, runWorkflow, safeLeadSlug } from "./workflow.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
   BatchAuditContext,
@@ -99,6 +101,21 @@ export type {
   ShortlistReviewRow,
   ShortlistSort
 } from "./shortlist.js";
+export type { RawWorkflowConfig as WorkflowConfig, ResolvedWorkflowConfig } from "./workflow-config.js";
+export type {
+  WorkflowDependencies,
+  WorkflowDiscoveryStageSummary,
+  WorkflowPackageEntry,
+  WorkflowPackageStatus,
+  WorkflowPackageSummary,
+  WorkflowPackagingStageSummary,
+  WorkflowReviewStageSummary,
+  WorkflowShortlistStageSummary,
+  WorkflowStageName,
+  WorkflowStageStatus,
+  WorkflowStatus,
+  WorkflowSummary
+} from "./workflow.js";
 export type {
   AuditOptions,
   AuditProfile,
