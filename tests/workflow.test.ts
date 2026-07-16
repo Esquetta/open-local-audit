@@ -5,16 +5,47 @@ import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
 import type { DiscoveryRunResult } from "../src/discovery-runner.js";
-import type { ReportPackResult } from "../src/report-pack.js";
+import { packageReport as packageReportReal, type ReportPackResult } from "../src/report-pack.js";
 import type { ReviewSummary } from "../src/review.js";
 import type { ShortlistLead, ShortlistResult } from "../src/shortlist.js";
 import { WorkflowRunError, runWorkflow, safeLeadSlug, type WorkflowSummary } from "../src/workflow.js";
+
+const fsValidationMock = vi.hoisted(() => ({
+  linkedPath: "",
+  escapedPath: "",
+  escapedRealPath: ""
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    lstat: vi.fn(async (path: Parameters<typeof actual.lstat>[0]) => {
+      const stats = await actual.lstat(path);
+      if (String(path) === fsValidationMock.linkedPath) {
+        return new Proxy(stats, {
+          get(target, property, receiver) {
+            return property === "isSymbolicLink" ? () => true : Reflect.get(target, property, receiver);
+          }
+        });
+      }
+      return stats;
+    }),
+    realpath: vi.fn(async (path: Parameters<typeof actual.realpath>[0]) => {
+      const resolvedPath = await actual.realpath(path);
+      return String(path) === fsValidationMock.escapedPath ? fsValidationMock.escapedRealPath : resolvedPath;
+    })
+  };
+});
 
 describe("workflow orchestrator", () => {
   let directory: string;
   let configPath: string;
 
   beforeEach(async () => {
+    fsValidationMock.linkedPath = "";
+    fsValidationMock.escapedPath = "";
+    fsValidationMock.escapedRealPath = "";
     directory = await mkdtemp(join(tmpdir(), "open-local-audit-workflow-"));
     configPath = join(directory, "config", "workflow.json");
   });
@@ -817,6 +848,81 @@ describe("workflow orchestrator", () => {
       status: "failed",
       error: "Report path escapes reports directory"
     });
+  });
+
+  it("rejects an expected report file reported as a symbolic link before packaging", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+
+    const paths = resolvedWorkflowPaths();
+    const reportDir = join(paths.reportsDir, "linked-file");
+    const externalFile = join(directory, "external-report.html");
+    const linkedFile = join(reportDir, "open-local-audit-report.html");
+    const externalMarker = "external report content must not be packaged";
+    await writeAuditReport(reportDir);
+    await writeFile(externalFile, externalMarker, "utf8");
+    fsValidationMock.linkedPath = linkedFile;
+
+    const packageReport = vi.fn(packageReportReal);
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+        runShortlistReport: vi.fn(async () =>
+          makeShortlistResult([
+            makeLead({
+              companyName: "Linked File",
+              leadKey: "url:https://linked-file.test",
+              reportPath: "linked-file/open-local-audit-report.html"
+            })
+          ])
+        ),
+        packageReport
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    expect(packageReport).not.toHaveBeenCalled();
+    expect(readSummaryFile().summary.packages.entries[0]).toMatchObject({
+      status: "failed",
+      error: "Linked report files are not allowed"
+    });
+    expect(existsSync(join(paths.packagesDir, "linked-file", "reports", "open-local-audit-report.html"))).toBe(false);
+    expect(readFileSync(externalFile, "utf8")).toBe(externalMarker);
+  });
+
+  it("rejects an expected report file whose canonical path escapes inputDir", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+
+    const paths = resolvedWorkflowPaths();
+    const reportDir = join(paths.reportsDir, "escaped-file");
+    const reportFile = join(reportDir, "open-local-audit-report.html");
+    const externalFile = join(directory, "external-canonical-report.html");
+    await writeAuditReport(reportDir);
+    await writeFile(externalFile, "external canonical content", "utf8");
+    fsValidationMock.escapedPath = reportFile;
+    fsValidationMock.escapedRealPath = externalFile;
+
+    const packageReport = vi.fn(packageReportReal);
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+        runShortlistReport: vi.fn(async () =>
+          makeShortlistResult([
+            makeLead({
+              companyName: "Escaped File",
+              leadKey: "url:https://escaped-file.test",
+              reportPath: "escaped-file/open-local-audit-report.html"
+            })
+          ])
+        ),
+        packageReport
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    expect(packageReport).not.toHaveBeenCalled();
+    expect(readSummaryFile().summary.packages.entries[0]).toMatchObject({
+      status: "failed",
+      error: "Report file escapes input directory"
+    });
+    expect(existsSync(join(paths.packagesDir, "escaped-file"))).toBe(false);
   });
 
   it("replaces a stale final package only after the real package completes", async () => {

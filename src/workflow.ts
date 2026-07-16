@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { runDiscovery, type DiscoveryRunResult } from "./discovery-runner.js";
 import { packageReport, type ReportPackResult } from "./report-pack.js";
@@ -107,6 +107,13 @@ const defaultDependencies: WorkflowDependencies = {
   packageReport,
   resolveGoogleMapsApiKey
 };
+
+const packageReportFileNames = [
+  "open-local-audit-report.json",
+  "open-local-audit-report.md",
+  "open-local-audit-report.html",
+  "open-local-audit-report.pdf"
+];
 
 function slugify(value: string): string {
   return value
@@ -217,7 +224,10 @@ function markStageFailure(summary: WorkflowSummary, stage: WorkflowStageName, me
   };
 }
 
-async function resolvePackageInputDir(reportsDir: string, reportPath: string): Promise<string> {
+async function resolvePackageInputDir(
+  reportsDir: string,
+  reportPath: string
+): Promise<{ inputDir: string; realInputDir: string }> {
   const resolvedReportPath = resolve(reportsDir, reportPath);
   const relativePath = relative(reportsDir, resolvedReportPath);
 
@@ -232,7 +242,30 @@ async function resolvePackageInputDir(reportsDir: string, reportPath: string): P
     throw new Error("Report path escapes reports directory");
   }
 
-  return inputDir;
+  return { inputDir, realInputDir };
+}
+
+async function validatePackageSourceFiles(inputDir: string, realInputDir: string): Promise<void> {
+  for (const fileName of packageReportFileNames) {
+    const sourcePath = join(inputDir, fileName);
+    try {
+      const sourceInfo = await lstat(sourcePath);
+      if (sourceInfo.isSymbolicLink()) {
+        throw new Error("Linked report files are not allowed");
+      }
+
+      const realSourcePath = await realpath(sourcePath);
+      const relativeSourcePath = relative(realInputDir, realSourcePath);
+      if (relativeSourcePath.startsWith("..") || isAbsolute(relativeSourcePath)) {
+        throw new Error("Report file escapes input directory");
+      }
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 async function promotePackage(tempDir: string, finalDir: string): Promise<void> {
@@ -445,7 +478,8 @@ async function packageLead(
   let tempDir: string | undefined;
 
   try {
-    const inputDir = await resolvePackageInputDir(paths.reportsDir, reportPath);
+    const { inputDir, realInputDir } = await resolvePackageInputDir(paths.reportsDir, reportPath);
+    await validatePackageSourceFiles(inputDir, realInputDir);
     await mkdir(paths.packagesDir, { recursive: true });
     tempDir = await mkdtemp(join(paths.packagesDir, `.${slug}-tmp-`));
     await packageReportDependency({
