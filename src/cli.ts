@@ -26,16 +26,8 @@ import {
 } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
-import {
-  buildLeadShortlist,
-  readShortlistReviewCsv,
-  renderShortlistCsv,
-  renderShortlistJson,
-  renderShortlistMarkdown,
-  renderShortlistSummaryJson,
-  type ShortlistFormat,
-  type ShortlistSort
-} from "./shortlist.js";
+import { runShortlistReport } from "./shortlist-runner.js";
+import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
 
 const program = new Command();
@@ -285,52 +277,44 @@ const shortlistProgram = program
         throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
-      const sort = options.sort as ShortlistSort;
       const top = Number(options.top);
       const minOpportunityScore =
         options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
       const minScore =
         options.minScore === undefined ? undefined : Number(options.minScore);
-      const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
-      const result = buildLeadShortlist(await readFile(options.input, "utf8"), {
-        top,
-        minOpportunityScore,
-        minScore,
-        segment: options.segment,
-        profile: options.profile,
-        priority: options.priority,
-        contactConfidence: options.contactConfidence,
-        minContactConfidence: options.minContactConfidence,
-        preferredContactChannel: options.preferredContactChannel,
-        source: options.source,
-        auditStatus: options.auditStatus,
-        hasWebsite: options.hasWebsite,
-        topFinding: options.topFinding,
-        reviewStatus: options.reviewStatus,
-        excludeReviewStatus: options.excludeReviewStatus,
-        unreviewed: options.unreviewed,
-        reviewedBefore: options.reviewedBefore,
-        requireWebsite: options.requireWebsite,
-        missingWebsite: options.missingWebsite,
-        requireContact: options.requireContact,
-        missingContact: options.missingContact,
-        requireReport: options.requireReport,
-        missingReport: options.missingReport,
-        sort,
-        reviewRows
+      const result = await runShortlistReport({
+        input: options.input,
+        out: options.out,
+        summaryJson: options.summaryJson,
+        reviewCsv: options.reviewCsv,
+        format,
+        shortlist: {
+          top,
+          minOpportunityScore,
+          minScore,
+          segment: options.segment,
+          profile: options.profile,
+          priority: options.priority,
+          contactConfidence: options.contactConfidence,
+          minContactConfidence: options.minContactConfidence,
+          preferredContactChannel: options.preferredContactChannel,
+          source: options.source,
+          auditStatus: options.auditStatus,
+          hasWebsite: options.hasWebsite,
+          topFinding: options.topFinding,
+          reviewStatus: options.reviewStatus,
+          excludeReviewStatus: options.excludeReviewStatus,
+          unreviewed: options.unreviewed,
+          reviewedBefore: options.reviewedBefore,
+          requireWebsite: options.requireWebsite,
+          missingWebsite: options.missingWebsite,
+          requireContact: options.requireContact,
+          missingContact: options.missingContact,
+          requireReport: options.requireReport,
+          missingReport: options.missingReport,
+          sort: options.sort as ShortlistSort
+        }
       });
-      await mkdir(dirname(options.out), { recursive: true });
-      const output =
-        format === "json"
-          ? renderShortlistJson(result)
-          : format === "csv"
-            ? renderShortlistCsv(result)
-            : renderShortlistMarkdown(result);
-      await writeFile(options.out, output, "utf8");
-      if (options.summaryJson) {
-        await mkdir(dirname(options.summaryJson), { recursive: true });
-        await writeFile(options.summaryJson, renderShortlistSummaryJson(result), "utf8");
-      }
       process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
       process.stdout.write(`Suppressed: ${result.suppressedRows}\n`);
       process.stdout.write(`Filtered: ${result.filteredRows}\n`);
