@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { shortlistSortValues } from "../src/shortlist.js";
 import { readWorkflowConfig } from "../src/workflow-config.js";
 
 describe("workflow configuration", () => {
@@ -207,17 +208,7 @@ describe("workflow configuration", () => {
   });
 
   it("accepts all seven shortlist sort values and rejects unsupported values", async () => {
-    const sortValues = [
-      "opportunity-desc",
-      "score-desc",
-      "company-asc",
-      "last-reviewed-asc",
-      "contact-confidence-desc",
-      "priority-desc",
-      "source-asc"
-    ];
-
-    for (const [index, sort] of sortValues.entries()) {
+    for (const [index, sort] of shortlistSortValues.entries()) {
       configPath = join(directory, `sort-${index}.json`);
       await writeConfig({ ...validManualConfig(), shortlist: { sort } });
       await expect(readWorkflowConfig(configPath)).resolves.toMatchObject({ shortlist: { sort } });
@@ -240,5 +231,18 @@ describe("workflow configuration", () => {
       await writeConfig({ ...validManualConfig(), review: { csv: "review.csv", staleBefore } });
       await expect(readWorkflowConfig(configPath)).rejects.toThrow();
     }
+  });
+
+  it("reports malformed JSON with workflow config path context", async () => {
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, '{ "version": 1,', "utf8");
+
+    await expect(readWorkflowConfig(configPath)).rejects.toThrow(
+      `Workflow config ${resolve(configPath)} contains invalid JSON`
+    );
+  });
+
+  it("preserves missing workflow config file errors", async () => {
+    await expect(readWorkflowConfig(configPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

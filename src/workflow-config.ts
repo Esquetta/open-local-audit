@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { auditProfileSchema } from "./schema.js";
-import type { ShortlistSort } from "./shortlist.js";
+import { shortlistSortValues } from "./shortlist.js";
 
 const nonblankStringSchema = z.string().trim().min(1);
 
@@ -28,16 +28,6 @@ const googleDiscoverySchema = z
     limit: z.number().int().positive().max(50).default(10)
   })
   .strict();
-
-const shortlistSortValues = [
-  "opportunity-desc",
-  "score-desc",
-  "company-asc",
-  "last-reviewed-asc",
-  "contact-confidence-desc",
-  "priority-desc",
-  "source-asc"
-] satisfies [ShortlistSort, ...ShortlistSort[]];
 
 const shortlistSchema = z
   .object({
@@ -101,7 +91,17 @@ export type ResolvedWorkflowConfig = Omit<ParsedWorkflowConfig, "outDir" | "disc
 export async function readWorkflowConfig(configPath: string): Promise<ResolvedWorkflowConfig> {
   const absoluteConfigPath = resolve(configPath);
   const configDirectory = dirname(absoluteConfigPath);
-  const config = workflowConfigSchema.parse(JSON.parse(await readFile(absoluteConfigPath, "utf8")));
+  const content = await readFile(absoluteConfigPath, "utf8");
+  let rawConfig: unknown;
+  try {
+    rawConfig = JSON.parse(content);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Workflow config ${absoluteConfigPath} contains invalid JSON`, { cause: error });
+    }
+    throw error;
+  }
+  const config = workflowConfigSchema.parse(rawConfig);
   const outDir = resolve(configDirectory, config.outDir);
 
   return {
