@@ -149,6 +149,63 @@ describe("workflow configuration", () => {
     await expect(readWorkflowConfig(configPath)).rejects.toThrow();
   });
 
+  it("accepts omitted or zero maxAudits and rejects negative values", async () => {
+    const discoveries = [
+      { provider: "manual-csv", input: "places.csv" },
+      { provider: "google-places", query: "dentist Kadikoy" }
+    ];
+
+    for (const [providerIndex, discovery] of discoveries.entries()) {
+      for (const [valueIndex, maxAudits] of [undefined, 0].entries()) {
+        configPath = join(directory, `max-audits-${providerIndex}-${valueIndex}.json`);
+        await writeConfig({
+          ...validManualConfig(),
+          discovery: { ...discovery, ...(maxAudits === undefined ? {} : { maxAudits }) }
+        });
+        const result = await readWorkflowConfig(configPath);
+        expect(result.discovery).toMatchObject({ provider: discovery.provider });
+        if (maxAudits === undefined) {
+          expect(result.discovery).not.toHaveProperty("maxAudits");
+        } else {
+          expect(result.discovery).toHaveProperty("maxAudits", maxAudits);
+        }
+      }
+
+      configPath = join(directory, `max-audits-negative-${providerIndex}.json`);
+      await writeConfig({ ...validManualConfig(), discovery: { ...discovery, maxAudits: -1 } });
+      await expect(readWorkflowConfig(configPath)).rejects.toThrow();
+    }
+  });
+
+  it("accepts shortlist minOpportunityScore boundaries and rejects out-of-range values", async () => {
+    for (const minOpportunityScore of [0, 100]) {
+      configPath = join(directory, `min-opportunity-${minOpportunityScore}.json`);
+      await writeConfig({ ...validManualConfig(), shortlist: { minOpportunityScore } });
+      await expect(readWorkflowConfig(configPath)).resolves.toMatchObject({ shortlist: { minOpportunityScore } });
+    }
+
+    for (const minOpportunityScore of [-1, 101]) {
+      configPath = join(directory, `min-opportunity-${minOpportunityScore}.json`);
+      await writeConfig({ ...validManualConfig(), shortlist: { minOpportunityScore } });
+      await expect(readWorkflowConfig(configPath)).rejects.toThrow();
+    }
+  });
+
+  it("rejects a review object without csv", async () => {
+    await writeConfig({ ...validManualConfig(), review: {} });
+
+    await expect(readWorkflowConfig(configPath)).rejects.toThrow();
+  });
+
+  it("rejects unknown Google Places discovery fields", async () => {
+    await writeConfig({
+      ...validManualConfig(),
+      discovery: { provider: "google-places", query: "dentist Kadikoy", unexpected: true }
+    });
+
+    await expect(readWorkflowConfig(configPath)).rejects.toThrow(/unrecognized key/i);
+  });
+
   it("accepts all seven shortlist sort values and rejects unsupported values", async () => {
     const sortValues = [
       "opportunity-desc",
