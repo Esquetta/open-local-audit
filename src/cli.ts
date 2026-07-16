@@ -5,23 +5,8 @@ import { dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { readBrandConfig } from "./brand.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
-import {
-  buildDiscoverySummary,
-  buildProspectRows,
-  findDuplicateProspectGroups,
-  findFuzzyDuplicateProspectGroups,
-  fetchGooglePlacesCandidates,
-  filterSuppressedProspects,
-  mergeDiscoveryReviewRows,
-  readLeadSuppressionCsv,
-  readLeadReviewCsv,
-  readManualDiscoveryCsv,
-  renderDiscoveryReviewCsv,
-  renderProspectRowsCsv,
-  resolveCandidateWebsite,
-  type LeadReviewRow,
-  type ProspectRowInput
-} from "./discovery.js";
+import { type DiscoverySummary } from "./discovery.js";
+import { runDiscovery } from "./discovery-runner.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
 import {
   renderExportValidationJson,
@@ -41,17 +26,11 @@ import {
 } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
-import {
-  buildLeadShortlist,
-  readShortlistReviewCsv,
-  renderShortlistCsv,
-  renderShortlistJson,
-  renderShortlistMarkdown,
-  renderShortlistSummaryJson,
-  type ShortlistFormat,
-  type ShortlistSort
-} from "./shortlist.js";
+import { runShortlistReport } from "./shortlist-runner.js";
+import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
+import { readWorkflowConfig } from "./workflow-config.js";
+import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command();
 
@@ -84,15 +63,7 @@ Discovery boundaries:
 `
   );
 
-function preferredReportPath(slug: string, outputs: Array<{ format: string; path?: string }>): string | undefined {
-  const preferred =
-    outputs.find((output) => output.format === "html") ??
-    outputs.find((output) => output.format === "markdown") ??
-    outputs[0];
-  return preferred?.path ? `${slug}/${preferred.path.split(/[\\/]/).pop()}` : undefined;
-}
-
-function renderDiscoverySummary(summary: ReturnType<typeof buildDiscoverySummary>): string {
+function renderDiscoverySummary(summary: DiscoverySummary): string {
   return [
     `With website: ${summary.withWebsite}`,
     `Without website: ${summary.withoutWebsite}`,
@@ -103,22 +74,6 @@ function renderDiscoverySummary(summary: ReturnType<typeof buildDiscoverySummary
     `Suppressed: ${summary.suppressedCandidates}`,
     `Average score: ${summary.averageScore ?? "N/A"}`
   ].join("\n");
-}
-
-async function readOptionalReviewCsv(path: string | undefined): Promise<LeadReviewRow[]> {
-  if (!path) {
-    return [];
-  }
-
-  try {
-    return await readLeadReviewCsv(path);
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      return [];
-    }
-
-    throw error;
-  }
 }
 
 discoveryProgram.action(async (query?: string) => {
@@ -146,142 +101,61 @@ discoveryProgram.action(async (query?: string) => {
       .parse(rawDiscoveryOptions);
     const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
 
-    if (!options.exportCsv) {
-      throw new Error("--export-csv is required for discover output");
-    }
-
-    if (!options.dryRun && !options.outDir) {
-      throw new Error("--out-dir is required unless --dry-run is used");
-    }
-
-    if (options.provider === "manual-csv") {
-      if (query?.trim()) {
-        throw new Error("Manual CSV discovery does not accept a positional query; use --input instead");
-      }
-
-      if (!options.input) {
-        throw new Error("--input is required when --provider manual-csv is used");
-      }
-    }
-
-    if (options.provider === "google-places" && options.input) {
-      throw new Error("--input is only supported when --provider manual-csv is used");
-    }
-
     if (options.provider === "google-places") {
       process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
     }
 
-    const candidates =
-      options.provider === "manual-csv"
-        ? await readManualDiscoveryCsv(options.input ?? "", {
-            defaultProfile: options.profile
-          })
-        : await fetchGooglePlacesCandidates(query ?? "", {
-            apiKey: resolveGoogleMapsApiKey(),
-            defaultProfile: options.profile,
-            limit: options.limit
-          });
-
-    const resolutions = candidates.map(resolveCandidateWebsite);
-    let prospectInputs: ProspectRowInput[] = candidates.map((candidate, index) => ({
-      candidate,
-      resolution: resolutions[index]
-    }));
-    const existingReviewRows = await readOptionalReviewCsv(options.reviewCsv);
-    const suppressionEntries = [
-      ...(options.suppressionList ? await readLeadSuppressionCsv(options.suppressionList) : []),
-      ...existingReviewRows
-    ];
-    const suppressionResult = filterSuppressedProspects(prospectInputs, suppressionEntries);
-    prospectInputs = suppressionResult.included;
-
-    if (!options.dryRun) {
-      const auditable = prospectInputs
-        .map((input, index) => ({ ...input, index }))
-        .filter((input) => input.resolution.status === "resolved" && input.resolution.websiteUrl)
-        .slice(0, options.maxAudits);
-
-      const auditResults = await runBatchReports(
-        auditable.map((input) => ({
-          url: input.resolution.websiteUrl ?? "",
-          label: input.candidate.label,
-          segment: input.candidate.segment,
-          profile: input.candidate.profile
-        })),
-        {
-          format: "all",
-          outDir: options.outDir ?? "reports",
-          concurrency: options.concurrency,
-          profile: options.profile,
-          brand
-        }
-      );
-
-      prospectInputs = prospectInputs.map((input, index) => {
-        const auditableIndex = auditable.findIndex((candidate) => candidate.index === index);
-        if (auditableIndex < 0) {
-          return input;
-        }
-
-        const result = auditResults[auditableIndex];
-        if (result.status === "failed") {
-          return {
-            ...input,
-            audit: {
-              status: "failed",
-              error: result.error
-            }
-          };
-        }
-
-        const scores = Object.values(result.report.scores);
-        const score =
-          scores.length > 0 ? Math.round(scores.reduce((total, item) => total + item.score, 0) / scores.length) : undefined;
-        return {
-          ...input,
-          audit: {
-            status: "success",
-            score,
-            topFinding: result.report.findings[0]?.title,
-            reportPath: preferredReportPath(result.slug, result.outputs),
-            contact: result.report.contact
-          }
-        };
-      });
-    }
-
-    const rows = buildProspectRows(prospectInputs).filter((row) =>
-      options.minOpportunityScore === undefined ? true : row.opportunityScore >= options.minOpportunityScore
-    );
-    await mkdir(dirname(options.exportCsv), { recursive: true });
-    await writeFile(options.exportCsv, renderProspectRowsCsv(rows, options.exportPreset), "utf8");
-    if (options.reviewCsv) {
-      await mkdir(dirname(options.reviewCsv), { recursive: true });
-      await writeFile(options.reviewCsv, renderDiscoveryReviewCsv(mergeDiscoveryReviewRows(rows, existingReviewRows)), "utf8");
-    }
-    if (options.duplicatesJson) {
-      await mkdir(dirname(options.duplicatesJson), { recursive: true });
-      await writeFile(
-        options.duplicatesJson,
-        `${JSON.stringify(
-          {
-            duplicateGroups: findDuplicateProspectGroups(rows),
-            fuzzyDuplicateGroups: findFuzzyDuplicateProspectGroups(rows)
-          },
-          null,
-          2
-        )}\n`,
-        "utf8"
-      );
-    }
-    const summary = buildDiscoverySummary(rows, suppressionResult.suppressedCount);
-    if (options.summaryJson) {
-      await mkdir(dirname(options.summaryJson), { recursive: true });
-      await writeFile(options.summaryJson, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
-    }
+    const { rows, summary } = await runDiscovery({
+      provider: options.provider,
+      query,
+      input: options.input,
+      profile: options.profile,
+      outDir: options.outDir,
+      exportCsv: options.exportCsv ?? "",
+      summaryJson: options.summaryJson,
+      reviewCsv: options.reviewCsv,
+      suppressionList: options.suppressionList,
+      duplicatesJson: options.duplicatesJson,
+      exportPreset: options.exportPreset,
+      dryRun: options.dryRun,
+      limit: options.limit,
+      maxAudits: options.maxAudits,
+      minOpportunityScore: options.minOpportunityScore,
+      concurrency: options.concurrency,
+      apiKey: options.provider === "google-places" ? resolveGoogleMapsApiKey() : undefined,
+      brand
+    });
     process.stdout.write(`Discovered ${rows.length} lead${rows.length === 1 ? "" : "s"}\n`);
     process.stdout.write(`${renderDiscoverySummary(summary)}\n`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    process.stderr.write(`open-local-audit: ${message}\n`);
+    process.exitCode = 1;
+  }
+});
+
+const workflowProgram = program
+  .command("workflow")
+  .description("Run a versioned local discovery, shortlist, review, and report packaging workflow.")
+  .option("--config <path>", "read workflow configuration from a JSON file");
+
+workflowProgram.action(async () => {
+  try {
+    const options = workflowProgram.optsWithGlobals() as { config?: string };
+    if (!options.config) {
+      throw new Error("--config is required for workflow");
+    }
+
+    const config = await readWorkflowConfig(options.config);
+    if (config.discovery.provider === "google-places") {
+      process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
+    }
+
+    const summary = await runResolvedWorkflow(config);
+    process.stdout.write("Workflow completed\n");
+    process.stdout.write(`Discovered: ${summary.discoveredLeads}\n`);
+    process.stdout.write(`Selected: ${summary.selectedLeads}\n`);
+    process.stdout.write(`Summary: ${summary.outputs.workflowSummaryJson}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     process.stderr.write(`open-local-audit: ${message}\n`);
@@ -434,52 +308,44 @@ const shortlistProgram = program
         throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
-      const sort = options.sort as ShortlistSort;
       const top = Number(options.top);
       const minOpportunityScore =
         options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
       const minScore =
         options.minScore === undefined ? undefined : Number(options.minScore);
-      const reviewRows = options.reviewCsv ? readShortlistReviewCsv(await readFile(options.reviewCsv, "utf8")) : [];
-      const result = buildLeadShortlist(await readFile(options.input, "utf8"), {
-        top,
-        minOpportunityScore,
-        minScore,
-        segment: options.segment,
-        profile: options.profile,
-        priority: options.priority,
-        contactConfidence: options.contactConfidence,
-        minContactConfidence: options.minContactConfidence,
-        preferredContactChannel: options.preferredContactChannel,
-        source: options.source,
-        auditStatus: options.auditStatus,
-        hasWebsite: options.hasWebsite,
-        topFinding: options.topFinding,
-        reviewStatus: options.reviewStatus,
-        excludeReviewStatus: options.excludeReviewStatus,
-        unreviewed: options.unreviewed,
-        reviewedBefore: options.reviewedBefore,
-        requireWebsite: options.requireWebsite,
-        missingWebsite: options.missingWebsite,
-        requireContact: options.requireContact,
-        missingContact: options.missingContact,
-        requireReport: options.requireReport,
-        missingReport: options.missingReport,
-        sort,
-        reviewRows
+      const result = await runShortlistReport({
+        input: options.input,
+        out: options.out,
+        summaryJson: options.summaryJson,
+        reviewCsv: options.reviewCsv,
+        format,
+        shortlist: {
+          top,
+          minOpportunityScore,
+          minScore,
+          segment: options.segment,
+          profile: options.profile,
+          priority: options.priority,
+          contactConfidence: options.contactConfidence,
+          minContactConfidence: options.minContactConfidence,
+          preferredContactChannel: options.preferredContactChannel,
+          source: options.source,
+          auditStatus: options.auditStatus,
+          hasWebsite: options.hasWebsite,
+          topFinding: options.topFinding,
+          reviewStatus: options.reviewStatus,
+          excludeReviewStatus: options.excludeReviewStatus,
+          unreviewed: options.unreviewed,
+          reviewedBefore: options.reviewedBefore,
+          requireWebsite: options.requireWebsite,
+          missingWebsite: options.missingWebsite,
+          requireContact: options.requireContact,
+          missingContact: options.missingContact,
+          requireReport: options.requireReport,
+          missingReport: options.missingReport,
+          sort: options.sort as ShortlistSort
+        }
       });
-      await mkdir(dirname(options.out), { recursive: true });
-      const output =
-        format === "json"
-          ? renderShortlistJson(result)
-          : format === "csv"
-            ? renderShortlistCsv(result)
-            : renderShortlistMarkdown(result);
-      await writeFile(options.out, output, "utf8");
-      if (options.summaryJson) {
-        await mkdir(dirname(options.summaryJson), { recursive: true });
-        await writeFile(options.summaryJson, renderShortlistSummaryJson(result), "utf8");
-      }
       process.stdout.write(`Shortlisted ${result.selected} of ${result.totalRows} lead${result.totalRows === 1 ? "" : "s"}\n`);
       process.stdout.write(`Suppressed: ${result.suppressedRows}\n`);
       process.stdout.write(`Filtered: ${result.filteredRows}\n`);

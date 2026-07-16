@@ -109,6 +109,154 @@ async function startLocalBusinessServer(): Promise<{ server: Server; url: string
 }
 
 describe("CLI behavior helpers", () => {
+  it("lists the workflow command and its required configuration option", () => {
+    const rootHelp = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], {
+      cwd: process.cwd(),
+      encoding: "utf8"
+    });
+    const workflowHelp = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "workflow", "--help"], {
+      cwd: process.cwd(),
+      encoding: "utf8"
+    });
+
+    expect(rootHelp.status).toBe(0);
+    expect(rootHelp.stdout).toContain("workflow");
+    expect(workflowHelp.status).toBe(0);
+    expect(workflowHelp.stdout).toContain("--config <path>");
+  });
+
+  it("requires a configuration file for workflows", () => {
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "workflow"], {
+      cwd: process.cwd(),
+      encoding: "utf8"
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("open-local-audit: --config is required for workflow\n");
+  });
+
+  it("rejects invalid workflow configuration before creating output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-invalid-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const outDir = join(tmp, "workflow-output");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv", unexpected: true },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Unrecognized key");
+      expect(existsSync(outDir)).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("warns about Google Places billing before running a Google workflow", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-google-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "google-places", query: "dentist Kadikoy" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GOOGLE_MAPS_API_KEY: "",
+            OPEN_LOCAL_AUDIT_DISABLE_WINDOWS_ENV_FALLBACK: "1"
+          }
+        }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Google Maps Platform billing may apply");
+      expect(result.stderr).toContain("GOOGLE_MAPS_API_KEY is required");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("runs a manual CSV workflow from a versioned configuration file", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-"));
+    const { server, url } = await startLocalBusinessServer();
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const inputPath = join(tmp, "places.csv");
+      const outDir = join(tmp, "workflow-output");
+      writeFileSync(inputPath, `label,website,segment,profile\nExample Dental,${url},dental,dental\n`, "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: {
+            provider: "manual-csv",
+            input: "./places.csv",
+            profile: "dental",
+            concurrency: 1
+          },
+          shortlist: { top: 1, sort: "opportunity-desc" }
+        }),
+        "utf8"
+      );
+
+      const result = await spawnCli([
+        "--import",
+        "tsx",
+        "src/cli.ts",
+        "workflow",
+        "--config",
+        configPath
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("Workflow completed");
+      expect(result.stdout).toContain("Discovered: 1");
+      expect(result.stdout).toContain("Selected: 1");
+      expect(result.stdout).toContain(`Summary: ${join(outDir, "workflow-summary.json")}`);
+      expect(readFileSync(join(outDir, "leads.csv"), "utf8")).toContain("Example Dental");
+      expect(readFileSync(join(outDir, "shortlist.csv"), "utf8")).toContain("Example Dental");
+      expect(JSON.parse(readFileSync(join(outDir, "workflow-summary.json"), "utf8"))).toMatchObject({
+        version: 1,
+        status: "success",
+        discoveredLeads: 1,
+        selectedLeads: 1
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+      removeTempDir(tmp);
+    }
+  });
+
   it("fails when findings meet the configured severity threshold", () => {
     expect(shouldFailOnThreshold(report, "high")).toBe(true);
     expect(shouldFailOnThreshold(report, "medium")).toBe(true);

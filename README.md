@@ -35,6 +35,7 @@ Open Local Audit produces evidence-backed mini audits for local businesses. The 
 - [Security and ethics](./docs/security-and-ethics.md)
 - [Audit checklist](./docs/audit-checklist.md)
 - [Google Maps API key setup](./docs/google-maps-api-key.md)
+- [Workflow command architecture](./docs/architecture/workflow-command.md)
 
 ## Local development
 
@@ -199,6 +200,35 @@ open-local-audit discover --input places.csv --provider manual-csv --profile den
 ```
 
 The `manual-csv` provider reads an operator-prepared CSV, resolves supplied website URLs, audits website-present rows through the existing batch pipeline, and writes `leads.csv` with `hasWebsite`, `websiteUrl`, `priority`, and `nextAction`. Use `--dry-run` to create the prospect CSV without auditing websites.
+
+Config-driven local workflow:
+
+```bash
+open-local-audit workflow --config workflow.json
+```
+
+Minimal `workflow.json` for a manual CSV run:
+
+```json
+{
+  "version": 1,
+  "outDir": "./workflow-output",
+  "discovery": {
+    "provider": "manual-csv",
+    "input": "./places.csv",
+    "profile": "dental"
+  },
+  "shortlist": {
+    "top": 10
+  }
+}
+```
+
+The workflow runs discovery and then shortlisting from one strict JSON configuration. Version `1` is the only supported configuration version. Relative `outDir`, manual `input`, and optional review CSV paths resolve from the configuration file directory, so this example reads `places.csv` beside `workflow.json` and writes below `workflow-output/` beside it.
+
+The workflow owns predictable output paths below `outDir`: `reports/`, `leads.csv`, `discovery-summary.json`, `shortlist.csv`, `shortlist-summary.json`, and `workflow-summary.json`; it also writes `review-summary.json` when `review` is configured and `packages/` when `packageReports` is enabled. Rerunning the same configuration replaces those managed outputs without deleting unrelated files.
+
+Configuration validation happens before output creation. Invalid configuration or a failed workflow stage returns exit code `1`; when execution reaches a managed stage, inspect `workflow-summary.json` for stage status and output paths. The workflow writes local files only: it does not send outreach, upload reports, or synchronize a CRM. A `google-places` discovery configuration requires `GOOGLE_MAPS_API_KEY` and can incur Google Maps Platform billing; the API key is not stored in the configuration.
 
 Google Places lead discovery:
 
