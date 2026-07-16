@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.62.0 - 2026-07-16
+
+- Added `workflow --config <path>` to run versioned discovery, shortlist, optional review summary, and optional report packaging from one strict JSON configuration.
+- Added deterministic managed workflow outputs with fail-fast stage summaries and independent package failure reporting.
+- Kept workflows operator-controlled and local-only, with no outreach sending or CRM synchronization; Google Places remains opt-in and requires its existing API key and billing acknowledgement.
+
 ## v0.61.0 - 2026-07-14
 
 - Added batch `--summary-json <path>` output using the existing aggregate batch index JSON contract independently of report format.
