@@ -871,6 +871,54 @@ describe("workflow orchestrator", () => {
     });
   });
 
+  it("rejects a linked managed reports directory before discovery writes", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+
+    const paths = resolvedWorkflowPaths();
+    const outsideDir = join(directory, "outside-managed-reports");
+    await mkdir(paths.outDir, { recursive: true });
+    await mkdir(outsideDir, { recursive: true });
+    await symlink(outsideDir, paths.reportsDir, process.platform === "win32" ? "junction" : "dir");
+
+    const discovery = vi.fn();
+    await expect(runWorkflow(configPath, { runDiscovery: discovery })).rejects.toThrow(
+      "Managed reports directory must not be linked"
+    );
+    expect(discovery).not.toHaveBeenCalled();
+  });
+
+  it("rejects a linked managed output directory before any workflow writes", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+
+    const paths = resolvedWorkflowPaths();
+    const outsideDir = join(directory, "outside-managed-output");
+    await mkdir(dirname(paths.outDir), { recursive: true });
+    await mkdir(outsideDir, { recursive: true });
+    await symlink(outsideDir, paths.outDir, process.platform === "win32" ? "junction" : "dir");
+
+    const discovery = vi.fn();
+    await expect(runWorkflow(configPath, { runDiscovery: discovery })).rejects.toThrow(
+      "Managed output directory must not be linked"
+    );
+    expect(discovery).not.toHaveBeenCalled();
+  });
+
+  it("rejects a linked managed packages directory before package writes", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+
+    const paths = resolvedWorkflowPaths();
+    const outsideDir = join(directory, "outside-managed-packages");
+    await mkdir(paths.outDir, { recursive: true });
+    await mkdir(outsideDir, { recursive: true });
+    await symlink(outsideDir, paths.packagesDir, process.platform === "win32" ? "junction" : "dir");
+
+    const discovery = vi.fn();
+    await expect(runWorkflow(configPath, { runDiscovery: discovery })).rejects.toThrow(
+      "Managed packages directory must not be linked"
+    );
+    expect(discovery).not.toHaveBeenCalled();
+  });
+
   it("rejects an expected report file reported as a symbolic link before packaging", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
