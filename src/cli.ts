@@ -30,9 +30,28 @@ import { runShortlistReport } from "./shortlist-runner.js";
 import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
 import { readWorkflowConfig } from "./workflow-config.js";
+import {
+  renderWorkflowPreflightJson,
+  renderWorkflowPreflightTerminal,
+  runWorkflowPreflight
+} from "./workflow-preflight.js";
 import { runResolvedWorkflow } from "./workflow.js";
 
-const program = new Command();
+const program = new Command().enablePositionalOptions();
+
+function optsWithLocalCliPrecedence(command: Command): Record<string, unknown> {
+  const options = command.optsWithGlobals();
+  const localOptions = command.opts();
+
+  for (const option of command.options) {
+    const name = option.attributeName();
+    if (command.getOptionValueSource(name) === "cli") {
+      options[name] = localOptions[name];
+    }
+  }
+
+  return options;
+}
 
 const discoveryProgram = program
   .command("discover")
@@ -78,7 +97,7 @@ function renderDiscoverySummary(summary: DiscoverySummary): string {
 
 discoveryProgram.action(async (query?: string) => {
   try {
-    const rawDiscoveryOptions = discoveryProgram.optsWithGlobals();
+    const rawDiscoveryOptions = optsWithLocalCliPrecedence(discoveryProgram);
     const options = cliOptionsSchema
       .pick({
         input: true,
@@ -137,13 +156,41 @@ discoveryProgram.action(async (query?: string) => {
 const workflowProgram = program
   .command("workflow")
   .description("Run a versioned local discovery, shortlist, review, and report packaging workflow.")
-  .option("--config <path>", "read workflow configuration from a JSON file");
+  .option("--config <path>", "read workflow configuration from a JSON file")
+  .option("--check", "validate workflow readiness without running it", false)
+  .option("--format <format>", "preflight output format: terminal or json");
 
 workflowProgram.action(async () => {
   try {
-    const options = workflowProgram.optsWithGlobals() as { config?: string };
+    const options = workflowProgram.opts() as { config?: string; check: boolean; format?: string };
+    const format = workflowProgram.getOptionValueSource("format") === "cli" ? options.format : undefined;
     if (!options.config) {
       throw new Error("--config is required for workflow");
+    }
+
+    if (!options.check && format !== undefined) {
+      throw new Error("--format is only supported with workflow --check");
+    }
+
+    if (options.check) {
+      const preflightFormat = format ?? "terminal";
+      if (preflightFormat !== "terminal" && preflightFormat !== "json") {
+        throw new Error("workflow --format must be terminal or json");
+      }
+
+      const report = await runWorkflowPreflight(options.config);
+      process.stdout.write(
+        preflightFormat === "json"
+          ? renderWorkflowPreflightJson(report)
+          : renderWorkflowPreflightTerminal(report, options.config)
+      );
+      if (report.status === "blocked") {
+        if (preflightFormat === "terminal") {
+          process.stderr.write("open-local-audit: workflow preflight blocked\n");
+        }
+        process.exitCode = 1;
+      }
+      return;
     }
 
     const config = await readWorkflowConfig(options.config);
@@ -171,7 +218,11 @@ const validateExportProgram = program
   .option("--format <format>", "validation report format: markdown or json", "markdown")
   .action(async () => {
     try {
-      const rawOptions = validateExportProgram.optsWithGlobals() as { input?: string; preset: string; format: string };
+      const rawOptions = optsWithLocalCliPrecedence(validateExportProgram) as {
+        input?: string;
+        preset: string;
+        format: string;
+      };
       const preset = rawOptions.preset as ExportValidationPreset;
       const format = rawOptions.format as ExportValidationFormat;
       if (!rawOptions.input) {
@@ -263,7 +314,7 @@ const shortlistProgram = program
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
-    const options = shortlistProgram.optsWithGlobals() as {
+    const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
       out?: string;
       reviewCsv?: string;

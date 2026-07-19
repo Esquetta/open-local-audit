@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { runBatchReports } from "./batch.js";
 import {
@@ -23,6 +23,7 @@ import {
   type ProspectRowInput
 } from "./discovery.js";
 import type { AuditProfile, ReportBrandConfig } from "./types.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 export interface DiscoveryRunOptions {
   provider: DiscoveryProviderName;
@@ -42,6 +43,7 @@ export interface DiscoveryRunOptions {
   minOpportunityScore?: number;
   concurrency: number;
   apiKey?: string;
+  managedOutputRoot?: string;
   brand?: ReportBrandConfig;
 }
 
@@ -139,7 +141,8 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
         outDir: options.outDir ?? "reports",
         concurrency: options.concurrency,
         profile: options.profile,
-        brand: options.brand
+        brand: options.brand,
+        managedOutputRoot: options.managedOutputRoot
       }
     );
 
@@ -180,14 +183,14 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
     options.minOpportunityScore === undefined ? true : row.opportunityScore >= options.minOpportunityScore
   );
   await mkdir(dirname(options.exportCsv), { recursive: true });
-  await writeFile(options.exportCsv, renderProspectRowsCsv(rows, options.exportPreset ?? "standard"), "utf8");
+  await writeWorkflowOutputFile(options.exportCsv, renderProspectRowsCsv(rows, options.exportPreset ?? "standard"));
   if (options.reviewCsv) {
     await mkdir(dirname(options.reviewCsv), { recursive: true });
-    await writeFile(options.reviewCsv, renderDiscoveryReviewCsv(mergeDiscoveryReviewRows(rows, existingReviewRows)), "utf8");
+    await writeWorkflowOutputFile(options.reviewCsv, renderDiscoveryReviewCsv(mergeDiscoveryReviewRows(rows, existingReviewRows)));
   }
   if (options.duplicatesJson) {
     await mkdir(dirname(options.duplicatesJson), { recursive: true });
-    await writeFile(
+    await writeWorkflowOutputFile(
       options.duplicatesJson,
       `${JSON.stringify(
         {
@@ -197,13 +200,12 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
         null,
         2
       )}\n`,
-      "utf8"
     );
   }
   const summary = buildDiscoverySummary(rows, suppressionResult.suppressedCount);
   if (options.summaryJson) {
     await mkdir(dirname(options.summaryJson), { recursive: true });
-    await writeFile(options.summaryJson, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    await writeWorkflowOutputFile(options.summaryJson, `${JSON.stringify(summary, null, 2)}\n`);
   }
 
   return {

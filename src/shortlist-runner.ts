@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   buildLeadShortlist,
@@ -11,6 +11,7 @@ import {
   type ShortlistOptions,
   type ShortlistResult
 } from "./shortlist.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 export interface ShortlistRunOptions {
   input: string;
@@ -37,11 +38,11 @@ export async function runShortlistReport(options: ShortlistRunOptions): Promise<
         : renderShortlistMarkdown(result);
 
   await mkdir(dirname(options.out), { recursive: true });
-  await writeFile(options.out, output, "utf8");
+  await writeWorkflowOutputFile(options.out, output);
 
   if (options.summaryJson) {
     await mkdir(dirname(options.summaryJson), { recursive: true });
-    await writeFile(options.summaryJson, renderShortlistSummaryJson(result), "utf8");
+    await writeWorkflowOutputFile(options.summaryJson, renderShortlistSummaryJson(result));
   }
 
   return result;

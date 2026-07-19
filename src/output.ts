@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { renderPdfReport } from "./pdf.js";
 import { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 import type { AuditReport, ReportBrandConfig } from "./types.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 export type OutputFormat = "json" | "markdown" | "html" | "pdf" | "all";
 
@@ -12,6 +13,7 @@ export interface ReportOutputOptions {
   outDir?: string;
   pretty?: boolean;
   brand?: ReportBrandConfig;
+  managedOutputRoot?: string;
 }
 
 export interface ReportOutput {
@@ -61,10 +63,18 @@ export async function writeReportOutputs(report: AuditReport, options: ReportOut
   }
 
   if (options.outDir) {
-    await mkdir(options.outDir, { recursive: true });
+    if (!options.managedOutputRoot) {
+      await mkdir(options.outDir, { recursive: true });
+    }
     for (const output of outputs) {
       output.path = join(options.outDir, defaultReportName(output.format));
-      await writeFile(output.path, output.content);
+      if (options.managedOutputRoot) {
+        await writeWorkflowOutputFile(output.path, output.content, {
+          managedOutputRoot: options.managedOutputRoot
+        });
+      } else {
+        await writeFile(output.path, output.content);
+      }
     }
     return outputs;
   }
@@ -75,7 +85,13 @@ export async function writeReportOutputs(report: AuditReport, options: ReportOut
 
   if (options.out) {
     outputs[0].path = options.out;
-    await writeFile(options.out, outputs[0].content);
+    if (options.managedOutputRoot) {
+      await writeWorkflowOutputFile(options.out, outputs[0].content, {
+        managedOutputRoot: options.managedOutputRoot
+      });
+    } else {
+      await writeFile(options.out, outputs[0].content);
+    }
   }
 
   return outputs;

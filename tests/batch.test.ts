@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -131,6 +131,62 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("batch reports", () => {
+  it("rejects a linked generated report directory in workflow managed-output mode", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      const reportsDir = join(dir, "reports");
+      const externalDir = join(dir, "external-reports");
+      const url = "https://linked-leaf.test";
+      await mkdir(reportsDir, { recursive: true });
+      await mkdir(externalDir, { recursive: true });
+      await symlink(externalDir, join(reportsDir, safeReportSlug(url)), process.platform === "win32" ? "junction" : "dir");
+
+      const results = await runBatchReports([url], {
+        format: "json",
+        outDir: reportsDir,
+        managedOutputRoot: reportsDir,
+        audit: async () => reportFor(url)
+      });
+
+      expect(results).toMatchObject([
+        {
+          status: "failed",
+          error: "Managed output directory must not be linked"
+        }
+      ]);
+      expect(await readdir(externalDir)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces a linked batch index target in workflow managed-output mode", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
+    try {
+      const reportsDir = join(dir, "reports");
+      const indexPath = join(reportsDir, "open-local-audit-batch-index.json");
+      const externalIndex = join(dir, "external-index.json");
+      const url = "https://linked-index.test";
+      await mkdir(reportsDir, { recursive: true });
+      await writeFile(externalIndex, "external index\n", "utf8");
+      await link(externalIndex, indexPath);
+
+      await runBatchReports([url], {
+        format: "json",
+        outDir: reportsDir,
+        managedOutputRoot: reportsDir,
+        audit: async () => reportFor(url)
+      });
+
+      expect(await readFile(externalIndex, "utf8")).toBe("external index\n");
+      expect(JSON.parse(await readFile(indexPath, "utf8"))).toMatchObject({
+        summary: { total: 1, succeeded: 1 }
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("reads URL input files with comments and blank lines", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-batch-"));
     try {

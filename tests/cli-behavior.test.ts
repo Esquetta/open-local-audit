@@ -109,7 +109,7 @@ async function startLocalBusinessServer(): Promise<{ server: Server; url: string
 }
 
 describe("CLI behavior helpers", () => {
-  it("lists the workflow command and its required configuration option", () => {
+  it("lists workflow preflight options in help", () => {
     const rootHelp = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], {
       cwd: process.cwd(),
       encoding: "utf8"
@@ -123,6 +123,8 @@ describe("CLI behavior helpers", () => {
     expect(rootHelp.stdout).toContain("workflow");
     expect(workflowHelp.status).toBe(0);
     expect(workflowHelp.stdout).toContain("--config <path>");
+    expect(workflowHelp.stdout).toContain("--check");
+    expect(workflowHelp.stdout).toContain("--format <format>");
   });
 
   it("requires a configuration file for workflows", () => {
@@ -133,6 +135,242 @@ describe("CLI behavior helpers", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("open-local-audit: --config is required for workflow\n");
+  });
+
+  it("reports a ready manual workflow preflight in terminal format without creating output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-ready-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const outDir = join(tmp, "workflow-output");
+      writeFileSync(join(tmp, "places.csv"), "label,website\nExample Dental,https://example.test\n", "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--check"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Workflow preflight: READY");
+      expect(existsSync(outDir)).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("reports ready manual workflow preflight JSON in supported local format option orders", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-json-ready-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(join(tmp, "places.csv"), "label,website\nExample Dental,https://example.test\n", "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      for (const checkArguments of [
+        ["--check", "--format", "json"],
+        ["--format", "json", "--check"]
+      ]) {
+        const result = spawnSync(
+          process.execPath,
+          ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, ...checkArguments],
+          { cwd: process.cwd(), encoding: "utf8" }
+        );
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "ready" });
+      }
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("blocks a workflow preflight with a missing manual input", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-missing-input-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--check"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.stderr).toBe("open-local-audit: workflow preflight blocked\n");
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("Workflow preflight: BLOCKED");
+      expect(result.stdout).toContain("Discovery input must be a readable regular file");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("reports invalid workflow preflight JSON as blocked", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-invalid-json-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(configPath, '{ "version": 1,', "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--check", "--format", "json"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        version: 1,
+        status: "blocked",
+        checks: [{ id: "configuration", status: "fail", message: "Workflow configuration could not be read or validated" }]
+      });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("keeps root audit format out of terminal workflow preflight output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-root-format-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(configPath, '{ "version": 1,', "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "--format", "json", "workflow", "--config", configPath, "--check"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("open-local-audit: workflow preflight blocked\n");
+      expect(result.stdout).toContain("Workflow preflight: BLOCKED");
+      expect(() => JSON.parse(result.stdout)).toThrow();
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("blocks Google workflow preflight without billing warning or secret leakage", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-google-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const querySentinel = "workflow-preflight-query-sentinel";
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "google-places", query: querySentinel },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--check"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            GOOGLE_MAPS_API_KEY: "",
+            OPEN_LOCAL_AUDIT_DISABLE_WINDOWS_ENV_FALLBACK: "1"
+          }
+        }
+      );
+
+      expect(result.stderr).toBe("open-local-audit: workflow preflight blocked\n");
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("Google Maps API key is required");
+      expect(result.stderr).not.toContain("Google Maps Platform billing may apply");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(querySentinel);
+      expect(existsSync(join(tmp, "workflow-output"))).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("keeps a missing workflow preflight review CSV as a ready warning", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-review-warning-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(join(tmp, "places.csv"), "label,website\nExample Dental,https://example.test\n", "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {},
+          review: { csv: "./review.csv" }
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--check"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("WARN  Review CSV does not exist and will be created");
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("rejects workflow preflight format without --check", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", "--format", "json"],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("open-local-audit: --format is only supported with workflow --check\n");
+  });
+
+  it("rejects unsupported workflow preflight formats", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", "--check", "--format", "yaml"],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("open-local-audit: workflow --format must be terminal or json\n");
   });
 
   it("rejects invalid workflow configuration before creating output", () => {
@@ -230,6 +468,8 @@ describe("CLI behavior helpers", () => {
         "--import",
         "tsx",
         "src/cli.ts",
+        "--format",
+        "json",
         "workflow",
         "--config",
         configPath
@@ -621,13 +861,13 @@ describe("CLI behavior helpers", () => {
           "--import",
           "tsx",
           "src/cli.ts",
+          "--format",
+          "json",
           "validate-export",
           "--input",
           inputPath,
           "--preset",
-          "crm",
-          "--format",
-          "json"
+          "crm"
         ],
         {
           cwd: process.cwd(),
@@ -1112,13 +1352,13 @@ describe("CLI behavior helpers", () => {
           "--import",
           "tsx",
           "src/cli.ts",
-          "shortlist",
           "--input",
           inputPath,
           "--out",
           outPath,
           "--format",
-          "json"
+          "json",
+          "shortlist",
         ],
         {
           cwd: process.cwd(),
@@ -2167,6 +2407,8 @@ describe("CLI behavior helpers", () => {
           "--import",
           "tsx",
           "src/cli.ts",
+          "--export-preset",
+          "crm",
           "discover",
           "--input",
           inputPath,
@@ -2174,8 +2416,6 @@ describe("CLI behavior helpers", () => {
           "manual-csv",
           "--export-csv",
           exportCsv,
-          "--export-preset",
-          "crm",
           "--dry-run"
         ],
         {

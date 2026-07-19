@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, rename, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { runDiscovery, type DiscoveryRunResult } from "./discovery-runner.js";
 import { packageReport, type ReportPackResult } from "./report-pack.js";
@@ -8,6 +8,8 @@ import { runShortlistReport, type ShortlistRunOptions } from "./shortlist-runner
 import type { ShortlistLead, ShortlistResult } from "./shortlist.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import { readWorkflowConfig, type ResolvedWorkflowConfig, type WorkflowManagedPaths } from "./workflow-config.js";
+import { prepareWorkflowManagedDirectories } from "./workflow-paths.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 export type WorkflowStatus = "success" | "failed";
 export type WorkflowStageStatus = "success" | "failed" | "skipped" | "not-run";
@@ -188,7 +190,7 @@ function createInitialSummary(config: ResolvedWorkflowConfig): WorkflowSummary {
 
 async function writePrettyJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await writeWorkflowOutputFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 async function writeWorkflowSummary(summary: WorkflowSummary): Promise<void> {
@@ -222,34 +224,6 @@ function markStageFailure(summary: WorkflowSummary, stage: WorkflowStageName, me
     stage,
     message
   };
-}
-
-async function prepareManagedDirectories(config: ResolvedWorkflowConfig): Promise<void> {
-  await mkdir(config.outDir, { recursive: true });
-  const outputInfo = await lstat(config.outDir);
-  if (outputInfo.isSymbolicLink()) {
-    throw new Error("Managed output directory must not be linked");
-  }
-
-  const realOutDir = await realpath(config.outDir);
-  const directories = [
-    { label: "reports", path: config.paths.reportsDir },
-    ...(config.packageReports ? [{ label: "packages", path: config.paths.packagesDir }] : [])
-  ];
-
-  for (const directory of directories) {
-    await mkdir(directory.path, { recursive: true });
-    const directoryInfo = await lstat(directory.path);
-    if (directoryInfo.isSymbolicLink()) {
-      throw new Error(`Managed ${directory.label} directory must not be linked`);
-    }
-
-    const realDirectory = await realpath(directory.path);
-    const relativeDirectory = relative(realOutDir, realDirectory);
-    if (relativeDirectory.startsWith("..") || isAbsolute(relativeDirectory)) {
-      throw new Error(`Managed ${directory.label} directory escapes output directory`);
-    }
-  }
 }
 
 async function resolvePackageInputDir(
@@ -401,7 +375,7 @@ export async function runResolvedWorkflow(
     ...dependencies
   };
 
-  await prepareManagedDirectories(config);
+  await prepareWorkflowManagedDirectories(config);
   const summary = createInitialSummary(config);
   const knownSecrets: string[] = [];
 
@@ -418,6 +392,7 @@ export async function runResolvedWorkflow(
       ...(config.discovery.provider === "google-places" ? { query: config.discovery.query } : {}),
       profile: config.discovery.profile,
       outDir: config.paths.reportsDir,
+      managedOutputRoot: config.paths.reportsDir,
       exportCsv: config.paths.leadsCsv,
       summaryJson: config.paths.discoverySummaryJson,
       reviewCsv: config.review?.csv,

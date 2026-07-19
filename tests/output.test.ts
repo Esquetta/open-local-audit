@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { link, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,33 @@ import { auditSnapshot } from "../src/audit.js";
 import { writeReportOutputs } from "../src/output.js";
 
 describe("report output writer", () => {
+  it("preserves standalone linked --out write semantics", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "open-local-audit-output-link-"));
+    try {
+      const destination = join(directory, "report.json");
+      const externalTarget = join(directory, "external-report.json");
+      const report = auditSnapshot(
+        {
+          url: "https://example.test",
+          finalUrl: "https://example.test",
+          statusCode: 200,
+          headers: { "content-type": "text/html" },
+          html: "<html><head><title>Example</title></head><body><h1>Example</h1></body></html>"
+        },
+        "2026-05-08T00:00:00.000Z"
+      );
+      await writeFile(externalTarget, "external content\n", "utf8");
+      await link(externalTarget, destination);
+
+      await writeReportOutputs(report, { format: "json", out: destination, pretty: true });
+
+      expect(JSON.parse(await readFile(externalTarget, "utf8"))).toMatchObject({ url: "https://example.test" });
+      expect((await stat(destination)).ino).toBe((await stat(externalTarget)).ino);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("writes JSON, Markdown, and HTML reports when format is all", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "open-local-audit-"));
     try {

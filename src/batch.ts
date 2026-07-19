@@ -5,6 +5,7 @@ import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditOptions, AuditProfile, AuditReport, PublicContact, ReportBrandConfig, Severity } from "./types.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 export interface BatchInputEntry {
   url: string;
@@ -26,6 +27,7 @@ export interface BatchReportOptions {
   concurrency?: number;
   profile?: AuditProfile;
   brand?: ReportBrandConfig;
+  managedOutputRoot?: string;
 }
 
 export type BatchCsvExportPreset = "standard" | "crm";
@@ -757,7 +759,9 @@ ${rows}
 }
 
 async function writeBatchIndex(results: BatchReportResult[], options: BatchReportOptions): Promise<void> {
-  await mkdir(options.outDir, { recursive: true });
+  if (!options.managedOutputRoot) {
+    await mkdir(options.outDir, { recursive: true });
+  }
   const index = buildBatchIndex(results, options.index, options.profile);
   const writers = {
     json: () => JSON.stringify(index, null, options.pretty ? 2 : 0) + "\n",
@@ -771,7 +775,9 @@ async function writeBatchIndex(results: BatchReportResult[], options: BatchRepor
   };
 
   for (const format of formatsFor(options.format)) {
-    await writeFile(join(options.outDir, fileNames[format]), writers[format](), "utf8");
+    await writeWorkflowOutputFile(join(options.outDir, fileNames[format]), writers[format](), {
+      managedOutputRoot: options.managedOutputRoot
+    });
   }
 
   if (options.summaryJson) {
@@ -943,7 +949,8 @@ export async function runBatchReports(
         format: options.format,
         outDir: prepared.siteOutDir,
         pretty: options.pretty,
-        brand: options.brand
+        brand: options.brand,
+        managedOutputRoot: options.managedOutputRoot
       });
 
       return {
