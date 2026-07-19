@@ -1,5 +1,5 @@
 import { lstat, mkdir, realpath } from "node:fs/promises";
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, relative, sep } from "node:path";
 import type { ResolvedWorkflowConfig } from "./workflow-config.js";
 
 export type WorkflowPathIssueId =
@@ -102,7 +102,11 @@ export async function inspectWorkflowManagedPaths(
 
     const realDirectory = await resolvedDependencies.realpath(directory.path);
     const relativeDirectory = relative(realOutDir, realDirectory);
-    if (relativeDirectory.startsWith("..") || isAbsolute(relativeDirectory)) {
+    if (
+      relativeDirectory === ".." ||
+      relativeDirectory.startsWith(`..${sep}`) ||
+      isAbsolute(relativeDirectory)
+    ) {
       issues.push({
         id: `${directory.id}-escape`,
         message: `Managed ${directory.id} directory escapes output directory`,

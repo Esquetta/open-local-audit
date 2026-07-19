@@ -64,6 +64,14 @@ describe("workflow managed path inspection", () => {
     await expect(inspectWorkflowManagedPaths(config)).resolves.toEqual({ status: "safe", issues: [] });
   });
 
+  it("accepts a contained managed reports directory with a .. prefix", async () => {
+    const config = makeConfig();
+    config.paths.reportsDir = join(config.outDir, "..foo");
+    await mkdir(config.paths.reportsDir, { recursive: true });
+
+    await expect(inspectWorkflowManagedPaths(config)).resolves.toEqual({ status: "safe", issues: [] });
+  });
+
   it("reports a linked managed output directory", async () => {
     const config = makeConfig();
     const outsideDir = join(directory, "outside-output");
