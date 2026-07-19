@@ -48,6 +48,11 @@ export {
 } from "./shortlist.js";
 export { readWorkflowConfig } from "./workflow-config.js";
 export { WorkflowRunError, runWorkflow, safeLeadSlug } from "./workflow.js";
+export {
+  renderWorkflowPreflightJson,
+  renderWorkflowPreflightTerminal,
+  runWorkflowPreflight
+} from "./workflow-preflight.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
   BatchAuditContext,
@@ -102,6 +107,14 @@ export type {
   ShortlistSort
 } from "./shortlist.js";
 export type { RawWorkflowConfig as WorkflowConfig, ResolvedWorkflowConfig } from "./workflow-config.js";
+export type {
+  WorkflowPreflightCheck,
+  WorkflowPreflightCheckId,
+  WorkflowPreflightCheckStatus,
+  WorkflowPreflightReport,
+  WorkflowPreflightStage,
+  WorkflowPreflightStatus
+} from "./workflow-preflight.js";
 export type {
   WorkflowDependencies,
   WorkflowDiscoveryStageSummary,
