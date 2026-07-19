@@ -36,6 +36,7 @@ Open Local Audit produces evidence-backed mini audits for local businesses. The 
 - [Audit checklist](./docs/audit-checklist.md)
 - [Google Maps API key setup](./docs/google-maps-api-key.md)
 - [Workflow command architecture](./docs/architecture/workflow-command.md)
+- [Workflow preflight contract](./docs/architecture/workflow-preflight.md)
 
 ## Local development
 
@@ -206,6 +207,17 @@ Config-driven local workflow:
 ```bash
 open-local-audit workflow --config workflow.json
 ```
+
+Preflight a workflow without running it:
+
+```bash
+open-local-audit workflow --config workflow.json --check
+open-local-audit workflow --config workflow.json --check --format json
+```
+
+Terminal output is the default. A ready preflight exits `0`, including when it reports warnings; a blocked preflight exits `1`. Use `--format json` for automation, where standard output is one versioned JSON report.
+
+Preflight is read-only: it makes no API or website calls, creates or modifies no outputs, and performs no outreach, uploads, or CRM synchronization. For Google Places workflows it checks only that an API key is present, so it does not display a billing warning because it makes no API call. Filesystem access checks are advisory; workflow execution keeps its write-time containment checks as the authoritative safety boundary.
 
 Minimal `workflow.json` for a manual CSV run:
 
