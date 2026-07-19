@@ -144,6 +144,27 @@ function reportStatus(checks: WorkflowPreflightCheck[]): WorkflowPreflightStatus
   return checks.some((check) => check.status === "fail") ? "blocked" : "ready";
 }
 
+export function renderWorkflowPreflightTerminal(report: WorkflowPreflightReport, configPath: string): string {
+  const details = [
+    ...(report.stages ? [`Stages: ${report.stages.join(" -> ")}`] : []),
+    ...(report.outputs ? [`Managed output: ${report.outputs.outDir}`] : [])
+  ];
+  const lines = [
+    `Workflow preflight: ${report.status.toUpperCase()}`,
+    `Config: ${configPath}`,
+    ...(report.provider ? [`Provider: ${report.provider}`] : []),
+    "",
+    ...report.checks.map((check) => `${check.status.toUpperCase().padEnd(5)} ${check.message}`),
+    ...(details.length > 0 ? ["", ...details] : [])
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderWorkflowPreflightJson(report: WorkflowPreflightReport): string {
+  return `${JSON.stringify(report, null, 2)}\n`;
+}
+
 export async function runWorkflowPreflight(
   configPath: string,
   overrides: Partial<WorkflowPreflightDependencies> = {}

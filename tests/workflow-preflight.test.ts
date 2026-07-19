@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as workflowPreflight from "../src/workflow-preflight.js";
 import { runWorkflowPreflight } from "../src/workflow-preflight.js";
-import type { WorkflowPreflightCheckId } from "../src/workflow-preflight.js";
+import type { WorkflowPreflightCheckId, WorkflowPreflightReport } from "../src/workflow-preflight.js";
 
 const workflowPreflightCheckIds = [
   "configuration",
@@ -452,6 +452,97 @@ describe("workflow preflight", () => {
       stages: ["discovery", "shortlist", "review", "packaging"],
       limits: { maxCandidates: 3, maxAudits: 2 }
     });
+  });
+
+  it("renders a ready preflight report as a stable terminal summary without exposing configuration secrets", async () => {
+    const apiKey = "google-preflight-renderer-api-key";
+    const query = "google-preflight-renderer-query";
+    await writeConfig(
+      manualConfig({
+        discovery: { provider: "google-places", query, limit: 3 },
+        review: { csv: "./review.csv" },
+        packageReports: true
+      })
+    );
+
+    const report = await runWorkflowPreflight(configPath, { resolveGoogleMapsApiKey: () => apiKey });
+    const before = structuredClone(report);
+
+    const rendered = workflowPreflight.renderWorkflowPreflightTerminal(report, configPath);
+
+    expect(rendered).toBe(
+      [
+        "Workflow preflight: READY",
+        `Config: ${configPath}`,
+        "Provider: google-places",
+        "",
+        "PASS  Workflow configuration is valid",
+        "PASS  Google Maps API key is available",
+        "WARN  Review CSV does not exist and will be created",
+        "PASS  Output location is writable",
+        "",
+        "Stages: discovery -> shortlist -> review -> packaging",
+        `Managed output: ${report.outputs?.outDir}`,
+        ""
+      ].join("\n")
+    );
+    expect(report).toEqual(before);
+    expect(rendered).not.toContain(apiKey);
+    expect(rendered).not.toContain(query);
+  });
+
+  it("renders invalid configuration reports without optional terminal fields", () => {
+    const report: WorkflowPreflightReport = {
+      version: 1,
+      status: "blocked",
+      checks: [
+        {
+          id: "configuration",
+          status: "fail",
+          message: "Workflow configuration could not be read or validated"
+        }
+      ]
+    };
+    const before = structuredClone(report);
+
+    const rendered = workflowPreflight.renderWorkflowPreflightTerminal(report, "invalid-workflow.json");
+
+    expect(rendered).toBe(
+      [
+        "Workflow preflight: BLOCKED",
+        "Config: invalid-workflow.json",
+        "",
+        "FAIL  Workflow configuration could not be read or validated",
+        ""
+      ].join("\n")
+    );
+    expect(report).toEqual(before);
+  });
+
+  it("renders ready and blocked reports as one pretty JSON document without mutation or secrets", async () => {
+    const apiKey = "google-preflight-json-api-key";
+    const query = "google-preflight-json-query";
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query } }));
+    const ready = await runWorkflowPreflight(configPath, { resolveGoogleMapsApiKey: () => apiKey });
+    const blocked: WorkflowPreflightReport = {
+      version: 1,
+      status: "blocked",
+      checks: [{ id: "configuration", status: "fail", message: "Workflow configuration could not be read or validated" }]
+    };
+    const readyBefore = structuredClone(ready);
+    const blockedBefore = structuredClone(blocked);
+
+    const readyJson = workflowPreflight.renderWorkflowPreflightJson(ready);
+    const blockedJson = workflowPreflight.renderWorkflowPreflightJson(blocked);
+
+    expect(JSON.parse(readyJson)).toEqual(ready);
+    expect(JSON.parse(blockedJson)).toEqual(blocked);
+    expect(readyJson).toBe(`${JSON.stringify(ready, null, 2)}\n`);
+    expect(blockedJson).toBe(`${JSON.stringify(blocked, null, 2)}\n`);
+    expect(ready).toEqual(readyBefore);
+    expect(blocked).toEqual(blockedBefore);
+    expect(readyJson).not.toContain(apiKey);
+    expect(readyJson).not.toContain(query);
   });
 
   it("does not expose fetch or discovery execution from the preflight module", () => {
