@@ -14,7 +14,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/architecture/workflow-preflight.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
