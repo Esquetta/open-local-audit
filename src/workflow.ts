@@ -392,6 +392,7 @@ export async function runResolvedWorkflow(
       ...(config.discovery.provider === "google-places" ? { query: config.discovery.query } : {}),
       profile: config.discovery.profile,
       outDir: config.paths.reportsDir,
+      managedOutputRoot: config.paths.reportsDir,
       exportCsv: config.paths.leadsCsv,
       summaryJson: config.paths.discoverySummaryJson,
       reviewCsv: config.review?.csv,

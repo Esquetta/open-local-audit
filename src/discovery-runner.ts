@@ -43,6 +43,7 @@ export interface DiscoveryRunOptions {
   minOpportunityScore?: number;
   concurrency: number;
   apiKey?: string;
+  managedOutputRoot?: string;
   brand?: ReportBrandConfig;
 }
 
@@ -140,7 +141,8 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
         outDir: options.outDir ?? "reports",
         concurrency: options.concurrency,
         profile: options.profile,
-        brand: options.brand
+        brand: options.brand,
+        managedOutputRoot: options.managedOutputRoot
       }
     );
 
