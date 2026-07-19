@@ -58,7 +58,9 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 function isFilesystemReadinessError(error: unknown): boolean {
-  return ["ENOENT", "EACCES", "EPERM", "EISDIR", "ENOTDIR"].some((code) => hasErrorCode(error, code));
+  return ["ENOENT", "EACCES", "EPERM", "EISDIR", "ENOTDIR", "ELOOP", "ENAMETOOLONG"].some((code) =>
+    hasErrorCode(error, code)
+  );
 }
 
 function isInvalidWorkflowConfigJsonError(error: unknown): boolean {

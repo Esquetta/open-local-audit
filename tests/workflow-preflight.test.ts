@@ -320,6 +320,24 @@ describe("workflow preflight", () => {
     ).rejects.toBe(unexpected);
   });
 
+  it("blocks output readiness for symlink-loop and overlong path errors", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+
+    for (const code of ["ELOOP", "ENAMETOOLONG"]) {
+      const result = await runWorkflowPreflight(configPath, {
+        resolveGoogleMapsApiKey: () => "present",
+        lstat: async () => {
+          throw Object.assign(new Error("path unavailable"), { code });
+        }
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked",
+        checks: expect.arrayContaining([expect.objectContaining({ id: "output-access", status: "fail" })])
+      });
+    }
+  });
+
   it("maps managed-path inspection issues to blocking checks", async () => {
     await writeConfig(manualConfig());
     await writeManualInput();
