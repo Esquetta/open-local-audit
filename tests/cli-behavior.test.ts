@@ -169,7 +169,7 @@ describe("CLI behavior helpers", () => {
     }
   });
 
-  it("reports a ready manual workflow preflight as one JSON document", () => {
+  it("reports ready manual workflow preflight JSON in supported local format option orders", () => {
     const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-json-ready-"));
     try {
       const configPath = join(tmp, "workflow.json");
@@ -185,15 +185,20 @@ describe("CLI behavior helpers", () => {
         "utf8"
       );
 
-      const result = spawnSync(
-        process.execPath,
-        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--check", "--format", "json"],
-        { cwd: process.cwd(), encoding: "utf8" }
-      );
+      for (const checkArguments of [
+        ["--check", "--format", "json"],
+        ["--format", "json", "--check"]
+      ]) {
+        const result = spawnSync(
+          process.execPath,
+          ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, ...checkArguments],
+          { cwd: process.cwd(), encoding: "utf8" }
+        );
 
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "ready" });
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "ready" });
+      }
     } finally {
       removeTempDir(tmp);
     }
@@ -248,6 +253,27 @@ describe("CLI behavior helpers", () => {
         status: "blocked",
         checks: [{ id: "configuration", status: "fail", message: "Workflow configuration could not be read or validated" }]
       });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("keeps root audit format out of terminal workflow preflight output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-preflight-root-format-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(configPath, '{ "version": 1,', "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "--format", "json", "workflow", "--config", configPath, "--check"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("open-local-audit: workflow preflight blocked\n");
+      expect(result.stdout).toContain("Workflow preflight: BLOCKED");
+      expect(() => JSON.parse(result.stdout)).toThrow();
     } finally {
       removeTempDir(tmp);
     }
@@ -442,6 +468,8 @@ describe("CLI behavior helpers", () => {
         "--import",
         "tsx",
         "src/cli.ts",
+        "--format",
+        "json",
         "workflow",
         "--config",
         configPath

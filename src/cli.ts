@@ -37,7 +37,7 @@ import {
 } from "./workflow-preflight.js";
 import { runResolvedWorkflow } from "./workflow.js";
 
-const program = new Command();
+const program = new Command().enablePositionalOptions();
 
 const discoveryProgram = program
   .command("discover")
@@ -83,7 +83,7 @@ function renderDiscoverySummary(summary: DiscoverySummary): string {
 
 discoveryProgram.action(async (query?: string) => {
   try {
-    const rawDiscoveryOptions = discoveryProgram.optsWithGlobals();
+    const rawDiscoveryOptions = discoveryProgram.opts();
     const options = cliOptionsSchema
       .pick({
         input: true,
@@ -146,13 +146,10 @@ const workflowProgram = program
   .option("--check", "validate workflow readiness without running it", false)
   .option("--format <format>", "preflight output format: terminal or json");
 
-workflowProgram.action(async (options: { config?: string; check: boolean; format?: string }) => {
+workflowProgram.action(async () => {
   try {
-    const globalOptions = workflowProgram.optsWithGlobals() as { format?: string };
-    const format =
-      workflowProgram.getOptionValueSourceWithGlobals("format") === "cli"
-        ? globalOptions.format
-        : options.format;
+    const options = workflowProgram.opts() as { config?: string; check: boolean; format?: string };
+    const format = workflowProgram.getOptionValueSource("format") === "cli" ? options.format : undefined;
     if (!options.config) {
       throw new Error("--config is required for workflow");
     }
@@ -207,7 +204,7 @@ const validateExportProgram = program
   .option("--format <format>", "validation report format: markdown or json", "markdown")
   .action(async () => {
     try {
-      const rawOptions = validateExportProgram.optsWithGlobals() as { input?: string; preset: string; format: string };
+      const rawOptions = validateExportProgram.opts() as { input?: string; preset: string; format: string };
       const preset = rawOptions.preset as ExportValidationPreset;
       const format = rawOptions.format as ExportValidationFormat;
       if (!rawOptions.input) {
@@ -299,7 +296,7 @@ const shortlistProgram = program
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
-    const options = shortlistProgram.optsWithGlobals() as {
+    const options = shortlistProgram.opts() as {
       input?: string;
       out?: string;
       reviewCsv?: string;
