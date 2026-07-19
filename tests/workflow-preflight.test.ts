@@ -6,6 +6,16 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as workflowPreflight from "../src/workflow-preflight.js";
 import { runWorkflowPreflight } from "../src/workflow-preflight.js";
+import type { WorkflowPreflightCheckId } from "../src/workflow-preflight.js";
+
+const workflowPreflightCheckIds = [
+  "configuration",
+  "discovery-input",
+  "google-api-key",
+  "review-csv",
+  "output-access",
+  "managed-paths"
+] as const satisfies readonly WorkflowPreflightCheckId[];
 
 describe("workflow preflight", () => {
   let directory: string;
@@ -123,6 +133,17 @@ describe("workflow preflight", () => {
     });
   });
 
+  it("blocks Google Places discovery when the API key resolver returns undefined", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+
+    const result = await runWorkflowPreflight(configPath, { resolveGoogleMapsApiKey: () => undefined });
+
+    expect(result).toMatchObject({
+      status: "blocked",
+      checks: expect.arrayContaining([expect.objectContaining({ id: "google-api-key", status: "fail" })])
+    });
+  });
+
   it("reports configured review CSV readiness without blocking a missing file", async () => {
     const reviewPath = join(directory, "config", "review.csv");
     await writeConfig(manualConfig({ review: { csv: "./review.csv" } }));
@@ -143,6 +164,27 @@ describe("workflow preflight", () => {
     await rm(reviewPath);
     await mkdir(reviewPath);
     await expect(runWorkflowPreflight(configPath)).resolves.toMatchObject({
+      status: "blocked",
+      checks: expect.arrayContaining([expect.objectContaining({ id: "review-csv", status: "fail" })])
+    });
+  });
+
+  it("blocks an existing review CSV when read access is denied", async () => {
+    const reviewPath = join(directory, "config", "review.csv");
+    await writeConfig(manualConfig({ review: { csv: "./review.csv" } }));
+    await writeManualInput();
+    await writeFile(reviewPath, "id\n1\n", "utf8");
+
+    const result = await runWorkflowPreflight(configPath, {
+      access: async (path, mode) => {
+        if (path === reviewPath && mode === constants.R_OK) {
+          throw Object.assign(new Error("denied"), { code: "EACCES" });
+        }
+        await access(path, mode);
+      }
+    });
+
+    expect(result).toMatchObject({
       status: "blocked",
       checks: expect.arrayContaining([expect.objectContaining({ id: "review-csv", status: "fail" })])
     });
@@ -265,6 +307,7 @@ describe("workflow preflight", () => {
   });
 
   it("does not expose fetch or discovery execution from the preflight module", () => {
+    expect(workflowPreflightCheckIds).toHaveLength(6);
     expect(workflowPreflight).not.toHaveProperty("fetch");
     expect(workflowPreflight).not.toHaveProperty("discoverBusinesses");
   });

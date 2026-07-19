@@ -11,9 +11,16 @@ import { resolveGoogleMapsApiKey } from "./secrets.js";
 export type WorkflowPreflightStatus = "ready" | "blocked";
 export type WorkflowPreflightCheckStatus = "pass" | "warn" | "fail";
 export type WorkflowPreflightStage = "discovery" | "shortlist" | "review" | "packaging";
+export type WorkflowPreflightCheckId =
+  | "configuration"
+  | "discovery-input"
+  | "google-api-key"
+  | "review-csv"
+  | "output-access"
+  | "managed-paths";
 
 export interface WorkflowPreflightCheck {
-  id: string;
+  id: WorkflowPreflightCheckId;
   status: WorkflowPreflightCheckStatus;
   message: string;
   path?: string;
