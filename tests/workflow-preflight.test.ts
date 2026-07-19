@@ -396,6 +396,32 @@ describe("workflow preflight", () => {
     });
   });
 
+  it("sanitizes operational managed-path inspection errors into JSON-safe blocked reports", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+
+    for (const code of ["EIO", "ESTALE"]) {
+      const rawMessage = `raw ${code} filesystem detail`;
+      const result = await runWorkflowPreflight(configPath, {
+        resolveGoogleMapsApiKey: () => "present",
+        inspectWorkflowManagedPaths: async () => {
+          throw Object.assign(new Error(rawMessage), { code });
+        }
+      });
+
+      expect(result).toMatchObject({
+        status: "blocked",
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            id: "managed-paths",
+            status: "fail",
+            message: "Managed output paths could not be inspected safely"
+          })
+        ])
+      });
+      expect(workflowPreflight.renderWorkflowPreflightJson(result)).not.toContain(rawMessage);
+    }
+  });
+
   it("rethrows an unexpected managed-path inspection error", async () => {
     await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
     const unexpected = new Error("inspection programming error");

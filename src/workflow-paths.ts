@@ -6,6 +6,7 @@ export type WorkflowPathIssueId =
   | "output-linked"
   | "reports-linked"
   | "packages-linked"
+  | "managed-file-linked"
   | "reports-escape"
   | "packages-escape";
 
@@ -84,6 +85,24 @@ export async function inspectWorkflowManagedPaths(
       : [])
   ];
   const issues: WorkflowPathIssue[] = [];
+
+  for (const path of [
+    config.paths.leadsCsv,
+    config.paths.discoverySummaryJson,
+    config.paths.shortlistCsv,
+    config.paths.shortlistSummaryJson,
+    config.paths.reviewSummaryJson,
+    config.paths.workflowSummaryJson
+  ]) {
+    const fileInfo = await pathInfo(path, resolvedDependencies);
+    if (fileInfo?.isSymbolicLink()) {
+      issues.push({
+        id: "managed-file-linked",
+        message: "Managed output file must not be linked",
+        path
+      });
+    }
+  }
 
   for (const directory of directories) {
     const directoryInfo = await pathInfo(directory.path, resolvedDependencies);

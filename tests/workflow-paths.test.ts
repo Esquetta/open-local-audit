@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -139,6 +139,44 @@ describe("workflow managed path inspection", () => {
           path: config.paths.packagesDir
         }
       ]
+    });
+  });
+
+  it("reports linked managed output files without creating or changing them", async () => {
+    const config = makeConfig();
+    const managedFiles = [
+      config.paths.leadsCsv,
+      config.paths.discoverySummaryJson,
+      config.paths.shortlistCsv,
+      config.paths.shortlistSummaryJson,
+      config.paths.reviewSummaryJson,
+      config.paths.workflowSummaryJson
+    ];
+    await mkdir(config.outDir, { recursive: true });
+
+    for (const managedFile of managedFiles) {
+      await writeFile(managedFile, "existing output\n", "utf8");
+    }
+
+    await expect(
+      inspectWorkflowManagedPaths(config, {
+        lstat: async (path) => {
+          const info = await lstat(path);
+          return managedFiles.includes(String(path))
+            ? new Proxy(info, {
+                get: (target, property, receiver) =>
+                  property === "isSymbolicLink" ? () => true : Reflect.get(target, property, receiver)
+              })
+            : info;
+        }
+      })
+    ).resolves.toEqual({
+      status: "unsafe",
+      issues: managedFiles.map((path) => ({
+        id: "managed-file-linked",
+        message: "Managed output file must not be linked",
+        path
+      }))
     });
   });
 

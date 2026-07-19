@@ -38,7 +38,7 @@ The preflight service performs these checks in order:
 3. For `google-places`, require the existing Google Maps API key resolver to return a nonblank value without exposing it or making a network request.
 4. When a review CSV is configured, verify it is a readable regular file when present. A missing review CSV is a warning because the workflow may create it.
 5. Find the nearest existing ancestor for `outDir` and verify that it is a directory with write access.
-6. Inspect existing `outDir`, `reports/`, and enabled `packages/` paths. Reject linked managed roots and canonical paths that escape `outDir`.
+6. Inspect existing `outDir`, `reports/`, enabled `packages/`, and config-managed output files. Reject linked managed paths and canonical directories that escape `outDir`.
 7. Report the enabled workflow stages, configured limits, and resolved managed output paths.
 
 Filesystem access checks are advisory and can become stale before execution. The workflow retains its existing write-time containment checks as the authoritative enforcement boundary.
@@ -105,7 +105,7 @@ With `--format json`, standard output contains exactly one JSON document for bot
 ## Components
 
 - `workflow-preflight.ts` owns check orchestration and the versioned result type.
-- A small shared workflow-path module owns no-write path inspection and write-time managed-directory preparation so preflight and workflow execution use the same containment rules.
+- Small shared workflow path and output modules own no-write inspection, write-time managed-directory preparation, and same-directory temporary-file replacement for managed outputs.
 - Terminal and JSON renderers convert a preflight result without performing checks.
 - `cli.ts` selects normal execution or preflight while preserving the existing error prefix and exit behavior.
 
@@ -113,7 +113,7 @@ With `--format json`, standard output contains exactly one JSON document for bot
 
 Configuration read and validation errors are converted into a blocked preflight report. Independent checks continue where their prerequisites are available so one invocation can report all actionable local problems. Checks that depend on an invalid configuration are omitted rather than reported as additional failures.
 
-Unexpected internal filesystem errors are sanitized and represented as failed checks. The command must never include a resolved API key in thrown errors, terminal output, or JSON output.
+Expected operational filesystem errors are sanitized and represented as failed checks; unexpected programming errors still propagate. The command must never include a resolved API key in thrown errors, terminal output, or JSON output.
 
 ## Acceptance Tests
 
@@ -123,7 +123,7 @@ Unexpected internal filesystem errors are sanitized and represented as failed ch
 - A missing review CSV produces a warning, while an unreadable or non-file review path fails.
 - A missing output tree passes when its nearest existing ancestor is writable.
 - An unwritable output ancestor blocks execution without creating a probe file.
-- Linked or canonically escaping `outDir`, `reports/`, and `packages/` paths block execution.
+- Linked or canonically escaping managed directories, and linked managed output files, block execution.
 - Terminal and JSON outputs contain no API key or raw environment value.
 - JSON output is one parseable document for ready and blocked results.
 - `--format` without `--check` is rejected.

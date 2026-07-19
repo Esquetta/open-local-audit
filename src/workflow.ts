@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, rename, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { runDiscovery, type DiscoveryRunResult } from "./discovery-runner.js";
 import { packageReport, type ReportPackResult } from "./report-pack.js";
@@ -9,6 +9,7 @@ import type { ShortlistLead, ShortlistResult } from "./shortlist.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
 import { readWorkflowConfig, type ResolvedWorkflowConfig, type WorkflowManagedPaths } from "./workflow-config.js";
 import { prepareWorkflowManagedDirectories } from "./workflow-paths.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 export type WorkflowStatus = "success" | "failed";
 export type WorkflowStageStatus = "success" | "failed" | "skipped" | "not-run";
@@ -189,7 +190,7 @@ function createInitialSummary(config: ResolvedWorkflowConfig): WorkflowSummary {
 
 async function writePrettyJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await writeWorkflowOutputFile(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 async function writeWorkflowSummary(summary: WorkflowSummary): Promise<void> {
