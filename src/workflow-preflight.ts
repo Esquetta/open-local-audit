@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { access, lstat } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Stats } from "node:fs";
+import { ZodError } from "zod";
 import { readWorkflowConfig } from "./workflow-config.js";
 import type { ResolvedWorkflowConfig, WorkflowManagedPaths } from "./workflow-config.js";
 import { inspectWorkflowManagedPaths } from "./workflow-paths.js";
@@ -56,6 +57,26 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === code);
 }
 
+function isFilesystemReadinessError(error: unknown): boolean {
+  return ["ENOENT", "EACCES", "EPERM", "EISDIR", "ENOTDIR"].some((code) => hasErrorCode(error, code));
+}
+
+function isInvalidWorkflowConfigJsonError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "cause" in error &&
+      error.cause instanceof SyntaxError &&
+      error instanceof Error &&
+      error.message.startsWith("Workflow config ") &&
+      error.message.endsWith(" contains invalid JSON")
+  );
+}
+
+function isExpectedWorkflowConfigError(error: unknown): boolean {
+  return isFilesystemReadinessError(error) || error instanceof ZodError || isInvalidWorkflowConfigJsonError(error);
+}
+
 async function isReadableRegularFile(
   path: string,
   dependencies: WorkflowPreflightDependencies
@@ -68,6 +89,9 @@ async function isReadableRegularFile(
     await dependencies.access(path, constants.R_OK);
     return "readable";
   } catch (error) {
+    if (!isFilesystemReadinessError(error)) {
+      throw error;
+    }
     return hasErrorCode(error, "ENOENT") ? "missing" : "invalid";
   }
 }
@@ -79,16 +103,15 @@ async function findWritableOutputAncestor(
   let ancestor = outDir;
 
   while (true) {
+    let info: Stats;
     try {
-      const info = await dependencies.lstat(ancestor);
-      if (!info.isDirectory()) {
-        return false;
-      }
-      await dependencies.access(ancestor, constants.W_OK);
-      return true;
+      info = await dependencies.lstat(ancestor);
     } catch (error) {
       if (!hasErrorCode(error, "ENOENT")) {
-        return false;
+        if (isFilesystemReadinessError(error)) {
+          return false;
+        }
+        throw error;
       }
 
       const parent = dirname(ancestor);
@@ -96,6 +119,21 @@ async function findWritableOutputAncestor(
         return false;
       }
       ancestor = parent;
+      continue;
+    }
+
+    if (!info.isDirectory()) {
+      return false;
+    }
+
+    try {
+      await dependencies.access(ancestor, constants.W_OK);
+      return true;
+    } catch (error) {
+      if (isFilesystemReadinessError(error)) {
+        return false;
+      }
+      throw error;
     }
   }
 }
@@ -113,7 +151,10 @@ export async function runWorkflowPreflight(
 
   try {
     config = await dependencies.readWorkflowConfig(configPath);
-  } catch {
+  } catch (error) {
+    if (!isExpectedWorkflowConfigError(error)) {
+      throw error;
+    }
     return {
       version: 1,
       status: "blocked",
@@ -140,12 +181,7 @@ export async function runWorkflowPreflight(
       path: config.discovery.input
     });
   } else {
-    let hasApiKey = false;
-    try {
-      hasApiKey = Boolean(dependencies.resolveGoogleMapsApiKey()?.trim());
-    } catch {
-      hasApiKey = false;
-    }
+    const hasApiKey = Boolean(dependencies.resolveGoogleMapsApiKey()?.trim());
     checks.push({
       id: "google-api-key",
       status: hasApiKey ? "pass" : "fail",
@@ -181,7 +217,10 @@ export async function runWorkflowPreflight(
     for (const issue of inspection.issues) {
       checks.push({ id: "managed-paths", status: "fail", message: issue.message, path: issue.path });
     }
-  } catch {
+  } catch (error) {
+    if (!isFilesystemReadinessError(error)) {
+      throw error;
+    }
     checks.push({
       id: "managed-paths",
       status: "fail",

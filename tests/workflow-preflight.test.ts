@@ -144,6 +144,19 @@ describe("workflow preflight", () => {
     });
   });
 
+  it("rethrows an unexpected Google API key resolver error", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+    const unexpected = new Error("resolver programming error");
+
+    await expect(
+      runWorkflowPreflight(configPath, {
+        resolveGoogleMapsApiKey: () => {
+          throw unexpected;
+        }
+      })
+    ).rejects.toBe(unexpected);
+  });
+
   it("reports configured review CSV readiness without blocking a missing file", async () => {
     const reviewPath = join(directory, "config", "review.csv");
     await writeConfig(manualConfig({ review: { csv: "./review.csv" } }));
@@ -188,6 +201,23 @@ describe("workflow preflight", () => {
       status: "blocked",
       checks: expect.arrayContaining([expect.objectContaining({ id: "review-csv", status: "fail" })])
     });
+  });
+
+  it("rethrows an unexpected input access error", async () => {
+    await writeConfig(manualConfig());
+    const inputPath = await writeManualInput();
+    const unexpected = new Error("access programming error");
+
+    await expect(
+      runWorkflowPreflight(configPath, {
+        access: async (path, mode) => {
+          if (path === inputPath && mode === constants.R_OK) {
+            throw unexpected;
+          }
+          await access(path, mode);
+        }
+      })
+    ).rejects.toBe(unexpected);
   });
 
   it("converts invalid JSON and strict schema errors into configuration failures", async () => {
@@ -246,6 +276,50 @@ describe("workflow preflight", () => {
     expect(existsSync(join(configDirectory, "output"))).toBe(false);
   });
 
+  it("terminates at the platform root when every output ancestor is missing", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+    let lstatCalls = 0;
+    let expectedCalls = 0;
+    let ancestor = join(directory, "config", "output");
+
+    while (true) {
+      expectedCalls += 1;
+      const parent = dirname(ancestor);
+      if (parent === ancestor) {
+        break;
+      }
+      ancestor = parent;
+    }
+
+    const result = await runWorkflowPreflight(configPath, {
+      resolveGoogleMapsApiKey: () => "present",
+      lstat: async () => {
+        lstatCalls += 1;
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
+    });
+
+    expect(result).toMatchObject({
+      status: "blocked",
+      checks: expect.arrayContaining([expect.objectContaining({ id: "output-access", status: "fail" })])
+    });
+    expect(lstatCalls).toBe(expectedCalls);
+  });
+
+  it("rethrows an unexpected output metadata error", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+    const unexpected = new Error("lstat programming error");
+
+    await expect(
+      runWorkflowPreflight(configPath, {
+        resolveGoogleMapsApiKey: () => "present",
+        lstat: async () => {
+          throw unexpected;
+        }
+      })
+    ).rejects.toBe(unexpected);
+  });
+
   it("maps managed-path inspection issues to blocking checks", async () => {
     await writeConfig(manualConfig());
     await writeManualInput();
@@ -286,6 +360,62 @@ describe("workflow preflight", () => {
         })
       ])
     });
+  });
+
+  it("blocks expected managed-path inspection filesystem errors", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+
+    const result = await runWorkflowPreflight(configPath, {
+      resolveGoogleMapsApiKey: () => "present",
+      inspectWorkflowManagedPaths: async () => {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      }
+    });
+
+    expect(result).toMatchObject({
+      status: "blocked",
+      checks: expect.arrayContaining([expect.objectContaining({ id: "managed-paths", status: "fail" })])
+    });
+  });
+
+  it("rethrows an unexpected managed-path inspection error", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query: "dentist Kadikoy" } }));
+    const unexpected = new Error("inspection programming error");
+
+    await expect(
+      runWorkflowPreflight(configPath, {
+        resolveGoogleMapsApiKey: () => "present",
+        inspectWorkflowManagedPaths: async () => {
+          throw unexpected;
+        }
+      })
+    ).rejects.toBe(unexpected);
+  });
+
+  it("blocks expected workflow configuration read errors", async () => {
+    const result = await runWorkflowPreflight(configPath, {
+      readWorkflowConfig: async () => {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      }
+    });
+
+    expect(result).toEqual({
+      version: 1,
+      status: "blocked",
+      checks: [{ id: "configuration", status: "fail", message: expect.any(String) }]
+    });
+  });
+
+  it("rethrows an unexpected workflow configuration error", async () => {
+    const unexpected = new Error("config programming error");
+
+    await expect(
+      runWorkflowPreflight(configPath, {
+        readWorkflowConfig: async () => {
+          throw unexpected;
+        }
+      })
+    ).rejects.toBe(unexpected);
   });
 
   it("reports stages and limits for packaging and audit caps", async () => {
