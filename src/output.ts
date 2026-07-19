@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { renderPdfReport } from "./pdf.js";
 import { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
@@ -68,9 +68,13 @@ export async function writeReportOutputs(report: AuditReport, options: ReportOut
     }
     for (const output of outputs) {
       output.path = join(options.outDir, defaultReportName(output.format));
-      await writeWorkflowOutputFile(output.path, output.content, {
-        managedOutputRoot: options.managedOutputRoot
-      });
+      if (options.managedOutputRoot) {
+        await writeWorkflowOutputFile(output.path, output.content, {
+          managedOutputRoot: options.managedOutputRoot
+        });
+      } else {
+        await writeFile(output.path, output.content);
+      }
     }
     return outputs;
   }
@@ -81,9 +85,13 @@ export async function writeReportOutputs(report: AuditReport, options: ReportOut
 
   if (options.out) {
     outputs[0].path = options.out;
-    await writeWorkflowOutputFile(options.out, outputs[0].content, {
-      managedOutputRoot: options.managedOutputRoot
-    });
+    if (options.managedOutputRoot) {
+      await writeWorkflowOutputFile(options.out, outputs[0].content, {
+        managedOutputRoot: options.managedOutputRoot
+      });
+    } else {
+      await writeFile(options.out, outputs[0].content);
+    }
   }
 
   return outputs;
