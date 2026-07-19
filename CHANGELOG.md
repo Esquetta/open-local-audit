@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.63.0 - 2026-07-19
+
+- Added `workflow --config <path> --check` to validate workflow readiness before execution.
+- Added stable terminal output and a versioned JSON preflight report for operator and automation use.
+- Kept preflight read-only and local: no network calls or output mutation, with advisory filesystem readiness checks and managed-path safety validation.
+
 ## v0.62.0 - 2026-07-16
 
 - Added `workflow --config <path>` to run versioned discovery, shortlist, optional review summary, and optional report packaging from one strict JSON configuration.
