@@ -30,6 +30,11 @@ import { runShortlistReport } from "./shortlist-runner.js";
 import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
 import { readWorkflowConfig } from "./workflow-config.js";
+import {
+  renderWorkflowPreflightJson,
+  renderWorkflowPreflightTerminal,
+  runWorkflowPreflight
+} from "./workflow-preflight.js";
 import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command();
@@ -137,13 +142,44 @@ discoveryProgram.action(async (query?: string) => {
 const workflowProgram = program
   .command("workflow")
   .description("Run a versioned local discovery, shortlist, review, and report packaging workflow.")
-  .option("--config <path>", "read workflow configuration from a JSON file");
+  .option("--config <path>", "read workflow configuration from a JSON file")
+  .option("--check", "validate workflow readiness without running it", false)
+  .option("--format <format>", "preflight output format: terminal or json");
 
-workflowProgram.action(async () => {
+workflowProgram.action(async (options: { config?: string; check: boolean; format?: string }) => {
   try {
-    const options = workflowProgram.optsWithGlobals() as { config?: string };
+    const globalOptions = workflowProgram.optsWithGlobals() as { format?: string };
+    const format =
+      workflowProgram.getOptionValueSourceWithGlobals("format") === "cli"
+        ? globalOptions.format
+        : options.format;
     if (!options.config) {
       throw new Error("--config is required for workflow");
+    }
+
+    if (!options.check && format !== undefined) {
+      throw new Error("--format is only supported with workflow --check");
+    }
+
+    if (options.check) {
+      const preflightFormat = format ?? "terminal";
+      if (preflightFormat !== "terminal" && preflightFormat !== "json") {
+        throw new Error("workflow --format must be terminal or json");
+      }
+
+      const report = await runWorkflowPreflight(options.config);
+      process.stdout.write(
+        preflightFormat === "json"
+          ? renderWorkflowPreflightJson(report)
+          : renderWorkflowPreflightTerminal(report, options.config)
+      );
+      if (report.status === "blocked") {
+        if (preflightFormat === "terminal") {
+          process.stderr.write("open-local-audit: workflow preflight blocked\n");
+        }
+        process.exitCode = 1;
+      }
+      return;
     }
 
     const config = await readWorkflowConfig(options.config);
