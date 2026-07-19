@@ -861,13 +861,13 @@ describe("CLI behavior helpers", () => {
           "--import",
           "tsx",
           "src/cli.ts",
+          "--format",
+          "json",
           "validate-export",
           "--input",
           inputPath,
           "--preset",
-          "crm",
-          "--format",
-          "json"
+          "crm"
         ],
         {
           cwd: process.cwd(),
@@ -1352,13 +1352,13 @@ describe("CLI behavior helpers", () => {
           "--import",
           "tsx",
           "src/cli.ts",
-          "shortlist",
           "--input",
           inputPath,
           "--out",
           outPath,
           "--format",
-          "json"
+          "json",
+          "shortlist",
         ],
         {
           cwd: process.cwd(),
@@ -2407,6 +2407,8 @@ describe("CLI behavior helpers", () => {
           "--import",
           "tsx",
           "src/cli.ts",
+          "--export-preset",
+          "crm",
           "discover",
           "--input",
           inputPath,
@@ -2414,8 +2416,6 @@ describe("CLI behavior helpers", () => {
           "manual-csv",
           "--export-csv",
           exportCsv,
-          "--export-preset",
-          "crm",
           "--dry-run"
         ],
         {

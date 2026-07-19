@@ -39,6 +39,20 @@ import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command().enablePositionalOptions();
 
+function optsWithLocalCliPrecedence(command: Command): Record<string, unknown> {
+  const options = command.optsWithGlobals();
+  const localOptions = command.opts();
+
+  for (const option of command.options) {
+    const name = option.attributeName();
+    if (command.getOptionValueSource(name) === "cli") {
+      options[name] = localOptions[name];
+    }
+  }
+
+  return options;
+}
+
 const discoveryProgram = program
   .command("discover")
   .description("Discover local lead candidates from an operator-provided source and prepare prospect triage output.")
@@ -83,7 +97,7 @@ function renderDiscoverySummary(summary: DiscoverySummary): string {
 
 discoveryProgram.action(async (query?: string) => {
   try {
-    const rawDiscoveryOptions = discoveryProgram.opts();
+    const rawDiscoveryOptions = optsWithLocalCliPrecedence(discoveryProgram);
     const options = cliOptionsSchema
       .pick({
         input: true,
@@ -204,7 +218,11 @@ const validateExportProgram = program
   .option("--format <format>", "validation report format: markdown or json", "markdown")
   .action(async () => {
     try {
-      const rawOptions = validateExportProgram.opts() as { input?: string; preset: string; format: string };
+      const rawOptions = optsWithLocalCliPrecedence(validateExportProgram) as {
+        input?: string;
+        preset: string;
+        format: string;
+      };
       const preset = rawOptions.preset as ExportValidationPreset;
       const format = rawOptions.format as ExportValidationFormat;
       if (!rawOptions.input) {
@@ -296,7 +314,7 @@ const shortlistProgram = program
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .action(async () => {
-    const options = shortlistProgram.opts() as {
+    const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
       out?: string;
       reviewCsv?: string;
