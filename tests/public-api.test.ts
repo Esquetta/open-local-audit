@@ -35,4 +35,11 @@ describe("public API", () => {
     expect(renderWorkflowPreflightTerminal(report, "workflow.json")).toContain("READY");
     expect(JSON.parse(renderWorkflowPreflightJson(report))).toEqual(report);
   });
+
+  it("accepts only a configuration path for workflow preflight", () => {
+    if (false) {
+      // @ts-expect-error The package-root preflight API does not accept dependency overrides.
+      void runWorkflowPreflight("workflow.json", {});
+    }
+  });
 });

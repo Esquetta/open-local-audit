@@ -15,6 +15,7 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
+    "docs/architecture/workflow-command.md",
     "docs/architecture/workflow-preflight.md"
   ],
   "scripts": {

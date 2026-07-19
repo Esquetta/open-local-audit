@@ -165,7 +165,11 @@ export function renderWorkflowPreflightJson(report: WorkflowPreflightReport): st
   return `${JSON.stringify(report, null, 2)}\n`;
 }
 
-export async function runWorkflowPreflight(
+export async function runWorkflowPreflight(configPath: string): Promise<WorkflowPreflightReport> {
+  return runWorkflowPreflightWithDependencies(configPath);
+}
+
+export async function runWorkflowPreflightWithDependencies(
   configPath: string,
   overrides: Partial<WorkflowPreflightDependencies> = {}
 ): Promise<WorkflowPreflightReport> {

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as workflowPreflight from "../src/workflow-preflight.js";
-import { runWorkflowPreflight } from "../src/workflow-preflight.js";
+import { runWorkflowPreflightWithDependencies as runWorkflowPreflight } from "../src/workflow-preflight.js";
 import type { WorkflowPreflightCheckId, WorkflowPreflightReport } from "../src/workflow-preflight.js";
 
 const workflowPreflightCheckIds = [

@@ -30,6 +30,21 @@ try {
   run(["install", tarball, "--cache", cacheDir, "--prefer-online"], { cwd: consumerDir, stdio: "inherit" });
   run(["ls", `${pkg.name}@${pkg.version}`, "--depth=0"], { cwd: consumerDir, stdio: "inherit" });
   run(["audit", "--omit=dev", "--cache", cacheDir], { cwd: consumerDir, stdio: "inherit" });
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `const api = await import(${JSON.stringify(pkg.name)});\nfor (const name of ["runWorkflowPreflight", "renderWorkflowPreflightTerminal", "renderWorkflowPreflightJson"]) {\n  if (typeof api[name] !== "function") throw new Error(\`Expected package export \${name} to be a function\`);\n}`
+    ],
+    { cwd: consumerDir, encoding: "utf8" }
+  );
+  for (const documentationPath of [
+    "docs/architecture/workflow-command.md",
+    "docs/architecture/workflow-preflight.md"
+  ]) {
+    readFileSync(join(consumerDir, "node_modules", pkg.name, documentationPath), "utf8");
+  }
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
 }
