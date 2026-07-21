@@ -94,6 +94,13 @@ The plan uses stable artifact identifiers and absolute normalized paths. It can 
 
 Step inputs and outputs refer to artifact identifiers instead of repeating paths. The plan does not inspect or include artifact contents.
 
+Artifact inputs and outputs follow the runtime data flow:
+
+- Discovery reads `manual-input-csv` for manual discovery and reads `review-csv` whenever review is configured. When review is configured, discovery also rewrites `review-csv`; discovery always writes `leads-csv`, `discovery-summary-json`, and `reports-dir`.
+- Shortlist always reads `leads-csv` and also reads `review-csv` when configured; it writes `shortlist-csv` and `shortlist-summary-json`.
+- Review reads only `review-csv` and writes `review-summary-json`.
+- Packaging reads report files through `reports-dir`; it uses the in-memory shortlist result and does not read `shortlist-csv`.
+
 ## Result Contract
 
 The plan report is versioned independently from the workflow configuration and preflight report:

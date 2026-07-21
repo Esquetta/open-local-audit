@@ -109,8 +109,16 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
       id: "discovery",
       state: "will-run",
       dependsOn: [],
-      inputs: config.discovery.provider === "manual-csv" ? ["manual-input-csv"] : [],
-      outputs: ["leads-csv", "discovery-summary-json", "reports-dir"],
+      inputs: [
+        ...(config.discovery.provider === "manual-csv" ? ["manual-input-csv" as const] : []),
+        ...(config.review ? ["review-csv" as const] : [])
+      ],
+      outputs: [
+        "leads-csv",
+        "discovery-summary-json",
+        "reports-dir",
+        ...(config.review ? ["review-csv" as const] : [])
+      ],
       networkAccess: discoveryNetworkAccess,
       settings: {
         provider: config.discovery.provider,
@@ -124,7 +132,7 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
       id: "shortlist",
       state: "will-run",
       dependsOn: ["discovery"],
-      inputs: ["leads-csv"],
+      inputs: ["leads-csv", ...(config.review ? ["review-csv" as const] : [])],
       outputs: ["shortlist-csv", "shortlist-summary-json"],
       networkAccess: [],
       settings: {
@@ -138,7 +146,7 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
           id: "review",
           state: "will-run",
           dependsOn: ["shortlist"],
-          inputs: ["review-csv", "shortlist-csv"],
+          inputs: ["review-csv"],
           outputs: ["review-summary-json"],
           networkAccess: [],
           settings: { staleBefore: config.review.staleBefore ?? null }
@@ -158,7 +166,7 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
           id: "packaging",
           state: "conditional",
           dependsOn: [reviewEnabled ? "review" : "shortlist"],
-          inputs: ["shortlist-csv", "reports-dir"],
+          inputs: ["reports-dir"],
           outputs: ["packages-dir"],
           networkAccess: [],
           reason: "Runs for selected leads with successful report artifacts",

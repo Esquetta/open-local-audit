@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -235,7 +236,7 @@ describe("workflow plan", () => {
     expect(findStep(packagingOnly, "packaging")).toMatchObject({
       state: "conditional",
       dependsOn: ["shortlist"],
-      inputs: ["shortlist-csv", "reports-dir"],
+      inputs: ["reports-dir"],
       outputs: ["packages-dir"]
     });
     expect(findStep(packagingOnly, "summary").dependsOn).toEqual(["packaging"]);
@@ -252,11 +253,18 @@ describe("workflow plan", () => {
     expect(report.artifacts).toHaveProperty("review-csv", join(directory, "config", "review.csv"));
     expect(report.artifacts).toHaveProperty("review-summary-json", join(directory, "config", "output", "review-summary.json"));
     expect(report.artifacts).toHaveProperty("packages-dir", join(directory, "config", "output", "packages"));
+    expect(findStep(report, "discovery")).toMatchObject({
+      inputs: ["manual-input-csv", "review-csv"],
+      outputs: ["leads-csv", "discovery-summary-json", "reports-dir", "review-csv"]
+    });
+    expect(findStep(report, "shortlist")).toMatchObject({
+      inputs: ["leads-csv", "review-csv"]
+    });
     expect(findStep(report, "review")).toEqual({
       id: "review",
       state: "will-run",
       dependsOn: ["shortlist"],
-      inputs: ["review-csv", "shortlist-csv"],
+      inputs: ["review-csv"],
       outputs: ["review-summary-json"],
       networkAccess: [],
       settings: { staleBefore: "2026-01-31" }
@@ -265,13 +273,23 @@ describe("workflow plan", () => {
       id: "packaging",
       state: "conditional",
       dependsOn: ["review"],
-      inputs: ["shortlist-csv", "reports-dir"],
+      inputs: ["reports-dir"],
       outputs: ["packages-dir"],
       networkAccess: [],
       reason: "Runs for selected leads with successful report artifacts",
       settings: { enabled: true }
     });
     expect(findStep(report, "summary").dependsOn).toEqual(["packaging"]);
+  });
+
+  it("does not create configured output artifacts while planning", async () => {
+    await writeConfig(manualConfig());
+    await writeManualInput();
+    const outputPath = join(directory, "config", "output");
+
+    await runWorkflowPlan(configPath);
+
+    expect(existsSync(outputPath)).toBe(false);
   });
 
   it("retains a derived plan when valid configuration preflight is blocked", async () => {
