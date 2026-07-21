@@ -171,8 +171,10 @@ Execution plan:
 2. shortlist [WILL RUN]
 
 3. review [DISABLED]
+   Reason: Review is not configured
 
 4. packaging [DISABLED]
+   Reason: Report packaging is not enabled
 
 5. summary [WILL RUN]
 ```
