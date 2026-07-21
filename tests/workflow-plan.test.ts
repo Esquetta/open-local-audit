@@ -195,6 +195,18 @@ describe("workflow plan", () => {
     expect(serialized).not.toContain(rawOnly);
   });
 
+  it("orders Google Places and website audit network access when audits are enabled", async () => {
+    await writeConfig(
+      manualConfig({
+        discovery: { provider: "google-places", query: "dentist Kadikoy", maxAudits: 2 }
+      })
+    );
+
+    const report = await runWorkflowPlan(configPath);
+
+    expect(findStep(report, "discovery").networkAccess).toEqual(["google-places", "website-audits"]);
+  });
+
   it("uses the preceding enabled step when review or packaging is disabled", async () => {
     await writeConfig(manualConfig({ review: { csv: "./review.csv" } }));
     await writeManualInput();
