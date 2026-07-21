@@ -109,7 +109,7 @@ async function startLocalBusinessServer(): Promise<{ server: Server; url: string
 }
 
 describe("CLI behavior helpers", () => {
-  it("lists workflow preflight options in help", () => {
+  it("lists workflow preflight and plan options in help", () => {
     const rootHelp = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], {
       cwd: process.cwd(),
       encoding: "utf8"
@@ -124,6 +124,7 @@ describe("CLI behavior helpers", () => {
     expect(workflowHelp.status).toBe(0);
     expect(workflowHelp.stdout).toContain("--config <path>");
     expect(workflowHelp.stdout).toContain("--check");
+    expect(workflowHelp.stdout).toContain("--plan");
     expect(workflowHelp.stdout).toContain("--format <format>");
   });
 
@@ -351,7 +352,7 @@ describe("CLI behavior helpers", () => {
     }
   });
 
-  it("rejects workflow preflight format without --check", () => {
+  it("rejects workflow format without a check or plan mode", () => {
     const result = spawnSync(
       process.execPath,
       ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", "--format", "json"],
@@ -359,7 +360,7 @@ describe("CLI behavior helpers", () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toBe("open-local-audit: --format is only supported with workflow --check\n");
+    expect(result.stderr).toBe("open-local-audit: --format is only supported with workflow --check or --plan\n");
   });
 
   it("rejects unsupported workflow preflight formats", () => {
@@ -371,6 +372,203 @@ describe("CLI behavior helpers", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("open-local-audit: workflow --format must be terminal or json\n");
+  });
+
+  it("rejects workflow check and plan together in either flag order", () => {
+    for (const modeArguments of [
+      ["--check", "--plan"],
+      ["--plan", "--check"]
+    ]) {
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", ...modeArguments],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("open-local-audit: workflow --check and --plan cannot be used together\n");
+    }
+  });
+
+  it("rejects unsupported workflow plan formats", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", "--plan", "--format", "yaml"],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("open-local-audit: workflow --format must be terminal or json\n");
+  });
+
+  it("reports a ready manual workflow plan in terminal format without creating output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-plan-ready-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const outDir = join(tmp, "workflow-output");
+      writeFileSync(join(tmp, "places.csv"), "label,website\nExample Dental,https://example.test\n", "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--plan"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("Workflow plan: READY");
+      expect(result.stdout).toContain("Execution plan:");
+      expect(existsSync(outDir)).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("reports ready manual workflow plan JSON in supported local format option orders", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-plan-json-ready-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(join(tmp, "places.csv"), "label,website\nExample Dental,https://example.test\n", "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      for (const planArguments of [
+        ["--plan", "--format", "json"],
+        ["--format", "json", "--plan"],
+        ["--plan", "--format", "terminal"]
+      ]) {
+        const result = spawnSync(
+          process.execPath,
+          ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, ...planArguments],
+          { cwd: process.cwd(), encoding: "utf8" }
+        );
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        if (planArguments.includes("json")) {
+          expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "ready", steps: expect.any(Array) });
+        } else {
+          expect(result.stdout).toContain("Workflow plan: READY");
+        }
+      }
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("renders a blocked valid workflow plan in terminal and JSON formats", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-plan-blocked-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const terminal = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--plan"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+      const json = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--plan", "--format", "json"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(terminal.status).toBe(1);
+      expect(terminal.stderr).toBe("open-local-audit: workflow plan blocked\n");
+      expect(terminal.stdout).toContain("Workflow plan: BLOCKED");
+      expect(terminal.stdout).toContain("Execution plan:");
+      expect(json.status).toBe(1);
+      expect(json.stderr).toBe("");
+      expect(JSON.parse(json.stdout)).toMatchObject({ version: 1, status: "blocked" });
+      expect(JSON.parse(json.stdout).steps).toHaveLength(5);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("renders invalid workflow plan JSON as an empty blocked plan", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-plan-invalid-json-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(configPath, '{ "version": 1,', "utf8");
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--plan", "--format", "json"],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "blocked", steps: [] });
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("plans Google workflows without requests, billing warnings, or sensitive values", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-plan-google-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const apiKey = "workflow-plan-cli-api-key-sentinel";
+      const query = "workflow-plan-cli-query-sentinel";
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "google-places", query },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--plan"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, GOOGLE_MAPS_API_KEY: apiKey, OPEN_LOCAL_AUDIT_DISABLE_WINDOWS_ENV_FALLBACK: "1" }
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("Workflow plan: READY");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(apiKey);
+      expect(`${result.stdout}${result.stderr}`).not.toContain(query);
+      expect(existsSync(join(tmp, "workflow-output"))).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
   });
 
   it("rejects invalid workflow configuration before creating output", () => {

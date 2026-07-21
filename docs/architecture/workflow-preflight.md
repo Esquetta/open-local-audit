@@ -9,7 +9,7 @@ open-local-audit workflow --config workflow.json --check
 open-local-audit workflow --config workflow.json --check --format json
 ```
 
-The existing `workflow --config <path>` execution behavior remains unchanged. `--format` is accepted only with `--check`.
+The existing `workflow --config <path>` execution behavior remains unchanged. `--format` is accepted with `--check` or `--plan` and remains invalid for normal workflow execution.
 
 ## Goals
 
@@ -44,6 +44,8 @@ The preflight service performs these checks in order:
 Filesystem access checks are advisory and can become stale before execution. The workflow retains its existing write-time containment checks as the authoritative enforcement boundary.
 
 ## Result Contract
+
+`workflow --plan` includes a preflight result alongside an execution plan; its additive contract is defined in the [workflow plan contract](./workflow-plan.md). The version `1` preflight report remains unchanged.
 
 The preflight report is versioned independently from the workflow configuration:
 
@@ -126,6 +128,6 @@ Expected operational filesystem errors are sanitized and represented as failed c
 - Linked or canonically escaping managed directories, and linked managed output files, block execution.
 - Terminal and JSON outputs contain no API key or raw environment value.
 - JSON output is one parseable document for ready and blocked results.
-- `--format` without `--check` is rejected.
+- `--format` without `--check` or `--plan` is rejected.
 - Existing workflow execution and failure behavior remains covered by regression tests.
 - The release passes the full release check, package audit, and fresh consumer installation check.

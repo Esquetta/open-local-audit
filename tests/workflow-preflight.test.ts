@@ -4,6 +4,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readWorkflowConfig } from "../src/workflow-config.js";
 import * as workflowPreflight from "../src/workflow-preflight.js";
 import { runWorkflowPreflightWithDependencies as runWorkflowPreflight } from "../src/workflow-preflight.js";
 import type { WorkflowPreflightCheckId, WorkflowPreflightReport } from "../src/workflow-preflight.js";
@@ -72,6 +73,46 @@ describe("workflow preflight", () => {
     });
     expect(result.outputs?.outDir).toBe(join(directory, "config", "output"));
     expect(existsSync(join(directory, "config", "output"))).toBe(false);
+  });
+
+  it("returns the resolved configuration snapshot used for a ready preflight evaluation", async () => {
+    await writeConfig(manualConfig());
+    await writeManualInput();
+    const config = await readWorkflowConfig(configPath);
+    let reads = 0;
+
+    const evaluation = await workflowPreflight.runWorkflowPreflightEvaluationWithDependencies(configPath, {
+      readWorkflowConfig: async () => {
+        reads += 1;
+        return config;
+      }
+    });
+
+    expect(reads).toBe(1);
+    expect(evaluation.config).toBe(config);
+    expect(evaluation.report.status).toBe("ready");
+  });
+
+  it("returns only a sanitized blocked report when configuration evaluation fails", async () => {
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, '{ "version": 1,', "utf8");
+
+    const evaluation = await workflowPreflight.runWorkflowPreflightEvaluationWithDependencies(configPath);
+
+    expect(evaluation).toEqual({
+      report: {
+        version: 1,
+        status: "blocked",
+        checks: [
+          {
+            id: "configuration",
+            status: "fail",
+            message: "Workflow configuration could not be read or validated"
+          }
+        ]
+      }
+    });
+    expect(evaluation).not.toHaveProperty("config");
   });
 
   it("blocks missing and non-file manual inputs", async () => {

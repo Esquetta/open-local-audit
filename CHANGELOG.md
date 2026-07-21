@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.64.0 - 2026-07-21
+
+- Added `workflow --config <path> --plan` for a read-only explanation of readiness, execution order, effective settings, network capability, and managed artifacts.
+- Added stable terminal output and a versioned JSON workflow plan for operators and automation.
+- Kept planning free of network calls and output mutation while preserving existing preflight and workflow execution behavior.
+
 ## v0.63.0 - 2026-07-19
 
 - Added `workflow --config <path> --check` to validate workflow readiness before execution.

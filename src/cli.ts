@@ -35,6 +35,7 @@ import {
   renderWorkflowPreflightTerminal,
   runWorkflowPreflight
 } from "./workflow-preflight.js";
+import { renderWorkflowPlanJson, renderWorkflowPlanTerminal, runWorkflowPlan } from "./workflow-plan.js";
 import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command().enablePositionalOptions();
@@ -158,47 +159,69 @@ const workflowProgram = program
   .description("Run a versioned local discovery, shortlist, review, and report packaging workflow.")
   .option("--config <path>", "read workflow configuration from a JSON file")
   .option("--check", "validate workflow readiness without running it", false)
-  .option("--format <format>", "preflight output format: terminal or json");
+  .option("--plan", "show readiness and resolved execution plan without running it", false)
+  .option("--format <format>", "workflow check or plan output format: terminal or json");
 
 workflowProgram.action(async () => {
   try {
-    const options = workflowProgram.opts() as { config?: string; check: boolean; format?: string };
+    const options = workflowProgram.opts<{ config?: string; check: boolean; plan: boolean; format?: string }>();
     const format = workflowProgram.getOptionValueSource("format") === "cli" ? options.format : undefined;
-    if (!options.config) {
+    const config = options.config;
+    if (!config) {
       throw new Error("--config is required for workflow");
     }
 
-    if (!options.check && format !== undefined) {
-      throw new Error("--format is only supported with workflow --check");
+    if (options.check && options.plan) {
+      throw new Error("workflow --check and --plan cannot be used together");
     }
 
-    if (options.check) {
-      const preflightFormat = format ?? "terminal";
-      if (preflightFormat !== "terminal" && preflightFormat !== "json") {
+    if (!options.check && !options.plan && format !== undefined) {
+      throw new Error("--format is only supported with workflow --check or --plan");
+    }
+
+    if (options.check || options.plan) {
+      const outputFormat = format ?? "terminal";
+      if (outputFormat !== "terminal" && outputFormat !== "json") {
         throw new Error("workflow --format must be terminal or json");
       }
 
-      const report = await runWorkflowPreflight(options.config);
+      if (options.check) {
+        const report = await runWorkflowPreflight(config);
+        process.stdout.write(
+          outputFormat === "json"
+            ? renderWorkflowPreflightJson(report)
+            : renderWorkflowPreflightTerminal(report, config)
+        );
+        if (report.status === "blocked") {
+          if (outputFormat === "terminal") {
+            process.stderr.write("open-local-audit: workflow preflight blocked\n");
+          }
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      const report = await runWorkflowPlan(config);
       process.stdout.write(
-        preflightFormat === "json"
-          ? renderWorkflowPreflightJson(report)
-          : renderWorkflowPreflightTerminal(report, options.config)
+        outputFormat === "json"
+          ? renderWorkflowPlanJson(report)
+          : renderWorkflowPlanTerminal(report, config)
       );
       if (report.status === "blocked") {
-        if (preflightFormat === "terminal") {
-          process.stderr.write("open-local-audit: workflow preflight blocked\n");
+        if (outputFormat === "terminal") {
+          process.stderr.write("open-local-audit: workflow plan blocked\n");
         }
         process.exitCode = 1;
       }
       return;
     }
 
-    const config = await readWorkflowConfig(options.config);
-    if (config.discovery.provider === "google-places") {
+    const resolvedConfig = await readWorkflowConfig(config);
+    if (resolvedConfig.discovery.provider === "google-places") {
       process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
     }
 
-    const summary = await runResolvedWorkflow(config);
+    const summary = await runResolvedWorkflow(resolvedConfig);
     process.stdout.write("Workflow completed\n");
     process.stdout.write(`Discovered: ${summary.discoveredLeads}\n`);
     process.stdout.write(`Selected: ${summary.selectedLeads}\n`);

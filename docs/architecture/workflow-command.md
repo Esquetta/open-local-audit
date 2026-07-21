@@ -90,7 +90,7 @@ The summary does not include the full configuration, environment variables, API 
 
 ## Compatibility
 
-The existing `discover`, `shortlist`, `review`, and `package-report` commands keep their current flags, outputs, and exit behavior. The workflow command is additive and uses configuration contract version `1` so future incompatible configuration changes can be rejected explicitly. `workflow --check` is also additive: it preflights the same configuration without changing normal workflow execution. Its read-only behavior, exit semantics, and versioned report contract are defined in the [workflow preflight contract](./workflow-preflight.md).
+The existing `discover`, `shortlist`, `review`, and `package-report` commands keep their current flags, outputs, and exit behavior. The workflow command is additive and uses configuration contract version `1` so future incompatible configuration changes can be rejected explicitly. `workflow --check` is also additive: it preflights the same configuration without changing normal workflow execution. Its read-only behavior, exit semantics, and versioned report contract are defined in the [workflow preflight contract](./workflow-preflight.md). `workflow --plan` is likewise additive and does not change normal workflow execution; its execution-plan contract is defined in the [workflow plan contract](./workflow-plan.md).
 
 ## Verification
 
