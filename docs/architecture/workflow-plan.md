@@ -158,19 +158,23 @@ Workflow plan: READY
 Config: workflow.json
 Provider: manual-csv
 
-Readiness
+Readiness:
 PASS  Workflow configuration is valid
 PASS  Discovery input is readable
 PASS  Output location is writable
 
-Execution plan
-1. discovery  WILL RUN
+Execution plan:
+1. discovery [WILL RUN]
    Network: website audits (up to 10)
-   Outputs: leads.csv, discovery-summary.json, reports/
-2. shortlist  WILL RUN
-3. review     DISABLED
-4. packaging  DISABLED
-5. summary    WILL RUN
+   Outputs: leads-csv, discovery-summary-json, reports-dir
+
+2. shortlist [WILL RUN]
+
+3. review [DISABLED]
+
+4. packaging [DISABLED]
+
+5. summary [WILL RUN]
 ```
 
 A blocked terminal plan writes the complete report to standard output and the concise `open-local-audit: workflow plan blocked` summary to standard error. JSON mode writes exactly one JSON document to standard output for ready and blocked reports and writes no expected readiness text to standard error.
