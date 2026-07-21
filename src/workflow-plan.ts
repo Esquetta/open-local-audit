@@ -214,10 +214,7 @@ function renderNetworkCapabilities(step: WorkflowPlanStep): string[] {
     if (access === "google-places") {
       return "Google Places";
     }
-    if (step.id !== "discovery" || step.settings.maxAudits === 0) {
-      return [];
-    }
-    return step.settings.maxAudits === null
+    return step.id !== "discovery" || step.settings.maxAudits === null
       ? "website audits (no configured cap)"
       : `website audits (up to ${step.settings.maxAudits})`;
   });

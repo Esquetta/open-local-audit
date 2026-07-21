@@ -415,6 +415,31 @@ describe("workflow plan", () => {
     expect(rendered).toContain("website audits (no configured cap)");
   });
 
+  it("does not render website audits for a generated zero-cap plan", async () => {
+    await writeConfig(
+      manualConfig({ discovery: { provider: "manual-csv", input: "./input/places.csv", maxAudits: 0 } })
+    );
+    await writeManualInput();
+
+    const rendered = renderWorkflowPlanTerminal(await runWorkflowPlan(configPath), configPath);
+
+    expect(rendered).not.toContain("website audits");
+  });
+
+  it("renders explicitly declared zero-cap website audit access", async () => {
+    await writeConfig(
+      manualConfig({ discovery: { provider: "manual-csv", input: "./input/places.csv", maxAudits: 0 } })
+    );
+    await writeManualInput();
+    const report = await runWorkflowPlan(configPath);
+    const declaredReport = structuredClone(report);
+    findStep(declaredReport, "discovery").networkAccess = ["website-audits"];
+
+    const rendered = renderWorkflowPlanTerminal(declaredReport, configPath);
+
+    expect(rendered).toContain("Network: website audits (up to 0)");
+  });
+
   it("renders reasons for conditional and disabled steps", async () => {
     await writeConfig(manualConfig({ packageReports: true }));
     await writeManualInput();
