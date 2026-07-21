@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runWorkflowPreflightEvaluationWithDependencies } from "../src/workflow-preflight.js";
 import {
+  renderWorkflowPlanJson,
+  renderWorkflowPlanTerminal,
   runWorkflowPlan,
   runWorkflowPlanWithDependencies,
   type WorkflowPlanReport,
@@ -336,5 +338,143 @@ describe("workflow plan", () => {
     expect(evaluations).toBe(1);
     expect(report.status).toBe(evaluation.report.status);
     expect(report.artifacts).toHaveProperty("leads-csv", evaluation.config?.paths.leadsCsv);
+  });
+
+  it("renders a ready manual plan with readiness, execution, and artifacts", async () => {
+    const secret = "workflow-plan-renderer-api-key-sentinel";
+    const rawConfig = "workflow-plan-renderer-raw-config-sentinel";
+    await writeConfig(manualConfig());
+    await writeManualInput();
+    const report = await runWorkflowPlan(configPath);
+    const before = structuredClone(report);
+
+    const rendered = renderWorkflowPlanTerminal(report, "display/workflow.json");
+    const json = renderWorkflowPlanJson(report);
+    const reorderedReport = {
+      ...report,
+      artifacts: Object.fromEntries(Object.entries(report.artifacts).reverse()) as WorkflowPlanReport["artifacts"]
+    };
+    const reorderedRendered = renderWorkflowPlanTerminal(reorderedReport, "display/workflow.json");
+
+    expect(rendered).toContain("Workflow plan: READY");
+    expect(rendered).toContain("Config: display/workflow.json");
+    expect(rendered).toContain("Provider: manual-csv");
+    expect(rendered).toContain("Readiness:");
+    expect(rendered).toContain("PASS  Workflow configuration is valid");
+    expect(rendered).toContain("Execution plan:");
+    expect(rendered).toContain("1. discovery [WILL RUN]");
+    expect(rendered).toContain("Network: website audits (no configured cap)");
+    expect(rendered).toContain("Outputs: leads-csv, discovery-summary-json, reports-dir");
+    expect(rendered).toContain("Artifacts:");
+    expect(rendered).toContain(`manual-input-csv: ${join(directory, "config", "input", "places.csv")}`);
+    expect(reorderedRendered.indexOf("- manual-input-csv:")).toBeLessThan(reorderedRendered.indexOf("- leads-csv:"));
+    expect(rendered).not.toContain(secret);
+    expect(rendered).not.toContain(rawConfig);
+    expect(json).not.toContain(secret);
+    expect(json).not.toContain(rawConfig);
+    expect(rendered.endsWith("\n")).toBe(true);
+    expect(rendered.endsWith("\n\n")).toBe(false);
+    expect(report).toEqual(before);
+  });
+
+  it("renders Google Places and website audit capabilities in model order", async () => {
+    const apiKey = "workflow-plan-google-renderer-api-key-sentinel";
+    const query = "workflow-plan-google-renderer-query-sentinel";
+    const rawConfig = "workflow-plan-google-renderer-raw-config-sentinel";
+    const stackDetails = "workflow-plan-google-renderer-stack-sentinel";
+    await writeConfig(manualConfig({ discovery: { provider: "google-places", query, maxAudits: 10 } }));
+    const evaluation = await runWorkflowPreflightEvaluationWithDependencies(configPath, {
+      resolveGoogleMapsApiKey: () => apiKey
+    });
+    if (!evaluation.config) {
+      throw new Error("Expected a resolved workflow configuration");
+    }
+    const resolvedConfig = evaluation.config;
+    const evaluationWithRawConfig = { ...evaluation, config: { ...resolvedConfig, rawConfig } };
+    const report = await runWorkflowPlanWithDependencies(configPath, {
+      evaluatePreflight: async () => evaluationWithRawConfig
+    });
+
+    const rendered = renderWorkflowPlanTerminal(report, configPath);
+    const json = renderWorkflowPlanJson(report);
+
+    expect(rendered).toContain("Network: Google Places, website audits (up to 10)");
+    expect(rendered.indexOf("Google Places")).toBeLessThan(rendered.indexOf("website audits (up to 10)"));
+    expect(`${rendered}${json}`).not.toContain(apiKey);
+    expect(`${rendered}${json}`).not.toContain(query);
+    expect(`${rendered}${json}`).not.toContain(rawConfig);
+    expect(`${rendered}${json}`).not.toContain(stackDetails);
+  });
+
+  it("renders no configured audit cap for website audit access", async () => {
+    await writeConfig(manualConfig());
+    await writeManualInput();
+
+    const rendered = renderWorkflowPlanTerminal(await runWorkflowPlan(configPath), configPath);
+
+    expect(rendered).toContain("website audits (no configured cap)");
+  });
+
+  it("renders reasons for conditional and disabled steps", async () => {
+    await writeConfig(manualConfig({ packageReports: true }));
+    await writeManualInput();
+
+    const rendered = renderWorkflowPlanTerminal(await runWorkflowPlan(configPath), configPath);
+
+    expect(rendered).toContain("3. review [DISABLED]");
+    expect(rendered).toContain("Reason: Review is not configured");
+    expect(rendered).toContain("4. packaging [CONDITIONAL]");
+    expect(rendered).toContain("Reason: Runs for selected leads with successful report artifacts");
+  });
+
+  it("retains execution details in a blocked plan with valid configuration", async () => {
+    await writeConfig(manualConfig());
+
+    const rendered = renderWorkflowPlanTerminal(await runWorkflowPlan(configPath), configPath);
+
+    expect(rendered).toContain("Workflow plan: BLOCKED");
+    expect(rendered).toContain("Execution plan:");
+    expect(rendered).toContain("1. discovery [WILL RUN]");
+    expect(rendered).toContain("Artifacts:");
+  });
+
+  it("renders an invalid blocked configuration without an execution plan", async () => {
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, '{ "version": 1,', "utf8");
+
+    const rendered = renderWorkflowPlanTerminal(await runWorkflowPlan(configPath), configPath);
+
+    expect(rendered).toContain("Workflow plan: BLOCKED");
+    expect(rendered).toContain("No execution plan is available");
+    expect(rendered).not.toContain("Artifacts:");
+  });
+
+  it("renders ready and blocked plans as pretty JSON without mutation", async () => {
+    await writeConfig(manualConfig());
+    await writeManualInput();
+    const ready = await runWorkflowPlan(configPath);
+    const blocked: WorkflowPlanReport = {
+      version: 1,
+      status: "blocked",
+      preflight: {
+        version: 1,
+        status: "blocked",
+        checks: [{ id: "configuration", status: "fail", message: "Workflow configuration could not be read or validated" }]
+      },
+      artifacts: {},
+      steps: []
+    };
+    const readyBefore = structuredClone(ready);
+    const blockedBefore = structuredClone(blocked);
+
+    const readyJson = renderWorkflowPlanJson(ready);
+    const blockedJson = renderWorkflowPlanJson(blocked);
+
+    expect(JSON.parse(readyJson)).toEqual(ready);
+    expect(JSON.parse(blockedJson)).toEqual(blocked);
+    expect(readyJson).toBe(`${JSON.stringify(ready, null, 2)}\n`);
+    expect(blockedJson).toBe(`${JSON.stringify(blocked, null, 2)}\n`);
+    expect(ready).toEqual(readyBefore);
+    expect(blocked).toEqual(blockedBefore);
   });
 });

@@ -70,6 +70,19 @@ export interface WorkflowPlanReport {
   steps: WorkflowPlanStep[];
 }
 
+const workflowPlanArtifactIds = [
+  "manual-input-csv",
+  "review-csv",
+  "leads-csv",
+  "discovery-summary-json",
+  "reports-dir",
+  "shortlist-csv",
+  "shortlist-summary-json",
+  "review-summary-json",
+  "packages-dir",
+  "workflow-summary-json"
+] as const satisfies readonly WorkflowPlanArtifactId[];
+
 interface WorkflowPlanDependencies {
   evaluatePreflight(configPath: string): Promise<WorkflowPreflightEvaluation>;
 }
@@ -194,6 +207,62 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
   ];
 
   return { version: 1, status: preflight.status, preflight, artifacts, steps };
+}
+
+function renderNetworkCapabilities(step: WorkflowPlanStep): string[] {
+  return step.networkAccess.flatMap((access) => {
+    if (access === "google-places") {
+      return "Google Places";
+    }
+    if (step.id !== "discovery" || step.settings.maxAudits === 0) {
+      return [];
+    }
+    return step.settings.maxAudits === null
+      ? "website audits (no configured cap)"
+      : `website audits (up to ${step.settings.maxAudits})`;
+  });
+}
+
+function renderWorkflowPlanStep(step: WorkflowPlanStep, index: number): string[] {
+  const networkCapabilities = renderNetworkCapabilities(step);
+  return [
+    `${index + 1}. ${step.id} [${step.state.toUpperCase().replace("-", " ")}]`,
+    ...(step.reason !== undefined ? [`   Reason: ${step.reason}`] : []),
+    ...(networkCapabilities.length > 0 ? [`   Network: ${networkCapabilities.join(", ")}`] : []),
+    ...(step.inputs.length > 0 ? [`   Inputs: ${step.inputs.join(", ")}`] : []),
+    ...(step.outputs.length > 0 ? [`   Outputs: ${step.outputs.join(", ")}`] : [])
+  ];
+}
+
+export function renderWorkflowPlanTerminal(report: WorkflowPlanReport, configPath: string): string {
+  const discovery = report.steps.find((step) => step.id === "discovery");
+  const artifactLines = workflowPlanArtifactIds.flatMap((id) => {
+    const path = report.artifacts[id];
+    return path !== undefined ? [`- ${id}: ${path}`] : [];
+  });
+  const lines = [
+    `Workflow plan: ${report.status.toUpperCase()}`,
+    `Config: ${configPath}`,
+    ...(discovery ? [`Provider: ${discovery.settings.provider}`] : []),
+    "",
+    "Readiness:",
+    ...report.preflight.checks.map((check) => `${check.status.toUpperCase().padEnd(5)} ${check.message}`),
+    "",
+    "Execution plan:",
+    ...(report.steps.length > 0
+      ? report.steps.flatMap((step, index) => [
+          ...renderWorkflowPlanStep(step, index),
+          ...(index < report.steps.length - 1 ? [""] : [])
+        ])
+      : ["No execution plan is available"]),
+    ...(artifactLines.length > 0 ? ["", "Artifacts:", ...artifactLines] : [])
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderWorkflowPlanJson(report: WorkflowPlanReport): string {
+  return `${JSON.stringify(report, null, 2)}\n`;
 }
 
 export async function runWorkflowPlan(configPath: string): Promise<WorkflowPlanReport> {
