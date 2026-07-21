@@ -49,6 +49,11 @@ export {
 export { readWorkflowConfig } from "./workflow-config.js";
 export { WorkflowRunError, runWorkflow, safeLeadSlug } from "./workflow.js";
 export {
+  renderWorkflowPlanJson,
+  renderWorkflowPlanTerminal,
+  runWorkflowPlan
+} from "./workflow-plan.js";
+export {
   renderWorkflowPreflightJson,
   renderWorkflowPreflightTerminal,
   runWorkflowPreflight
@@ -107,6 +112,15 @@ export type {
   ShortlistSort
 } from "./shortlist.js";
 export type { RawWorkflowConfig as WorkflowConfig, ResolvedWorkflowConfig } from "./workflow-config.js";
+export type {
+  WorkflowPlanArtifactId,
+  WorkflowPlanNetworkAccess,
+  WorkflowPlanReport,
+  WorkflowPlanStatus,
+  WorkflowPlanStep,
+  WorkflowPlanStepId,
+  WorkflowPlanStepState
+} from "./workflow-plan.js";
 export type {
   WorkflowPreflightCheck,
   WorkflowPreflightCheckId,
