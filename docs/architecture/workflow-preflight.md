@@ -128,6 +128,6 @@ Expected operational filesystem errors are sanitized and represented as failed c
 - Linked or canonically escaping managed directories, and linked managed output files, block execution.
 - Terminal and JSON outputs contain no API key or raw environment value.
 - JSON output is one parseable document for ready and blocked results.
-- `--format` without `--check` is rejected.
+- `--format` without `--check` or `--plan` is rejected.
 - Existing workflow execution and failure behavior remains covered by regression tests.
 - The release passes the full release check, package audit, and fresh consumer installation check.
