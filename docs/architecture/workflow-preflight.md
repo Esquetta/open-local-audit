@@ -9,7 +9,7 @@ open-local-audit workflow --config workflow.json --check
 open-local-audit workflow --config workflow.json --check --format json
 ```
 
-The existing `workflow --config <path>` execution behavior remains unchanged. `--format` is accepted only with `--check`.
+The existing `workflow --config <path>` execution behavior remains unchanged. `--format` is accepted with `--check` or `--plan` and remains invalid for normal workflow execution.
 
 ## Goals
 
