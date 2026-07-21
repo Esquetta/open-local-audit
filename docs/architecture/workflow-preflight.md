@@ -45,6 +45,8 @@ Filesystem access checks are advisory and can become stale before execution. The
 
 ## Result Contract
 
+`workflow --plan` includes a preflight result alongside an execution plan; its additive contract is defined in the [workflow plan contract](./workflow-plan.md). The version `1` preflight report remains unchanged.
+
 The preflight report is versioned independently from the workflow configuration:
 
 ```json
