@@ -37,6 +37,11 @@ export interface WorkflowPreflightReport {
   limits?: { maxCandidates: number | null; maxAudits: number | null };
 }
 
+export interface WorkflowPreflightEvaluation {
+  config?: ResolvedWorkflowConfig;
+  report: WorkflowPreflightReport;
+}
+
 export interface WorkflowPreflightDependencies {
   readWorkflowConfig(configPath: string): Promise<ResolvedWorkflowConfig>;
   resolveGoogleMapsApiKey(): string | undefined;
@@ -166,13 +171,20 @@ export function renderWorkflowPreflightJson(report: WorkflowPreflightReport): st
 }
 
 export async function runWorkflowPreflight(configPath: string): Promise<WorkflowPreflightReport> {
-  return runWorkflowPreflightWithDependencies(configPath);
+  return (await runWorkflowPreflightEvaluationWithDependencies(configPath)).report;
 }
 
 export async function runWorkflowPreflightWithDependencies(
   configPath: string,
   overrides: Partial<WorkflowPreflightDependencies> = {}
 ): Promise<WorkflowPreflightReport> {
+  return (await runWorkflowPreflightEvaluationWithDependencies(configPath, overrides)).report;
+}
+
+export async function runWorkflowPreflightEvaluationWithDependencies(
+  configPath: string,
+  overrides: Partial<WorkflowPreflightDependencies> = {}
+): Promise<WorkflowPreflightEvaluation> {
   const dependencies: WorkflowPreflightDependencies = { ...defaultDependencies, ...overrides };
   let config: ResolvedWorkflowConfig;
 
@@ -183,15 +195,17 @@ export async function runWorkflowPreflightWithDependencies(
       throw error;
     }
     return {
-      version: 1,
-      status: "blocked",
-      checks: [
-        {
-          id: "configuration",
-          status: "fail",
-          message: "Workflow configuration could not be read or validated"
-        }
-      ]
+      report: {
+        version: 1,
+        status: "blocked",
+        checks: [
+          {
+            id: "configuration",
+            status: "fail",
+            message: "Workflow configuration could not be read or validated"
+          }
+        ]
+      }
     };
   }
 
@@ -263,15 +277,18 @@ export async function runWorkflowPreflightWithDependencies(
   ];
 
   return {
-    version: 1,
-    status: reportStatus(checks),
-    checks,
-    provider: config.discovery.provider,
-    stages,
-    outputs: { outDir: config.outDir, ...config.paths },
-    limits: {
-      maxCandidates: config.discovery.provider === "google-places" ? config.discovery.limit : null,
-      maxAudits: config.discovery.maxAudits ?? null
+    config,
+    report: {
+      version: 1,
+      status: reportStatus(checks),
+      checks,
+      provider: config.discovery.provider,
+      stages,
+      outputs: { outDir: config.outDir, ...config.paths },
+      limits: {
+        maxCandidates: config.discovery.provider === "google-places" ? config.discovery.limit : null,
+        maxAudits: config.discovery.maxAudits ?? null
+      }
     }
   };
 }
