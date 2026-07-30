@@ -2,6 +2,13 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.65.0 - 2026-07-30
+
+- Added explicit `workflow --config <path> --resume` recovery from the latest verified stage checkpoint.
+- Added strict configuration fingerprint, managed artifact, report source, and checkpoint state validation before resumed work begins.
+- Kept existing workflow summary, preflight, and plan output contracts stable while rerunning incomplete packaging as a complete stage.
+- Updated the locked PostCSS development dependency to a patched release after the release audit reported a high-severity source map path traversal advisory.
+
 ## v0.64.0 - 2026-07-21
 
 - Added `workflow --config <path> --plan` for a read-only explanation of readiness, execution order, effective settings, network capability, and managed artifacts.
