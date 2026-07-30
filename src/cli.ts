@@ -160,15 +160,20 @@ const workflowProgram = program
   .option("--config <path>", "read workflow configuration from a JSON file")
   .option("--check", "validate workflow readiness without running it", false)
   .option("--plan", "show readiness and resolved execution plan without running it", false)
+  .option("--resume", "resume from the latest valid workflow checkpoint", false)
   .option("--format <format>", "workflow check or plan output format: terminal or json");
 
 workflowProgram.action(async () => {
   try {
-    const options = workflowProgram.opts<{ config?: string; check: boolean; plan: boolean; format?: string }>();
+    const options = workflowProgram.opts<{ config?: string; check: boolean; plan: boolean; resume: boolean; format?: string }>();
     const format = workflowProgram.getOptionValueSource("format") === "cli" ? options.format : undefined;
     const config = options.config;
     if (!config) {
       throw new Error("--config is required for workflow");
+    }
+
+    if (options.resume && (options.check || options.plan || format !== undefined)) {
+      throw new Error("workflow --resume cannot be used with --check, --plan, or --format");
     }
 
     if (options.check && options.plan) {
@@ -221,7 +226,7 @@ workflowProgram.action(async () => {
       process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
     }
 
-    const summary = await runResolvedWorkflow(resolvedConfig);
+    const summary = await runResolvedWorkflow(resolvedConfig, {}, { resume: options.resume });
     process.stdout.write("Workflow completed\n");
     process.stdout.write(`Discovered: ${summary.discoveredLeads}\n`);
     process.stdout.write(`Selected: ${summary.selectedLeads}\n`);

@@ -1,6 +1,6 @@
 {
   "name": "open-local-audit",
-  "version": "0.64.0",
+  "version": "0.65.0",
   "description": "Open-source website and local presence auditor for small businesses.",
   "license": "MIT",
   "type": "module",
@@ -17,7 +17,8 @@
     "CHANGELOG.md",
     "docs/architecture/workflow-command.md",
     "docs/architecture/workflow-preflight.md",
-    "docs/architecture/workflow-plan.md"
+    "docs/architecture/workflow-plan.md",
+    "docs/architecture/workflow-resume.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

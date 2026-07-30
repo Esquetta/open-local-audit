@@ -38,6 +38,7 @@ Open Local Audit produces evidence-backed mini audits for local businesses. The 
 - [Workflow command architecture](./docs/architecture/workflow-command.md)
 - [Workflow preflight contract](./docs/architecture/workflow-preflight.md)
 - [Workflow plan contract](./docs/architecture/workflow-plan.md)
+- [Workflow resume contract](./docs/architecture/workflow-resume.md)
 
 ## Local development
 
@@ -229,6 +230,14 @@ open-local-audit workflow --config workflow.json --plan --format json
 
 `--check` answers whether a workflow can run. `--plan` includes that readiness result and explains the successful-path steps and states, artifact paths, declared network capability, and configuration-derived upper bounds. Planning performs no network calls and creates or modifies no files. It does not use a Google query or API key, estimate currency cost, or replace the workflow's authoritative write-time safety checks.
 
+Resume an interrupted workflow from its last verified stage:
+
+```bash
+open-local-audit workflow --config workflow.json --resume
+```
+
+Resume is explicit and validates `workflow-checkpoint.json`, the effective configuration, and required managed artifacts before invoking a stage. Completed stages are reused only when their artifacts are unchanged. An incomplete packaging stage reruns packaging for every selected lead.
+
 Minimal `workflow.json` for a manual CSV run:
 
 ```json
@@ -248,7 +257,7 @@ Minimal `workflow.json` for a manual CSV run:
 
 The workflow runs discovery and then shortlisting from one strict JSON configuration. Version `1` is the only supported configuration version. Relative `outDir`, manual `input`, and optional review CSV paths resolve from the configuration file directory, so this example reads `places.csv` beside `workflow.json` and writes below `workflow-output/` beside it.
 
-The workflow owns predictable output paths below `outDir`: `reports/`, `leads.csv`, `discovery-summary.json`, `shortlist.csv`, `shortlist-summary.json`, and `workflow-summary.json`; it also writes `review-summary.json` when `review` is configured and `packages/` when `packageReports` is enabled. Rerunning the same configuration replaces those managed outputs without deleting unrelated files.
+The workflow owns predictable output paths below `outDir`: `reports/`, `leads.csv`, `discovery-summary.json`, `shortlist.csv`, `shortlist-summary.json`, `workflow-checkpoint.json`, and `workflow-summary.json`; it also writes `review-summary.json` when `review` is configured and `packages/` when `packageReports` is enabled. Rerunning the same configuration replaces those managed outputs without deleting unrelated files.
 
 Configuration validation happens before output creation. Invalid configuration or a failed workflow stage returns exit code `1`; when execution reaches a managed stage, inspect `workflow-summary.json` for stage status and output paths. The workflow writes local files only: it does not send outreach, upload reports, or synchronize a CRM. A `google-places` discovery configuration requires `GOOGLE_MAPS_API_KEY` and can incur Google Maps Platform billing; the API key is not stored in the configuration.
 

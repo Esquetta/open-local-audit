@@ -125,7 +125,21 @@ describe("CLI behavior helpers", () => {
     expect(workflowHelp.stdout).toContain("--config <path>");
     expect(workflowHelp.stdout).toContain("--check");
     expect(workflowHelp.stdout).toContain("--plan");
+    expect(workflowHelp.stdout).toContain("--resume");
     expect(workflowHelp.stdout).toContain("--format <format>");
+  });
+
+  it("rejects resume mode conflicts before reading the workflow configuration", () => {
+    for (const argumentsAfterConfig of [["--resume", "--check"], ["--resume", "--plan"], ["--resume", "--format", "json"]]) {
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", "missing-workflow.json", ...argumentsAfterConfig],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("open-local-audit: workflow --resume cannot be used with --check, --plan, or --format\n");
+    }
   });
 
   it("requires a configuration file for workflows", () => {
@@ -691,6 +705,44 @@ describe("CLI behavior helpers", () => {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
       });
+      removeTempDir(tmp);
+    }
+  });
+
+  it("resumes a completed workflow without requiring the original website to stay available", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-resume-"));
+    const { server, url } = await startLocalBusinessServer();
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const inputPath = join(tmp, "places.csv");
+      writeFileSync(inputPath, `label,website\nExample Dental,${url}\n`, "utf8");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: { top: 1 }
+        }),
+        "utf8"
+      );
+
+      const initial = await spawnCli(["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath]);
+      expect(initial.status).toBe(0);
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+
+      const resumed = await spawnCli(["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--resume"]);
+      expect(resumed.status).toBe(0);
+      expect(resumed.stderr).toBe("");
+      expect(resumed.stdout).toContain("Workflow completed");
+    } finally {
+      if (server.listening) {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        });
+      }
       removeTempDir(tmp);
     }
   });
