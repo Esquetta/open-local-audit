@@ -52,9 +52,10 @@ The command writes predictable paths below `outDir`:
 - `shortlist-summary.json`
 - `review-summary.json` when review configuration is present
 - `packages/<safe-lead-slug>/` for selected leads with successful report artifacts when packaging is enabled
+- `workflow-checkpoint.json`
 - `workflow-summary.json`
 
-The same configuration resolves to the same managed output paths, so rerun destinations are deterministic. Reruns replace only those managed outputs and do not delete unrelated files. Existing operator decisions in the configured review CSV remain authoritative and are preserved by the discovery merge behavior.
+The same configuration resolves to the same managed output paths, so rerun destinations are deterministic. Reruns replace only those managed outputs and do not delete unrelated files. Existing operator decisions in the configured review CSV remain authoritative and are preserved by the discovery merge behavior. The checkpoint supports explicit stage-boundary recovery as defined in the [workflow resume contract](./workflow-resume.md).
 
 ## Execution Model
 
@@ -88,9 +89,13 @@ Package directory names use a deterministic, file-system-safe slug derived from 
 
 The summary does not include the full configuration, environment variables, API keys, raw Google Places responses, or website response bodies.
 
+`workflow-checkpoint.json` is separate from the operator-facing summary. It is
+written after successful stage boundaries and contains only the state and
+integrity records required by `workflow --resume`.
+
 ## Compatibility
 
-The existing `discover`, `shortlist`, `review`, and `package-report` commands keep their current flags, outputs, and exit behavior. The workflow command is additive and uses configuration contract version `1` so future incompatible configuration changes can be rejected explicitly. `workflow --check` is also additive: it preflights the same configuration without changing normal workflow execution. Its read-only behavior, exit semantics, and versioned report contract are defined in the [workflow preflight contract](./workflow-preflight.md). `workflow --plan` is likewise additive and does not change normal workflow execution; its execution-plan contract is defined in the [workflow plan contract](./workflow-plan.md).
+The existing `discover`, `shortlist`, `review`, and `package-report` commands keep their current flags, outputs, and exit behavior. The workflow command is additive and uses configuration contract version `1` so future incompatible configuration changes can be rejected explicitly. `workflow --check` is also additive: it preflights the same configuration without changing normal workflow execution. Its read-only behavior, exit semantics, and versioned report contract are defined in the [workflow preflight contract](./workflow-preflight.md). `workflow --plan` is likewise additive and does not change normal workflow execution; its execution-plan contract is defined in the [workflow plan contract](./workflow-plan.md). `workflow --resume` is explicit and its checkpoint validation and recovery semantics are defined in the [workflow resume contract](./workflow-resume.md).
 
 ## Verification
 

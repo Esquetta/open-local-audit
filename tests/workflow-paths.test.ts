@@ -150,7 +150,8 @@ describe("workflow managed path inspection", () => {
       config.paths.shortlistCsv,
       config.paths.shortlistSummaryJson,
       config.paths.reviewSummaryJson,
-      config.paths.workflowSummaryJson
+      config.paths.workflowSummaryJson,
+      join(config.outDir, "workflow-checkpoint.json")
     ];
     await mkdir(config.outDir, { recursive: true });
 

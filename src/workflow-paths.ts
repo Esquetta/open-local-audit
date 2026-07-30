@@ -1,5 +1,5 @@
 import { lstat, mkdir, realpath } from "node:fs/promises";
-import { isAbsolute, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import type { ResolvedWorkflowConfig } from "./workflow-config.js";
 
 export type WorkflowPathIssueId =
@@ -92,7 +92,8 @@ export async function inspectWorkflowManagedPaths(
     config.paths.shortlistCsv,
     config.paths.shortlistSummaryJson,
     config.paths.reviewSummaryJson,
-    config.paths.workflowSummaryJson
+    config.paths.workflowSummaryJson,
+    join(config.outDir, "workflow-checkpoint.json")
   ]) {
     const fileInfo = await pathInfo(path, resolvedDependencies);
     if (fileInfo?.isSymbolicLink()) {

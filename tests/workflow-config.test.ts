@@ -64,6 +64,7 @@ describe("workflow configuration", () => {
         packagesDir: join(outDir, "packages")
       }
     });
+    expect(result.paths).not.toHaveProperty("workflowCheckpointJson");
   });
 
   it("applies workflow defaults", async () => {

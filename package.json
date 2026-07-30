@@ -17,7 +17,8 @@
     "CHANGELOG.md",
     "docs/architecture/workflow-command.md",
     "docs/architecture/workflow-preflight.md",
-    "docs/architecture/workflow-plan.md"
+    "docs/architecture/workflow-plan.md",
+    "docs/architecture/workflow-resume.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
