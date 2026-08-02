@@ -55,6 +55,27 @@ export type WorkflowPlanStep =
       {
         top: number;
         minOpportunityScore: number | null;
+        minScore: number | null;
+        segment: string | null;
+        profile: string | null;
+        priority: string | null;
+        contactConfidence: string | null;
+        minContactConfidence: string | null;
+        preferredContactChannel: string | null;
+        source: string | null;
+        auditStatus: string | null;
+        hasWebsite: string | null;
+        topFinding: string | null;
+        reviewStatus: string | null;
+        excludeReviewStatus: string | null;
+        unreviewed: boolean | null;
+        reviewedBefore: string | null;
+        requireWebsite: boolean | null;
+        missingWebsite: boolean | null;
+        requireContact: boolean | null;
+        missingContact: boolean | null;
+        requireReport: boolean | null;
+        missingReport: boolean | null;
         sort: ResolvedWorkflowConfig["shortlist"]["sort"];
       }
     >
@@ -151,6 +172,27 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
       settings: {
         top: config.shortlist.top,
         minOpportunityScore: config.shortlist.minOpportunityScore ?? null,
+        minScore: config.shortlist.minScore ?? null,
+        segment: config.shortlist.segment ?? null,
+        profile: config.shortlist.profile ?? null,
+        priority: config.shortlist.priority ?? null,
+        contactConfidence: config.shortlist.contactConfidence ?? null,
+        minContactConfidence: config.shortlist.minContactConfidence ?? null,
+        preferredContactChannel: config.shortlist.preferredContactChannel ?? null,
+        source: config.shortlist.source ?? null,
+        auditStatus: config.shortlist.auditStatus ?? null,
+        hasWebsite: config.shortlist.hasWebsite ?? null,
+        topFinding: config.shortlist.topFinding ?? null,
+        reviewStatus: config.shortlist.reviewStatus ?? null,
+        excludeReviewStatus: config.shortlist.excludeReviewStatus ?? null,
+        unreviewed: config.shortlist.unreviewed ?? null,
+        reviewedBefore: config.shortlist.reviewedBefore ?? null,
+        requireWebsite: config.shortlist.requireWebsite ?? null,
+        missingWebsite: config.shortlist.missingWebsite ?? null,
+        requireContact: config.shortlist.requireContact ?? null,
+        missingContact: config.shortlist.missingContact ?? null,
+        requireReport: config.shortlist.requireReport ?? null,
+        missingReport: config.shortlist.missingReport ?? null,
         sort: config.shortlist.sort
       }
     },

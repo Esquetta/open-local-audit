@@ -102,7 +102,32 @@ describe("workflow plan", () => {
           inputs: ["leads-csv"],
           outputs: ["shortlist-csv", "shortlist-summary-json"],
           networkAccess: [],
-          settings: { top: 20, minOpportunityScore: null, sort: "opportunity-desc" }
+          settings: {
+            auditStatus: null,
+            contactConfidence: null,
+            excludeReviewStatus: null,
+            hasWebsite: null,
+            minContactConfidence: null,
+            minOpportunityScore: null,
+            minScore: null,
+            missingContact: null,
+            missingReport: null,
+            missingWebsite: null,
+            preferredContactChannel: null,
+            priority: null,
+            profile: null,
+            requireContact: null,
+            requireReport: null,
+            requireWebsite: null,
+            reviewStatus: null,
+            reviewedBefore: null,
+            segment: null,
+            sort: "opportunity-desc",
+            source: null,
+            top: 20,
+            topFinding: null,
+            unreviewed: null
+          }
         },
         {
           id: "review",
@@ -191,7 +216,7 @@ describe("workflow plan", () => {
         maxAudits: 0
       }
     });
-    expect(findStep(report, "shortlist").settings).toEqual({ top: 4, minOpportunityScore: 60, sort: "priority-desc" });
+    expect(findStep(report, "shortlist").settings).toMatchObject({ top: 4, minOpportunityScore: 60, sort: "priority-desc" });
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain(apiKey);
     expect(serialized).not.toContain(query);

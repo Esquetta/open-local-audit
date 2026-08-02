@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.66.0 - 2026-08-02
+
+- Added all 21 shortlist filter fields to the workflow configuration schema, including `minScore`, `segment`, `profile`, `priority`, `contactConfidence`, `minContactConfidence`, `preferredContactChannel`, `source`, `auditStatus`, `hasWebsite`, `topFinding`, `reviewStatus`, `excludeReviewStatus`, `unreviewed`, `reviewedBefore`, `requireWebsite`, `missingWebsite`, `requireContact`, `missingContact`, `requireReport`, and `missingReport`.
+- Added new shortlist settings to workflow plan output for operator visibility.
+- Kept workflow configuration local-only with no source CSV mutation, API calls, outreach sending, or CRM sync.
+
 ## v0.65.0 - 2026-07-30
 
 - Added explicit `workflow --config <path> --resume` recovery from the latest verified stage checkpoint.

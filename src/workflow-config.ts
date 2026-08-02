@@ -29,6 +29,15 @@ const googleDiscoverySchema = z
   })
   .strict();
 
+const calendarDateSchema = z.string().refine((value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const parsed = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+}, "Expected a real calendar date in YYYY-MM-DD format");
+
 const shortlistSortValues = [
   "opportunity-desc",
   "score-desc",
@@ -46,18 +55,30 @@ const shortlistSchema = z
   .object({
     top: z.number().int().positive().default(20),
     minOpportunityScore: z.number().int().min(0).max(100).optional(),
+    minScore: z.number().int().min(0).max(100).optional(),
+    segment: nonblankStringSchema.optional(),
+    profile: nonblankStringSchema.optional(),
+    priority: nonblankStringSchema.optional(),
+    contactConfidence: nonblankStringSchema.optional(),
+    minContactConfidence: z.enum(["high", "medium", "low", "none"]).optional(),
+    preferredContactChannel: nonblankStringSchema.optional(),
+    source: nonblankStringSchema.optional(),
+    auditStatus: nonblankStringSchema.optional(),
+    hasWebsite: nonblankStringSchema.optional(),
+    topFinding: nonblankStringSchema.optional(),
+    reviewStatus: nonblankStringSchema.optional(),
+    excludeReviewStatus: nonblankStringSchema.optional(),
+    unreviewed: z.boolean().optional(),
+    reviewedBefore: calendarDateSchema.optional(),
+    requireWebsite: z.boolean().optional(),
+    missingWebsite: z.boolean().optional(),
+    requireContact: z.boolean().optional(),
+    missingContact: z.boolean().optional(),
+    requireReport: z.boolean().optional(),
+    missingReport: z.boolean().optional(),
     sort: z.enum(shortlistSortValues).default("opportunity-desc")
   })
   .strict();
-
-const calendarDateSchema = z.string().refine((value) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const parsed = Date.parse(`${value}T00:00:00.000Z`);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
-}, "Expected a real calendar date in YYYY-MM-DD format");
 
 const reviewSchema = z
   .object({
