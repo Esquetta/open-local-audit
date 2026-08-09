@@ -255,14 +255,28 @@ function isWorkflowState(value: unknown): value is WorkflowState {
   if (!isRecord(value) || !hasExactKeys(value, stateKeys)) {
     return false;
   }
-  return (
+  const structuralValidity =
     value.version === 1 &&
     isHash(value.configFingerprint) &&
     (value.phase === "running" || value.phase === "failed" || value.phase === "completed") &&
     (value.currentStage === null || isStageName(value.currentStage)) &&
     (value.checkpointHash === null || isHash(value.checkpointHash)) &&
     isTimestamp(value.startedAt) &&
-    isTimestamp(value.updatedAt) &&
-    isWorkflowSummary(value.summary)
-  );
+    isTimestamp(value.updatedAt);
+  if (!structuralValidity || !isWorkflowSummary(value.summary)) {
+    return false;
+  }
+  const summary = value.summary;
+
+  if (value.phase === "completed") {
+    return summary.status === "success" && summary.error === undefined && value.currentStage === null;
+  }
+  if (value.phase === "failed") {
+    return (
+      summary.status === "failed" &&
+      summary.error !== undefined &&
+      value.currentStage === summary.error.stage
+    );
+  }
+  return summary.status === "success" && summary.error === undefined;
 }

@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readWorkflowConfig, type ResolvedWorkflowConfig } from "../src/workflow-config.js";
 import {
   createWorkflowState,
@@ -14,11 +14,32 @@ import {
 } from "../src/workflow-state.js";
 import { type WorkflowSummary } from "../src/workflow.js";
 
+const fsValidationMock = vi.hoisted(() => ({ linkedPath: "" }));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    lstat: vi.fn(async (path: Parameters<typeof actual.lstat>[0]) => {
+      const stats = await actual.lstat(path);
+      if (String(path) === fsValidationMock.linkedPath) {
+        return new Proxy(stats, {
+          get(target, property, receiver) {
+            return property === "isSymbolicLink" ? () => true : Reflect.get(target, property, receiver);
+          }
+        });
+      }
+      return stats;
+    })
+  };
+});
+
 describe("workflow state manifest", () => {
   let directory: string;
   let config: ResolvedWorkflowConfig;
 
   beforeEach(async () => {
+    fsValidationMock.linkedPath = "";
     directory = await mkdtemp(join(tmpdir(), "open-local-audit-workflow-state-"));
     const configPath = join(directory, "workflow.json");
     await writeFile(
@@ -32,9 +53,11 @@ describe("workflow state manifest", () => {
       "utf8"
     );
     config = await readWorkflowConfig(configPath);
+    expect(config.paths).not.toHaveProperty("workflowStateJson");
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -111,6 +134,56 @@ describe("workflow state manifest", () => {
     await expect(readWorkflowState(config)).resolves.toEqual({ kind: "invalid", message: "Workflow state is invalid" });
   });
 
+  it("rejects invalid scalar values and malformed nested summaries", () => {
+    const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");
+    const invalidStates = [
+      { ...state, startedAt: "not-a-timestamp" },
+      { ...state, updatedAt: "2026-08-09T10:00:00Z" },
+      { ...state, checkpointHash: "not-a-hash" },
+      { ...state, currentStage: "export" },
+      { ...state, summary: { ...state.summary, stages: { ...state.summary.stages, discovery: { status: "running" } } } }
+    ];
+
+    for (const invalidState of invalidStates) {
+      expect(parseWorkflowState(invalidState)).toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+    }
+  });
+
+  it("rejects lifecycle phases that contradict the persisted summary", () => {
+    const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");
+    const failedSummary: WorkflowSummary = {
+      ...state.summary,
+      status: "failed",
+      error: { stage: "shortlist", message: "shortlist failed" }
+    };
+    const invalidStates = [
+      { ...state, phase: "completed", currentStage: "discovery" },
+      { ...state, phase: "completed", summary: { ...state.summary, error: { stage: "discovery", message: "unexpected" } } },
+      { ...state, phase: "failed", currentStage: "discovery", summary: failedSummary },
+      { ...state, phase: "failed", currentStage: "shortlist" },
+      { ...state, phase: "running", summary: failedSummary }
+    ];
+
+    for (const invalidState of invalidStates) {
+      expect(parseWorkflowState(invalidState)).toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+    }
+  });
+
+  it("rejects linked and non-regular state paths", async () => {
+    await mkdir(config.outDir, { recursive: true });
+    const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");
+    await writeWorkflowState(config, state);
+    fsValidationMock.linkedPath = workflowStatePath(config);
+
+    await expect(readWorkflowState(config)).resolves.toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+    await expect(writeWorkflowState(config, state)).rejects.toThrow("Workflow state must be a regular file");
+
+    fsValidationMock.linkedPath = "";
+    await rm(workflowStatePath(config));
+    await mkdir(workflowStatePath(config));
+    await expect(readWorkflowState(config)).resolves.toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+  });
+
   it("reports a missing state file and hashes only regular checkpoints", async () => {
     await expect(readWorkflowState(config)).resolves.toEqual({ kind: "missing" });
     await mkdir(config.outDir, { recursive: true });
@@ -118,6 +191,9 @@ describe("workflow state manifest", () => {
     await writeFile(checkpointPath, "checkpoint\n", "utf8");
 
     expect(await hashWorkflowCheckpoint(config)).toMatch(/^[a-f0-9]{64}$/);
+    await rm(checkpointPath);
+    await mkdir(checkpointPath);
+    await expect(hashWorkflowCheckpoint(config)).rejects.toThrow("Workflow checkpoint must be a regular file");
   });
 });
 
