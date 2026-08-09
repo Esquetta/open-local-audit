@@ -918,14 +918,7 @@ export async function runResolvedWorkflow(
     } catch (error) {
       await throwStageFailure(summary, "shortlist", error, knownSecrets, persistFailedState);
     }
-    try {
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
-    } catch (error) {
-      if (config.packageReports) {
-        await throwStageFailure(summary, "packaging", error, knownSecrets, persistFailedState);
-      }
-      throw error;
-    }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
     checkpointHash = await hashWorkflowCheckpoint(config);
     await persistState("running", null);
   }

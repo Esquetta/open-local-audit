@@ -483,6 +483,51 @@ describe("workflow orchestrator", () => {
     expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({ phase: "completed", currentStage: null });
   });
 
+  it("propagates a shortlist checkpoint persistence error without fabricating a packaging failure", async () => {
+    await writeWorkflowConfig(
+      manualWorkflowConfig({
+        review: { csv: "./operator/review.csv", staleBefore: "2026-06-01" },
+        packageReports: true
+      })
+    );
+    const review = vi.fn(async () => makeReviewSummary());
+    const packageReport = vi.fn(async ({ outDir }: { outDir: string }) => makePackResult(outDir));
+    let capturedError: unknown;
+
+    try {
+      await runWorkflow(configPath, {
+        runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+          await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+          await writeFile(options.summaryJson!, "{}\n", "utf8");
+          return makeDiscoveryResult(1);
+        }),
+        runShortlistReport: vi.fn(async () =>
+          makeShortlistResult([makeLead({ reportPath: "missing/open-local-audit-report.html" })])
+        ),
+        summarizeReviewCsvFile: review,
+        packageReport
+      });
+    } catch (error) {
+      capturedError = error;
+    }
+
+    expect(capturedError).toBeInstanceOf(Error);
+    expect(capturedError).not.toBeInstanceOf(WorkflowRunError);
+    expect((capturedError as Error).message).toBe("Checkpoint package source report is missing");
+    expect(review).not.toHaveBeenCalled();
+    expect(packageReport).not.toHaveBeenCalled();
+    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "running",
+      currentStage: "shortlist",
+      checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      summary: {
+        status: "success",
+        stages: { discovery: { status: "success" }, shortlist: { status: "not-run" }, packaging: { status: "not-run" } }
+      }
+    });
+  });
+
   it("sanitizes lead slugs, falls back safely, and appends duplicate suffixes during packaging", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
@@ -1029,13 +1074,10 @@ describe("workflow orchestrator", () => {
         runShortlistReport: shortlist,
         packageReport
       })
-    ).rejects.toBeInstanceOf(WorkflowRunError);
+    ).rejects.toThrow("Report path escapes reports directory");
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(readSummaryFile().summary).toMatchObject({
-      error: { stage: "packaging", message: "Report path escapes reports directory" },
-      packages: { entries: [] }
-    });
+    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
   });
 
   it("rejects a report directory link that resolves outside reportsDir", async () => {
@@ -1063,13 +1105,10 @@ describe("workflow orchestrator", () => {
         ),
         packageReport
       })
-    ).rejects.toBeInstanceOf(WorkflowRunError);
+    ).rejects.toThrow("Report path escapes reports directory");
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(readSummaryFile().summary).toMatchObject({
-      error: { stage: "packaging", message: "Report path escapes reports directory" },
-      packages: { entries: [] }
-    });
+    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
   });
 
   it("rejects a linked managed reports directory before discovery writes", async () => {
@@ -1147,13 +1186,10 @@ describe("workflow orchestrator", () => {
         ),
         packageReport
       })
-    ).rejects.toBeInstanceOf(WorkflowRunError);
+    ).rejects.toThrow("Linked report files are not allowed");
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(readSummaryFile().summary).toMatchObject({
-      error: { stage: "packaging", message: "Linked report files are not allowed" },
-      packages: { entries: [] }
-    });
+    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
     expect(existsSync(join(paths.packagesDir, "linked-file", "reports", "open-local-audit-report.html"))).toBe(false);
     expect(readFileSync(externalFile, "utf8")).toBe(externalMarker);
   });
@@ -1185,13 +1221,10 @@ describe("workflow orchestrator", () => {
         ),
         packageReport
       })
-    ).rejects.toBeInstanceOf(WorkflowRunError);
+    ).rejects.toThrow("Report file escapes input directory");
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(readSummaryFile().summary).toMatchObject({
-      error: { stage: "packaging", message: "Report file escapes input directory" },
-      packages: { entries: [] }
-    });
+    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
     expect(existsSync(join(paths.packagesDir, "escaped-file"))).toBe(false);
   });
 
