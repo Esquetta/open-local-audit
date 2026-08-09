@@ -17,7 +17,8 @@ import { runWorkflowStatus } from "../src/workflow-status.js";
 const fsValidationMock = vi.hoisted(() => ({
   linkedPath: "",
   escapedPath: "",
-  escapedRealPath: ""
+  escapedRealPath: "",
+  failingRealpath: ""
 }));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -36,6 +37,9 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       return stats;
     }),
     realpath: vi.fn(async (path: Parameters<typeof actual.realpath>[0]) => {
+      if (String(path) === fsValidationMock.failingRealpath) {
+        throw Object.assign(new Error("source snapshot unavailable"), { code: "EACCES" });
+      }
       const resolvedPath = await actual.realpath(path);
       return String(path) === fsValidationMock.escapedPath ? fsValidationMock.escapedRealPath : resolvedPath;
     })
@@ -50,6 +54,7 @@ describe("workflow orchestrator", () => {
     fsValidationMock.linkedPath = "";
     fsValidationMock.escapedPath = "";
     fsValidationMock.escapedRealPath = "";
+    fsValidationMock.failingRealpath = "";
     directory = await mkdtemp(join(tmpdir(), "open-local-audit-workflow-"));
     configPath = join(directory, "config", "workflow.json");
   });
@@ -549,7 +554,7 @@ describe("workflow orchestrator", () => {
     });
   });
 
-  it("isolates invalid package sources to their packaging entries and retains a conservative checkpoint", async () => {
+  it("checkpoints invalid package-source snapshots before continuing per-lead packaging", async () => {
     await writeWorkflowConfig(
       manualWorkflowConfig({
         review: { csv: "./operator/review.csv", staleBefore: "2026-06-01" },
@@ -575,7 +580,11 @@ describe("workflow orchestrator", () => {
         await writeFile(options.summaryJson!, "{}\n", "utf8");
         return makeDiscoveryResult(2);
       }),
-      runShortlistReport: vi.fn(async () => makeShortlistResult([invalidLead, validLead])),
+      runShortlistReport: vi.fn(async (options: { out: string; summaryJson?: string }) => {
+        await writeFile(options.out, "leadKey,companyName\nurl:https://missing.test,Missing Report\nurl:https://valid.test,Valid Report\n", "utf8");
+        await writeFile(options.summaryJson!, "{}\n", "utf8");
+        return makeShortlistResult([invalidLead, validLead]);
+      }),
       summarizeReviewCsvFile: review,
       packageReport
     };
@@ -604,12 +613,126 @@ describe("workflow orchestrator", () => {
       summary: { stages: { packaging: { status: "failed" } } }
     });
 
+    const checkpointContent = readFileSync(workflowCheckpointPath());
+    const checkpoint = JSON.parse(checkpointContent.toString("utf8")) as { summary: WorkflowSummary; integrity: Record<string, string> };
+    expect(checkpoint.summary.stages).toMatchObject({ shortlist: { status: "success" }, review: { status: "success" } });
+    expect(checkpoint.integrity["package-source-0-open-local-audit-report.json"]).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      checkpointHash: createHash("sha256").update(checkpointContent).digest("hex")
+    });
+
     await expect(runWorkflow(configPath, dependencies, { resume: true })).rejects.toBeInstanceOf(WorkflowRunError);
     expect(dependencies.runDiscovery).toHaveBeenCalledTimes(1);
-    expect(dependencies.runShortlistReport).toHaveBeenCalledTimes(2);
+    expect(dependencies.runShortlistReport).toHaveBeenCalledTimes(1);
   });
 
-  it("does not retain an earlier checkpoint when package-source validation fails after packaging", async () => {
+  it.each([
+    ["becomes valid", async (lead: ShortlistLead) => await createReportDirectories([lead])],
+    [
+      "changes invalid classification",
+      async (lead: ShortlistLead) =>
+        await mkdir(join(dirname(join(resolvedWorkflowPaths().reportsDir, lead.reportPath)), "open-local-audit-report.json"), { recursive: true })
+    ]
+  ])("rejects resume before packaging when an invalid package source %s", async (_label, changeSource) => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+    const invalidLead = makeLead({ reportPath: "missing/open-local-audit-report.html" });
+    const validLead = makeLead({ companyName: "Valid Report", leadKey: "url:https://valid.test", reportPath: "valid/open-local-audit-report.html" });
+    await createReportDirectories([validLead]);
+    const packageReport = vi.fn(async ({ outDir }: { outDir: string }) => makePackResult(outDir));
+    const dependencies = {
+      runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+        await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+        await writeFile(options.summaryJson!, "{}\n", "utf8");
+        return makeDiscoveryResult(2);
+      }),
+      runShortlistReport: vi.fn(async (options: { out: string; summaryJson?: string }) => {
+        await writeFile(options.out, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+        await writeFile(options.summaryJson!, "{}\n", "utf8");
+        return makeShortlistResult([invalidLead, validLead]);
+      }),
+      packageReport
+    };
+
+    await expect(runWorkflow(configPath, dependencies)).rejects.toBeInstanceOf(WorkflowRunError);
+    const callsBeforeResume = packageReport.mock.calls.length;
+    await changeSource(invalidLead);
+
+    await expect(runWorkflow(configPath, dependencies, { resume: true })).rejects.toThrow(
+      "Workflow checkpoint managed artifacts do not match"
+    );
+    expect(packageReport).toHaveBeenCalledTimes(callsBeforeResume);
+  });
+
+  it("rejects resume before packaging when content changes beside a missing required package source", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+    const invalidLead = makeLead({ reportPath: "missing/open-local-audit-report.html" });
+    const validLead = makeLead({ companyName: "Valid Report", leadKey: "url:https://valid.test", reportPath: "valid/open-local-audit-report.html" });
+    const invalidHtmlPath = join(dirname(join(resolvedWorkflowPaths().reportsDir, invalidLead.reportPath)), "open-local-audit-report.html");
+    await mkdir(dirname(invalidHtmlPath), { recursive: true });
+    await writeFile(invalidHtmlPath, "original invalid-source companion\n", "utf8");
+    await createReportDirectories([validLead]);
+    const packageReport = vi.fn(async ({ inputDir, outDir }: { inputDir: string; outDir: string }) => {
+      if (inputDir === dirname(invalidHtmlPath)) {
+        throw new Error("missing required package source");
+      }
+      return makePackResult(outDir);
+    });
+    const dependencies = {
+      runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+        await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+        await writeFile(options.summaryJson!, "{}\n", "utf8");
+        return makeDiscoveryResult(2);
+      }),
+      runShortlistReport: vi.fn(async (options: { out: string; summaryJson?: string }) => {
+        await writeFile(options.out, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+        await writeFile(options.summaryJson!, "{}\n", "utf8");
+        return makeShortlistResult([invalidLead, validLead]);
+      }),
+      packageReport
+    };
+
+    await expect(runWorkflow(configPath, dependencies)).rejects.toBeInstanceOf(WorkflowRunError);
+    const callsBeforeResume = packageReport.mock.calls.length;
+    await writeFile(invalidHtmlPath, "changed invalid-source companion\n", "utf8");
+
+    await expect(runWorkflow(configPath, dependencies, { resume: true })).rejects.toThrow(
+      "Workflow checkpoint managed artifacts do not match"
+    );
+    expect(packageReport).toHaveBeenCalledTimes(callsBeforeResume);
+  });
+
+  it("propagates unexpected package-source checkpoint I/O errors without advancing shortlist state", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+    const lead = makeLead({ reportPath: "acme/open-local-audit-report.html" });
+    await createReportDirectories([lead]);
+    fsValidationMock.failingRealpath = dirname(join(resolvedWorkflowPaths().reportsDir, lead.reportPath));
+    const packageReport = vi.fn();
+
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+          await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+          await writeFile(options.summaryJson!, "{}\n", "utf8");
+          return makeDiscoveryResult(1);
+        }),
+        runShortlistReport: vi.fn(async (options: { out: string; summaryJson?: string }) => {
+          await writeFile(options.out, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+          await writeFile(options.summaryJson!, "{}\n", "utf8");
+          return makeShortlistResult([lead]);
+        }),
+        packageReport
+      })
+    ).rejects.toThrow("source snapshot unavailable");
+
+    expect(packageReport).not.toHaveBeenCalled();
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "running",
+      currentStage: "shortlist",
+      summary: { stages: { discovery: { status: "success" }, shortlist: { status: "not-run" } } }
+    });
+  });
+
+  it("writes a fresh completed checkpoint when a package source becomes invalid after packaging", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
     const lead = makeLead({ reportPath: "acme/open-local-audit-report.html" });
     await createReportDirectories([lead]);
@@ -623,9 +746,11 @@ describe("workflow orchestrator", () => {
           return makePackResult(outDir);
         })
       })
-    ).rejects.toThrow("Checkpoint package source report is missing");
+    ).resolves.toMatchObject({ status: "success" });
 
-    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
+    const checkpoint = JSON.parse(readFileSync(workflowCheckpointPath(), "utf8")) as { summary: WorkflowSummary; integrity: Record<string, string> };
+    expect(checkpoint.summary.stages.packaging).toMatchObject({ status: "success" });
+    expect(checkpoint.integrity["package-source-0-open-local-audit-report.json"]).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("sanitizes lead slugs, falls back safely, and appends duplicate suffixes during packaging", async () => {

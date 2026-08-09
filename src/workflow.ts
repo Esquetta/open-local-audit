@@ -134,13 +134,6 @@ export class WorkflowRunError extends Error {
   }
 }
 
-class PackageSourceCheckpointValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PackageSourceCheckpointValidationError";
-  }
-}
-
 const defaultDependencies: WorkflowDependencies = {
   readWorkflowConfig,
   runDiscovery,
@@ -158,6 +151,15 @@ const packageReportFileNames = [
   "open-local-audit-report.html",
   "open-local-audit-report.pdf"
 ];
+
+const packageSourceInvalidMarkerLabel = "open-local-audit:package-source-invalid:v1";
+type PackageSourceInvalidClassification =
+  | "required-json-missing"
+  | "report-path-escapes-reports-directory"
+  | "linked-report-file"
+  | "report-file-escapes-input-directory"
+  | "non-regular-report-file"
+  | "source-directory-missing";
 
 function slugify(value: string): string {
   return value
@@ -285,39 +287,39 @@ function isPackageSourceIntegrityId(id: string, shortlistLeads: readonly Shortli
   );
 }
 
-async function validateCheckpointPackageSources(
-  config: ResolvedWorkflowConfig,
-  checkpoint: WorkflowCheckpoint
-): Promise<void> {
-  if (!config.packageReports || checkpoint.summary.stages.packaging.status === "success") {
-    return;
-  }
+function packageSourceInvalidMarker(classification: PackageSourceInvalidClassification): string {
+  return createHash("sha256").update(`${packageSourceInvalidMarkerLabel}:${classification}`).digest("hex");
+}
 
-  for (const [index, lead] of checkpoint.shortlistLeads.entries()) {
-    if (!lead.reportPath.trim()) {
-      continue;
-    }
-    const source = await resolvePackageInputDir(config.paths.reportsDir, lead.reportPath);
-    await validatePackageSourceFiles(source.inputDir, source.realInputDir);
-    for (const fileName of packageReportFileNames) {
-      const id = packageSourceIntegrityId(index, fileName);
-      const expectedHash = checkpoint.integrity[id];
-      const actualHash = await hashManagedFile(join(source.inputDir, fileName));
-      if ((actualHash && !expectedHash) || (expectedHash && actualHash !== expectedHash)) {
-        throw new Error("Workflow checkpoint managed artifacts do not match");
-      }
-    }
+function packageSourceInvalidClassification(error: unknown): PackageSourceInvalidClassification | undefined {
+  if (isMissingPath(error)) {
+    return "source-directory-missing";
+  }
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+  switch (error.message) {
+    case "Report path escapes reports directory":
+      return "report-path-escapes-reports-directory";
+    case "Linked report files are not allowed":
+      return "linked-report-file";
+    case "Report file escapes input directory":
+      return "report-file-escapes-input-directory";
+    case "Workflow checkpoint managed artifact must be a regular file":
+      return "non-regular-report-file";
+    default:
+      return undefined;
   }
 }
 
-async function addPackageSourceIntegrity(
+async function capturePackageSourceIntegrity(
   config: ResolvedWorkflowConfig,
   summary: WorkflowSummary,
-  shortlistLeads: ShortlistLead[],
-  integrity: Record<string, string>
-): Promise<void> {
+  shortlistLeads: readonly ShortlistLead[]
+): Promise<Record<string, string>> {
+  const integrity: Record<string, string> = {};
   if (!config.packageReports || summary.stages.shortlist.status !== "success") {
-    return;
+    return integrity;
   }
 
   for (const [index, lead] of shortlistLeads.entries()) {
@@ -330,32 +332,41 @@ async function addPackageSourceIntegrity(
       for (const fileName of packageReportFileNames) {
         const hash = await hashManagedFile(join(source.inputDir, fileName));
         if (!hash && fileName === "open-local-audit-report.json") {
-          throw new PackageSourceCheckpointValidationError("Checkpoint package source report is missing");
+          integrity[packageSourceIntegrityId(index, fileName)] = packageSourceInvalidMarker("required-json-missing");
+          continue;
         }
         if (hash) {
           integrity[packageSourceIntegrityId(index, fileName)] = hash;
         }
       }
     } catch (error) {
-      if (error instanceof PackageSourceCheckpointValidationError) {
+      const classification = packageSourceInvalidClassification(error);
+      if (!classification) {
         throw error;
       }
-      if (isMissingPath(error)) {
-        throw new PackageSourceCheckpointValidationError("Checkpoint package source report is missing");
-      }
-      if (
-        error instanceof Error &&
-        [
-          "Report path escapes reports directory",
-          "Linked report files are not allowed",
-          "Report file escapes input directory",
-          "Workflow checkpoint managed artifact must be a regular file"
-        ].includes(error.message)
-      ) {
-        throw new PackageSourceCheckpointValidationError(error.message);
-      }
-      throw error;
+      integrity[packageSourceIntegrityId(index, "open-local-audit-report.json")] = packageSourceInvalidMarker(classification);
     }
+  }
+  return integrity;
+}
+
+async function validateCheckpointPackageSources(
+  config: ResolvedWorkflowConfig,
+  checkpoint: WorkflowCheckpoint
+): Promise<void> {
+  if (!config.packageReports || checkpoint.summary.stages.packaging.status === "success") {
+    return;
+  }
+
+  const actualIntegrity = await capturePackageSourceIntegrity(config, checkpoint.summary, checkpoint.shortlistLeads);
+  const expectedEntries = Object.entries(checkpoint.integrity).filter(([id]) =>
+    isPackageSourceIntegrityId(id, checkpoint.shortlistLeads)
+  );
+  if (
+    expectedEntries.length !== Object.keys(actualIntegrity).length ||
+    expectedEntries.some(([id, hash]) => actualIntegrity[id] !== hash)
+  ) {
+    throw new Error("Workflow checkpoint managed artifacts do not match");
   }
 }
 
@@ -387,7 +398,7 @@ async function createCheckpoint(
       integrity[id] = hash;
     }
   }
-  await addPackageSourceIntegrity(config, summary, shortlistLeads, integrity);
+  Object.assign(integrity, await capturePackageSourceIntegrity(config, summary, shortlistLeads));
   return {
     version: 1,
     configFingerprint: workflowConfigFingerprint(config),
@@ -887,17 +898,6 @@ export async function runResolvedWorkflow(
     state = nextState;
   };
   const persistFailedState = (): Promise<void> => persistState("failed", summary.error?.stage ?? null);
-  const writeCheckpointOrRetainPriorForPackageSourceFailure = async (): Promise<void> => {
-    try {
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
-    } catch (error) {
-      if (error instanceof PackageSourceCheckpointValidationError) {
-        return;
-      }
-      throw error;
-    }
-    checkpointHash = await hashWorkflowCheckpoint(config);
-  };
 
   await resolvedDependencies.writeWorkflowState(config, state);
 
@@ -950,7 +950,8 @@ export async function runResolvedWorkflow(
     } catch (error) {
       await throwStageFailure(summary, "shortlist", error, knownSecrets, persistFailedState);
     }
-    await writeCheckpointOrRetainPriorForPackageSourceFailure();
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
     await persistState("running", null);
   }
 
@@ -965,7 +966,8 @@ export async function runResolvedWorkflow(
     } catch (error) {
       await throwStageFailure(summary, "review", error, knownSecrets, persistFailedState);
     }
-    await writeCheckpointOrRetainPriorForPackageSourceFailure();
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
     await persistState("running", null);
   }
 
