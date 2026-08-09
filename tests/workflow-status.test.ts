@@ -209,7 +209,7 @@ describe("workflow status", () => {
     const state = createWorkflowState(config, checkpoint.value.summary, "2026-08-09T10:00:00.000Z");
     state.phase = "completed";
     state.checkpointHash = checkpoint.hash;
-    state.configFingerprint = `${state.configFingerprint.slice(0, -1)}0`;
+    state.configFingerprint = `${state.configFingerprint[0] === "0" ? "1" : "0"}${state.configFingerprint.slice(1)}`;
     await writeFile(workflowStatePath(config), JSON.stringify(state), "utf8");
     expect((await runWorkflowStatus(configPath)).status).toBe("invalid");
 
