@@ -2,6 +2,15 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.67.0 - 2026-08-09
+
+- Added an atomic workflow-state lifecycle manifest with trusted stage visibility.
+- Added read-only `workflow --status` terminal and JSON modes with defined exit semantics.
+- Added checkpoint hash correlation, legacy v1 compatibility, and conservative resume guidance.
+- Added independent package-source integrity markers and lead packaging isolation.
+- Added public API, fresh-install, and documentation coverage.
+- Patched transitive audit resolutions.
+
 ## v0.66.0 - 2026-08-02
 
 - Added all 21 shortlist filter fields to the workflow configuration schema, including `minScore`, `segment`, `profile`, `priority`, `contactConfidence`, `minContactConfidence`, `preferredContactChannel`, `source`, `auditStatus`, `hasWebsite`, `topFinding`, `reviewStatus`, `excludeReviewStatus`, `unreviewed`, `reviewedBefore`, `requireWebsite`, `missingWebsite`, `requireContact`, `missingContact`, `requireReport`, and `missingReport`.
