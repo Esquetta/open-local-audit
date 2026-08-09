@@ -15,6 +15,12 @@ import {
 } from "./workflow-config.js";
 import { prepareWorkflowManagedDirectories } from "./workflow-paths.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
+import {
+  createWorkflowState,
+  hashWorkflowCheckpoint,
+  transitionWorkflowState,
+  writeWorkflowState
+} from "./workflow-state.js";
 
 export type WorkflowStatus = "success" | "failed";
 export type WorkflowStageStatus = "success" | "failed" | "skipped" | "not-run";
@@ -96,6 +102,8 @@ export interface WorkflowDependencies {
   summarizeReviewCsvFile: typeof summarizeReviewCsvFile;
   packageReport: (options: Parameters<typeof packageReport>[0]) => Promise<ReportPackResult>;
   resolveGoogleMapsApiKey: typeof resolveGoogleMapsApiKey;
+  now: () => Date;
+  writeWorkflowState: typeof writeWorkflowState;
 }
 
 export interface WorkflowRunOptions {
@@ -131,7 +139,9 @@ const defaultDependencies: WorkflowDependencies = {
   runShortlistReport,
   summarizeReviewCsvFile,
   packageReport,
-  resolveGoogleMapsApiKey
+  resolveGoogleMapsApiKey,
+  now: () => new Date(),
+  writeWorkflowState
 };
 
 const packageReportFileNames = [
@@ -625,21 +635,34 @@ export async function inspectWorkflowCheckpoint(config: ResolvedWorkflowConfig):
   return (await inspectWorkflowCheckpointInternal(config)).inspection;
 }
 
-async function readWorkflowCheckpoint(config: ResolvedWorkflowConfig): Promise<WorkflowCheckpoint> {
+async function readWorkflowCheckpoint(
+  config: ResolvedWorkflowConfig
+): Promise<{ checkpoint: WorkflowCheckpoint; checkpointHash: string }> {
   const { inspection, checkpoint } = await inspectWorkflowCheckpointInternal(config);
-  if (inspection.kind === "valid" && checkpoint) {
-    return checkpoint;
+  if (inspection.kind === "valid" && checkpoint && inspection.checkpointHash) {
+    return { checkpoint, checkpointHash: inspection.checkpointHash };
   }
   throw new Error(
     inspection.kind === "invalid" ? inspection.message : "Workflow checkpoint is missing or invalid"
   );
 }
 
-async function throwPersistedWorkflowFailure(summary: WorkflowSummary): Promise<never> {
+async function throwPersistedWorkflowFailure(
+  summary: WorkflowSummary,
+  persistFailedState?: () => Promise<void>
+): Promise<never> {
   try {
     await writeWorkflowSummary(summary);
   } catch {
     // The workflow failure remains authoritative if its summary cannot be persisted.
+  }
+
+  if (persistFailedState) {
+    try {
+      await persistFailedState();
+    } catch {
+      // The controlled stage failure remains authoritative if lifecycle state cannot be persisted.
+    }
   }
 
   throw new WorkflowRunError(summary);
@@ -649,10 +672,11 @@ async function throwStageFailure(
   summary: WorkflowSummary,
   stage: WorkflowStageName,
   error: unknown,
-  knownSecrets: readonly string[]
+  knownSecrets: readonly string[],
+  persistFailedState?: () => Promise<void>
 ): Promise<never> {
   markStageFailure(summary, stage, sanitizeErrorMessage(error, knownSecrets));
-  return throwPersistedWorkflowFailure(summary);
+  return throwPersistedWorkflowFailure(summary, persistFailedState);
 }
 
 function markStageFailure(summary: WorkflowSummary, stage: WorkflowStageName, message: string): void {
@@ -815,16 +839,39 @@ export async function runResolvedWorkflow(
     ...dependencies
   };
 
-  const checkpoint = options.resume ? await readWorkflowCheckpoint(config) : undefined;
+  const resumeCheckpoint = options.resume ? await readWorkflowCheckpoint(config) : undefined;
+  const checkpoint = resumeCheckpoint?.checkpoint;
   await prepareWorkflowManagedDirectories(config);
   const summary = checkpoint
     ? { ...checkpoint.summary, outputs: config.paths, error: undefined, status: "success" as const }
     : createInitialSummary(config);
   let shortlistLeads = checkpoint?.shortlistLeads ?? [];
   const knownSecrets: string[] = [];
+  let checkpointHash = resumeCheckpoint?.checkpointHash ?? null;
+  let state = {
+    ...createWorkflowState(config, summary, resolvedDependencies.now().toISOString()),
+    checkpointHash
+  };
 
-  try {
-    if (summary.stages.discovery.status !== "success") {
+  const persistState = async (
+    phase: "running" | "failed" | "completed",
+    currentStage: WorkflowStageName | null
+  ): Promise<void> => {
+    const nextState = transitionWorkflowState(
+      state,
+      { phase, currentStage, checkpointHash, summary },
+      resolvedDependencies.now().toISOString()
+    );
+    await resolvedDependencies.writeWorkflowState(config, nextState);
+    state = nextState;
+  };
+  const persistFailedState = (): Promise<void> => persistState("failed", summary.error?.stage ?? null);
+
+  await resolvedDependencies.writeWorkflowState(config, state);
+
+  if (summary.stages.discovery.status !== "success") {
+    await persistState("running", "discovery");
+    try {
       const googleApiKey =
         config.discovery.provider === "google-places" ? resolvedDependencies.resolveGoogleMapsApiKey() : undefined;
       if (googleApiKey) {
@@ -847,10 +894,17 @@ export async function runResolvedWorkflow(
         ...(googleApiKey !== undefined ? { apiKey: googleApiKey } : {})
       });
       updateDiscoveryStage(summary, discoveryResult);
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      await throwStageFailure(summary, "discovery", error, knownSecrets, persistFailedState);
     }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
+  }
 
-    if (summary.stages.shortlist.status !== "success") {
+  if (summary.stages.shortlist.status !== "success") {
+    await persistState("running", "shortlist");
+    try {
       const shortlistResult = await resolvedDependencies.runShortlistReport({
         input: config.paths.leadsCsv,
         out: config.paths.shortlistCsv,
@@ -861,67 +915,75 @@ export async function runResolvedWorkflow(
       });
       updateShortlistStage(summary, shortlistResult);
       shortlistLeads = shortlistResult.leads;
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      await throwStageFailure(summary, "shortlist", error, knownSecrets, persistFailedState);
     }
+    try {
+      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      if (config.packageReports) {
+        await throwStageFailure(summary, "packaging", error, knownSecrets, persistFailedState);
+      }
+      throw error;
+    }
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
+  }
 
-    if (config.review && summary.stages.review.status !== "success") {
+  if (config.review && summary.stages.review.status !== "success") {
+    await persistState("running", "review");
+    try {
       const reviewSummary = await resolvedDependencies.summarizeReviewCsvFile(config.review.csv, {
         staleBefore: config.review.staleBefore
       });
       await writePrettyJson(config.paths.reviewSummaryJson, reviewSummary);
       updateReviewStage(summary, reviewSummary);
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      await throwStageFailure(summary, "review", error, knownSecrets, persistFailedState);
     }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
+  }
 
-    if (config.packageReports && summary.stages.packaging.status !== "success") {
-      summary.packages = { packaged: 0, skipped: 0, failed: 0, entries: [] };
-      const slugCounts = new Map<string, number>();
-      for (const lead of shortlistLeads) {
-        const packageEntry = await packageLead(
-          config.paths,
-          lead,
-          slugCounts,
-          resolvedDependencies.packageReport,
-          knownSecrets
-        );
-        summary.packages.entries.push(packageEntry);
-        if (packageEntry.status === "packaged") {
-          summary.packages.packaged += 1;
-        } else if (packageEntry.status === "skipped") {
-          summary.packages.skipped += 1;
-        } else {
-          summary.packages.failed += 1;
-        }
+  if (config.packageReports && summary.stages.packaging.status !== "success") {
+    await persistState("running", "packaging");
+    summary.packages = { packaged: 0, skipped: 0, failed: 0, entries: [] };
+    const slugCounts = new Map<string, number>();
+    for (const lead of shortlistLeads) {
+      const packageEntry = await packageLead(
+        config.paths,
+        lead,
+        slugCounts,
+        resolvedDependencies.packageReport,
+        knownSecrets
+      );
+      summary.packages.entries.push(packageEntry);
+      if (packageEntry.status === "packaged") {
+        summary.packages.packaged += 1;
+      } else if (packageEntry.status === "skipped") {
+        summary.packages.skipped += 1;
+      } else {
+        summary.packages.failed += 1;
       }
-
-      updatePackagingStage(summary);
-      if (summary.packages.failed > 0) {
-        summary.status = "failed";
-        summary.error = {
-          stage: "packaging",
-          message: `${summary.packages.failed} package ${summary.packages.failed === 1 ? "entry" : "entries"} failed`
-        };
-        await throwPersistedWorkflowFailure(summary);
-      }
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
-    }
-  } catch (error) {
-    if (error instanceof WorkflowRunError) {
-      throw error;
     }
 
-    const failedStage =
-      summary.stages.discovery.status !== "success"
-        ? "discovery"
-        : summary.stages.shortlist.status !== "success"
-          ? "shortlist"
-          : summary.stages.review.status === "not-run"
-            ? "review"
-            : "packaging";
-    await throwStageFailure(summary, failedStage, error, knownSecrets);
+    updatePackagingStage(summary);
+    if (summary.packages.failed > 0) {
+      summary.status = "failed";
+      summary.error = {
+        stage: "packaging",
+        message: `${summary.packages.failed} package ${summary.packages.failed === 1 ? "entry" : "entries"} failed`
+      };
+      await throwPersistedWorkflowFailure(summary, persistFailedState);
+    }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
   }
 
   await writeWorkflowSummary(summary);
+  await persistState("completed", null);
   return summary;
 }
 

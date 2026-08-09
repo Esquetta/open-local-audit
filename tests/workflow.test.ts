@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,6 +11,7 @@ import type { ReviewSummary } from "../src/review.js";
 import type { ShortlistLead, ShortlistResult } from "../src/shortlist.js";
 import { readWorkflowConfig } from "../src/workflow-config.js";
 import { WorkflowRunError, runResolvedWorkflow, runWorkflow, safeLeadSlug, type WorkflowSummary } from "../src/workflow.js";
+import { writeWorkflowState as writeWorkflowStateReal } from "../src/workflow-state.js";
 
 const fsValidationMock = vi.hoisted(() => ({
   linkedPath: "",
@@ -116,6 +118,10 @@ describe("workflow orchestrator", () => {
 
   function workflowCheckpointPath(): string {
     return join(resolvedWorkflowPaths().outDir, "workflow-checkpoint.json");
+  }
+
+  function workflowStatePath(): string {
+    return join(resolvedWorkflowPaths().outDir, "workflow-state.json");
   }
 
   function makeLead(overrides: Partial<ShortlistLead> = {}): ShortlistLead {
@@ -279,6 +285,203 @@ describe("workflow orchestrator", () => {
       summary: JSON.parse(content) as WorkflowSummary
     };
   }
+
+  it("persists running stage progress for each stage and a completed lifecycle state", async () => {
+    await writeWorkflowConfig(
+      manualWorkflowConfig({
+        review: { csv: "./operator/review.csv", staleBefore: "2026-06-01" },
+        packageReports: true
+      })
+    );
+    const observedStates: Array<Record<string, unknown>> = [];
+    const readState = (): Record<string, unknown> => JSON.parse(readFileSync(workflowStatePath(), "utf8")) as Record<string, unknown>;
+    const leads = [makeLead({ reportPath: "acme/open-local-audit-report.html" })];
+    await createReportDirectories(leads);
+
+    const discovery = vi.fn(async () => {
+      observedStates.push(readState());
+      return makeDiscoveryResult(1);
+    });
+    const shortlist = vi.fn(async () => {
+      observedStates.push(readState());
+      return makeShortlistResult(leads);
+    });
+    const review = vi.fn(async () => {
+      observedStates.push(readState());
+      return makeReviewSummary();
+    });
+    const packageReport = vi.fn(async ({ outDir }: { outDir: string }) => {
+      observedStates.push(readState());
+      return makePackResult(outDir);
+    });
+
+    await runWorkflow(configPath, {
+      runDiscovery: discovery,
+      runShortlistReport: shortlist,
+      summarizeReviewCsvFile: review,
+      packageReport
+    });
+
+    expect(observedStates).toMatchObject([
+      { phase: "running", currentStage: "discovery", checkpointHash: null, summary: { stages: { discovery: { status: "not-run" } } } },
+      {
+        phase: "running",
+        currentStage: "shortlist",
+        checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        summary: { stages: { discovery: { status: "success" }, shortlist: { status: "not-run" } } }
+      },
+      {
+        phase: "running",
+        currentStage: "review",
+        checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        summary: { stages: { shortlist: { status: "success" }, review: { status: "not-run" } } }
+      },
+      {
+        phase: "running",
+        currentStage: "packaging",
+        checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        summary: { stages: { review: { status: "success" }, packaging: { status: "not-run" } } }
+      }
+    ]);
+    expect(readState()).toMatchObject({
+      phase: "completed",
+      currentStage: null,
+      checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      summary: { status: "success", stages: { shortlist: { status: "success" } } }
+    });
+  });
+
+  it("does not resolve an API key or invoke discovery when the initial state write fails", async () => {
+    await writeWorkflowConfig(googleWorkflowConfig());
+    const writeWorkflowState = vi.fn(async () => {
+      throw new Error("state storage unavailable");
+    });
+    const resolveGoogleMapsApiKey = vi.fn(() => "sensitive-key");
+    const discovery = vi.fn(async () => makeDiscoveryResult(1));
+
+    await expect(
+      runWorkflow(configPath, { writeWorkflowState, resolveGoogleMapsApiKey, runDiscovery: discovery })
+    ).rejects.toThrow("state storage unavailable");
+
+    expect(resolveGoogleMapsApiKey).not.toHaveBeenCalled();
+    expect(discovery).not.toHaveBeenCalled();
+  });
+
+  it("aborts before shortlist when the state transition after a checkpoint fails", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    let writes = 0;
+    const writeWorkflowState = vi.fn(async (...args: Parameters<typeof writeWorkflowStateReal>) => {
+      writes += 1;
+      if (writes === 3) {
+        throw new Error("state transition unavailable");
+      }
+      await writeWorkflowStateReal(...args);
+    });
+    const discovery = vi.fn(async () => makeDiscoveryResult(1));
+    const shortlist = vi.fn(async () => makeShortlistResult([makeLead()]));
+
+    await expect(runWorkflow(configPath, { writeWorkflowState, runDiscovery: discovery, runShortlistReport: shortlist })).rejects.toThrow(
+      "state transition unavailable"
+    );
+
+    expect(discovery).toHaveBeenCalledTimes(1);
+    expect(shortlist).not.toHaveBeenCalled();
+    expect(existsSync(workflowCheckpointPath())).toBe(true);
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "running",
+      currentStage: "discovery",
+      summary: { stages: { discovery: { status: "not-run" } } }
+    });
+  });
+
+  it("rejects without completing state when the final lifecycle write fails", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    let writes = 0;
+    const writeWorkflowState = vi.fn(async (...args: Parameters<typeof writeWorkflowStateReal>) => {
+      writes += 1;
+      if (writes === 6) {
+        throw new Error("final state unavailable");
+      }
+      await writeWorkflowStateReal(...args);
+    });
+
+    await expect(
+      runWorkflow(configPath, {
+        writeWorkflowState,
+        runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+        runShortlistReport: vi.fn(async () => makeShortlistResult([makeLead()]))
+      })
+    ).rejects.toThrow("final state unavailable");
+
+    expect(writeWorkflowState.mock.calls.at(-1)?.[1]).toMatchObject({ phase: "completed", currentStage: null });
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({ phase: "running", currentStage: null });
+  });
+
+  it("persists a sanitized failed state for a controlled stage error", async () => {
+    await writeWorkflowConfig(googleWorkflowConfig());
+    const resolveGoogleMapsApiKey = vi.fn(() => "sensitive-key");
+    const shortlist = vi.fn(async () => makeShortlistResult([]));
+
+    await expect(
+      runWorkflow(configPath, {
+        resolveGoogleMapsApiKey,
+        runDiscovery: vi.fn(async () => {
+          throw new Error("provider rejected sensitive-key");
+        }),
+        runShortlistReport: shortlist
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    expect(shortlist).not.toHaveBeenCalled();
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "failed",
+      currentStage: "discovery",
+      checkpointHash: null,
+      summary: {
+        status: "failed",
+        error: { stage: "discovery", message: "provider rejected [REDACTED]" }
+      }
+    });
+  });
+
+  it("resumes with the hash of the checkpoint validated for that invocation", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+          await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+          await writeFile(options.summaryJson!, "{}\n", "utf8");
+          return makeDiscoveryResult(1);
+        }),
+        runShortlistReport: vi.fn(async () => {
+          throw new Error("shortlist interrupted");
+        })
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+    const validatedCheckpointHash = createHash("sha256").update(readFileSync(workflowCheckpointPath())).digest("hex");
+    const observedStates: Array<Record<string, unknown>> = [];
+    const shortlist = vi.fn(async () => {
+      observedStates.push(JSON.parse(readFileSync(workflowStatePath(), "utf8")) as Record<string, unknown>);
+      return makeShortlistResult([makeLead()]);
+    });
+    const resume = runWorkflow as unknown as (
+      path: string,
+      dependencies: { runShortlistReport: typeof shortlist },
+      options: { resume: boolean }
+    ) => Promise<WorkflowSummary>;
+
+    await resume(configPath, { runShortlistReport: shortlist }, { resume: true });
+
+    expect(observedStates).toMatchObject([
+      {
+        phase: "running",
+        currentStage: "shortlist",
+        checkpointHash: validatedCheckpointHash,
+        summary: { stages: { discovery: { status: "success" }, shortlist: { status: "not-run" } } }
+      }
+    ]);
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({ phase: "completed", currentStage: null });
+  });
 
   it("sanitizes lead slugs, falls back safely, and appends duplicate suffixes during packaging", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
