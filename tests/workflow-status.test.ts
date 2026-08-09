@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readWorkflowConfig, workflowConfigFingerprint, type ResolvedWorkflowConfig } from "../src/workflow-config.js";
 import { createWorkflowState, workflowStatePath } from "../src/workflow-state.js";
 import {
@@ -13,12 +13,25 @@ import {
 } from "../src/workflow-status.js";
 import type { WorkflowSummary } from "../src/workflow.js";
 
+const googleApiKeyResolver = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error("Google API key resolution must not run during status checks");
+  })
+);
+
+vi.mock("../src/secrets.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/secrets.js")>();
+  return { ...actual, resolveGoogleMapsApiKey: googleApiKeyResolver };
+});
+
 describe("workflow status", () => {
   let directory: string;
   let configPath: string;
   let config: ResolvedWorkflowConfig;
+  let originalGoogleMapsApiKey: string | undefined;
 
   beforeEach(async () => {
+    originalGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
     directory = await mkdtemp(join(tmpdir(), "open-local-audit-workflow-status-"));
     configPath = join(directory, "config", "workflow.json");
     await mkdir(dirname(configPath), { recursive: true });
@@ -36,6 +49,13 @@ describe("workflow status", () => {
   });
 
   afterEach(async () => {
+    if (originalGoogleMapsApiKey === undefined) {
+      delete process.env.GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_API_KEY = originalGoogleMapsApiKey;
+    }
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -54,6 +74,39 @@ describe("workflow status", () => {
       error: null
     });
     await expect(lstat(config.outDir)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not resolve Google credentials or use fetch while reporting Google Places status", async () => {
+    const querySentinel = "GOOGLE_QUERY_SENTINEL__ISTANBUL_DENTISTS";
+    const secretSentinel = "GOOGLE_API_KEY_SENTINEL__DO_NOT_LEAK";
+    process.env.GOOGLE_MAPS_API_KEY = secretSentinel;
+    await writeFile(
+      configPath,
+      `${JSON.stringify({
+        version: 1,
+        outDir: "./google-output",
+        discovery: { provider: "google-places", query: querySentinel },
+        shortlist: {}
+      })}\n`,
+      "utf8"
+    );
+    const fetchSentinel = vi.fn(() => {
+      throw new Error("Network access must not run during status checks");
+    });
+    vi.stubGlobal("fetch", fetchSentinel);
+
+    const report = await runWorkflowStatus(configPath);
+    const json = renderWorkflowStatusJson(report);
+    const terminal = renderWorkflowStatusTerminal(report, configPath);
+
+    expect(report.status).toBe("not-started");
+    expect(googleApiKeyResolver).not.toHaveBeenCalled();
+    expect(fetchSentinel).not.toHaveBeenCalled();
+    expect(json).not.toContain(querySentinel);
+    expect(json).not.toContain(secretSentinel);
+    expect(terminal).not.toContain(querySentinel);
+    expect(terminal).not.toContain(secretSentinel);
+    await expect(lstat(join(directory, "config", "google-output"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it.each([
