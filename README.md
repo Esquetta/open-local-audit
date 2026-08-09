@@ -39,6 +39,7 @@ Open Local Audit produces evidence-backed mini audits for local businesses. The 
 - [Workflow preflight contract](./docs/architecture/workflow-preflight.md)
 - [Workflow plan contract](./docs/architecture/workflow-plan.md)
 - [Workflow resume contract](./docs/architecture/workflow-resume.md)
+- [Workflow status contract](./docs/architecture/workflow-status.md)
 
 ## Local development
 
