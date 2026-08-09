@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ResolvedWorkflowConfig, WorkflowManagedPaths } from "./workflow-config.js";
+import { workflowConfigFingerprint, type ResolvedWorkflowConfig, type WorkflowManagedPaths } from "./workflow-config.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
-import { workflowConfigFingerprint, type WorkflowPackageEntry, type WorkflowStageName, type WorkflowSummary } from "./workflow.js";
+import type { WorkflowPackageEntry, WorkflowStageName, WorkflowSummary } from "./workflow.js";
 
 export type WorkflowLifecyclePhase = "running" | "failed" | "completed";
 
@@ -84,8 +84,8 @@ export function transitionWorkflowState(
   };
 }
 
-export function parseWorkflowState(value: unknown): WorkflowStateReadResult {
-  if (!isWorkflowState(value)) {
+export function parseWorkflowState(value: unknown, config?: ResolvedWorkflowConfig): WorkflowStateReadResult {
+  if (!isWorkflowState(value, config)) {
     return { kind: "invalid", message: "Workflow state is invalid" };
   }
   return { kind: "valid", state: value };
@@ -108,14 +108,14 @@ export async function readWorkflowState(config: ResolvedWorkflowConfig): Promise
   }
 
   try {
-    return parseWorkflowState(JSON.parse(content));
+    return parseWorkflowState(JSON.parse(content), config);
   } catch {
     return { kind: "invalid", message: "Workflow state is invalid" };
   }
 }
 
 export async function writeWorkflowState(config: ResolvedWorkflowConfig, state: WorkflowState): Promise<void> {
-  const parsed = parseWorkflowState(state);
+  const parsed = parseWorkflowState(state, config);
   if (parsed.kind !== "valid") {
     throw new Error(parsed.kind === "invalid" ? parsed.message : "Workflow state is missing");
   }
@@ -251,7 +251,7 @@ function isWorkflowSummary(value: unknown): value is WorkflowSummary {
   );
 }
 
-function isWorkflowState(value: unknown): value is WorkflowState {
+function isWorkflowState(value: unknown, config?: ResolvedWorkflowConfig): value is WorkflowState {
   if (!isRecord(value) || !hasExactKeys(value, stateKeys)) {
     return false;
   }
@@ -267,16 +267,107 @@ function isWorkflowState(value: unknown): value is WorkflowState {
     return false;
   }
   const summary = value.summary;
+  const phase = value.phase as WorkflowLifecyclePhase;
+  const currentStage = value.currentStage as WorkflowStageName | null;
 
-  if (value.phase === "completed") {
-    return summary.status === "success" && summary.error === undefined && value.currentStage === null;
+  if (
+    config &&
+    (value.configFingerprint !== workflowConfigFingerprint(config) ||
+      !workflowManagedPathKeys.every((key) => summary.outputs[key] === config.paths[key]))
+  ) {
+    return false;
   }
-  if (value.phase === "failed") {
+
+  if (phase === "completed") {
+    return (
+      summary.status === "success" &&
+      summary.error === undefined &&
+      currentStage === null &&
+      hasValidStageProgress(summary, phase, currentStage, config)
+    );
+  }
+  if (phase === "failed") {
     return (
       summary.status === "failed" &&
       summary.error !== undefined &&
-      value.currentStage === summary.error.stage
+      currentStage === summary.error.stage &&
+      hasValidStageProgress(summary, phase, currentStage, config)
     );
   }
-  return summary.status === "success" && summary.error === undefined;
+  return (
+    summary.status === "success" &&
+    summary.error === undefined &&
+    hasValidStageProgress(summary, phase, currentStage, config)
+  );
+}
+
+function hasValidStageProgress(
+  summary: WorkflowSummary,
+  phase: WorkflowLifecyclePhase,
+  currentStage: WorkflowStageName | null,
+  config?: ResolvedWorkflowConfig
+): boolean {
+  const stageStatuses = workflowStageNames.map((name) => [name, summary.stages[name].status] as const);
+  const enabled = (stage: WorkflowStageName): boolean =>
+    stage === "discovery" ||
+    stage === "shortlist" ||
+    (stage === "review"
+      ? config === undefined || config.review !== undefined
+      : config === undefined || config.packageReports);
+  const isOptional = (stage: WorkflowStageName): boolean => stage === "review" || stage === "packaging";
+
+  if (
+    stageStatuses.some(([stage, status]) => {
+      if (!isOptional(stage)) {
+        return status === "skipped";
+      }
+      if (config) {
+        return enabled(stage) ? status === "skipped" : status !== "skipped";
+      }
+      return false;
+    })
+  ) {
+    return false;
+  }
+
+  const activeStages = stageStatuses.filter(([stage, status]) => !(isOptional(stage) && status === "skipped"));
+  if (phase === "completed") {
+    return activeStages.every(([, status]) => status === "success");
+  }
+
+  if (phase === "running") {
+    if (activeStages.some(([, status]) => status !== "success" && status !== "not-run")) {
+      return false;
+    }
+    let foundNotRun = false;
+    for (const [stage, status] of activeStages) {
+      if (status === "not-run") {
+        foundNotRun = true;
+      } else if (foundNotRun || status !== "success") {
+        return false;
+      }
+      if (currentStage === stage && status !== "not-run") {
+        return false;
+      }
+    }
+    return currentStage === null || (enabled(currentStage) && summary.stages[currentStage].status === "not-run");
+  }
+
+  if (!currentStage || summary.stages[currentStage].status !== "failed" || !enabled(currentStage)) {
+    return false;
+  }
+  let foundFailedStage = false;
+  for (const [stage, status] of activeStages) {
+    if (stage === currentStage) {
+      foundFailedStage = true;
+      if (status !== "failed") {
+        return false;
+      }
+      continue;
+    }
+    if (!foundFailedStage ? status !== "success" : status !== "not-run") {
+      return false;
+    }
+  }
+  return foundFailedStage;
 }

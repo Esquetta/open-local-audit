@@ -169,6 +169,51 @@ describe("workflow state manifest", () => {
     }
   });
 
+  it("rejects fingerprint and managed output paths that do not match the current configuration", async () => {
+    await mkdir(config.outDir, { recursive: true });
+    const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");
+    const fingerprintMismatch = { ...state, configFingerprint: `${state.configFingerprint.slice(0, -1)}0` };
+    const outputMismatch = {
+      ...state,
+      summary: { ...state.summary, outputs: { ...state.summary.outputs, leadsCsv: join(config.outDir, "forged.csv") } }
+    };
+    const outputWithExtraPath = {
+      ...state,
+      summary: { ...state.summary, outputs: { ...state.summary.outputs, unexpected: "forged" } }
+    };
+
+    expect(parseWorkflowState(fingerprintMismatch)).toMatchObject({ kind: "valid" });
+    expect(parseWorkflowState(outputMismatch)).toMatchObject({ kind: "valid" });
+    expect(parseWorkflowState(outputWithExtraPath)).toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+    await writeFile(workflowStatePath(config), JSON.stringify(fingerprintMismatch), "utf8");
+    await expect(readWorkflowState(config)).resolves.toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+    await expect(writeWorkflowState(config, outputMismatch)).rejects.toThrow("Workflow state is invalid");
+    await expect(readFile(workflowStatePath(config), "utf8")).resolves.toBe(JSON.stringify(fingerprintMismatch));
+  });
+
+  it("rejects completed and running states with impossible progress", () => {
+    const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");
+    const invalidStates = [
+      {
+        ...state,
+        phase: "completed",
+        summary: { ...state.summary, stages: { ...state.summary.stages, discovery: { status: "success" } } }
+      },
+      {
+        ...state,
+        currentStage: "shortlist",
+        summary: {
+          ...state.summary,
+          stages: { ...state.summary.stages, shortlist: { status: "success", selected: 0 } }
+        }
+      }
+    ];
+
+    for (const invalidState of invalidStates) {
+      expect(parseWorkflowState(invalidState)).toEqual({ kind: "invalid", message: "Workflow state is invalid" });
+    }
+  });
+
   it("rejects linked and non-regular state paths", async () => {
     await mkdir(config.outDir, { recursive: true });
     const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");

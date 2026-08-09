@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
@@ -121,6 +122,24 @@ export type ResolvedWorkflowConfig = Omit<ParsedWorkflowConfig, "outDir" | "disc
   review?: ParsedWorkflowConfig["review"] & { csv: string };
   paths: WorkflowManagedPaths;
 };
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function workflowConfigFingerprint(config: ResolvedWorkflowConfig): string {
+  const { paths: _paths, ...effectiveConfig } = config;
+  return createHash("sha256").update(stableJson(effectiveConfig)).digest("hex");
+}
 
 export async function readWorkflowConfig(configPath: string): Promise<ResolvedWorkflowConfig> {
   const absoluteConfigPath = resolve(configPath);

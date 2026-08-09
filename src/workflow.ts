@@ -7,7 +7,12 @@ import { summarizeReviewCsvFile, type ReviewSummary } from "./review.js";
 import { runShortlistReport, type ShortlistRunOptions } from "./shortlist-runner.js";
 import type { ShortlistLead, ShortlistResult } from "./shortlist.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
-import { readWorkflowConfig, type ResolvedWorkflowConfig, type WorkflowManagedPaths } from "./workflow-config.js";
+import {
+  readWorkflowConfig,
+  workflowConfigFingerprint,
+  type ResolvedWorkflowConfig,
+  type WorkflowManagedPaths
+} from "./workflow-config.js";
 import { prepareWorkflowManagedDirectories } from "./workflow-paths.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
 
@@ -15,6 +20,8 @@ export type WorkflowStatus = "success" | "failed";
 export type WorkflowStageStatus = "success" | "failed" | "skipped" | "not-run";
 export type WorkflowStageName = "discovery" | "shortlist" | "review" | "packaging";
 export type WorkflowPackageStatus = "packaged" | "skipped" | "failed";
+
+export { workflowConfigFingerprint } from "./workflow-config.js";
 
 export interface WorkflowDiscoveryStageSummary {
   status: WorkflowStageStatus;
@@ -212,24 +219,6 @@ async function writePrettyJson(path: string, value: unknown): Promise<void> {
 
 async function writeWorkflowSummary(summary: WorkflowSummary): Promise<void> {
   await writePrettyJson(summary.outputs.workflowSummaryJson, summary);
-}
-
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-export function workflowConfigFingerprint(config: ResolvedWorkflowConfig): string {
-  const { paths: _paths, ...effectiveConfig } = config;
-  return createHash("sha256").update(stableJson(effectiveConfig)).digest("hex");
 }
 
 function workflowCheckpointPath(config: ResolvedWorkflowConfig): string {
