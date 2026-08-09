@@ -103,6 +103,11 @@ interface WorkflowCheckpoint {
   shortlistLeads: ShortlistLead[];
 }
 
+export type WorkflowCheckpointInspection =
+  | { kind: "missing" }
+  | { kind: "invalid"; message: string }
+  | { kind: "valid"; summary: WorkflowSummary; checkpointPath: string; checkpointHash: string };
+
 export class WorkflowRunError extends Error {
   readonly summary: WorkflowSummary;
 
@@ -222,7 +227,7 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function workflowConfigFingerprint(config: ResolvedWorkflowConfig): string {
+export function workflowConfigFingerprint(config: ResolvedWorkflowConfig): string {
   const { paths: _paths, ...effectiveConfig } = config;
   return createHash("sha256").update(stableJson(effectiveConfig)).digest("hex");
 }
@@ -572,28 +577,73 @@ function isWorkflowCheckpoint(value: unknown, config: ResolvedWorkflowConfig): v
   );
 }
 
-async function readWorkflowCheckpoint(config: ResolvedWorkflowConfig): Promise<WorkflowCheckpoint> {
-  let value: unknown;
+async function inspectWorkflowCheckpointInternal(
+  config: ResolvedWorkflowConfig
+): Promise<{ inspection: WorkflowCheckpointInspection; checkpoint?: WorkflowCheckpoint }> {
+  const checkpointPath = workflowCheckpointPath(config);
+  let content: Buffer;
   try {
-    value = JSON.parse(await readFile(workflowCheckpointPath(config), "utf8"));
-  } catch {
-    throw new Error("Workflow checkpoint is missing or invalid");
-  }
-  if (!isWorkflowCheckpoint(value, config)) {
-    throw new Error("Workflow checkpoint is missing or invalid");
-  }
-  if (value.configFingerprint !== workflowConfigFingerprint(config)) {
-    throw new Error("Workflow checkpoint does not match the current configuration");
+    const info = await lstat(checkpointPath);
+    if (!isRegularFile(info)) {
+      return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
+    }
+    content = await readFile(checkpointPath);
+  } catch (error) {
+    if (isMissingPath(error)) {
+      return { inspection: { kind: "missing" } };
+    }
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
   }
 
-  for (const [id, path] of Object.entries(checkpointArtifactPaths(config, value.summary))) {
-    const expectedHash = value.integrity[id];
-    if (!expectedHash || (await hashManagedFile(path)) !== expectedHash) {
-      throw new Error("Workflow checkpoint managed artifacts do not match");
-    }
+  let value: unknown;
+  try {
+    value = JSON.parse(content.toString("utf8"));
+  } catch {
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
   }
-  await validateCheckpointPackageSources(config, value);
-  return value;
+  if (!isWorkflowCheckpoint(value, config)) {
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
+  }
+  if (value.configFingerprint !== workflowConfigFingerprint(config)) {
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint does not match the current configuration" } };
+  }
+
+  try {
+    for (const [id, path] of Object.entries(checkpointArtifactPaths(config, value.summary))) {
+      const expectedHash = value.integrity[id];
+      if (!expectedHash || (await hashManagedFile(path)) !== expectedHash) {
+        throw new Error("Workflow checkpoint managed artifacts do not match");
+      }
+    }
+    await validateCheckpointPackageSources(config, value);
+  } catch (error) {
+    return {
+      inspection: {
+        kind: "invalid",
+        message: error instanceof Error ? error.message : "Workflow checkpoint managed artifacts do not match"
+      }
+    };
+  }
+
+  const checkpointHash = createHash("sha256").update(content).digest("hex");
+  return {
+    inspection: { kind: "valid", summary: value.summary, checkpointPath, checkpointHash },
+    checkpoint: value
+  };
+}
+
+export async function inspectWorkflowCheckpoint(config: ResolvedWorkflowConfig): Promise<WorkflowCheckpointInspection> {
+  return (await inspectWorkflowCheckpointInternal(config)).inspection;
+}
+
+async function readWorkflowCheckpoint(config: ResolvedWorkflowConfig): Promise<WorkflowCheckpoint> {
+  const { inspection, checkpoint } = await inspectWorkflowCheckpointInternal(config);
+  if (inspection.kind === "valid" && checkpoint) {
+    return checkpoint;
+  }
+  throw new Error(
+    inspection.kind === "invalid" ? inspection.message : "Workflow checkpoint is missing or invalid"
+  );
 }
 
 async function throwPersistedWorkflowFailure(summary: WorkflowSummary): Promise<never> {
