@@ -258,7 +258,7 @@ Minimal `workflow.json` for a manual CSV run:
 
 The workflow runs discovery and then shortlisting from one strict JSON configuration. Version `1` is the only supported configuration version. Relative `outDir`, manual `input`, and optional review CSV paths resolve from the configuration file directory, so this example reads `places.csv` beside `workflow.json` and writes below `workflow-output/` beside it.
 
-The workflow owns predictable output paths below `outDir`: `reports/`, `leads.csv`, `discovery-summary.json`, `shortlist.csv`, `shortlist-summary.json`, `workflow-checkpoint.json`, and `workflow-summary.json`; it also writes `review-summary.json` when `review` is configured and `packages/` when `packageReports` is enabled. Rerunning the same configuration replaces those managed outputs without deleting unrelated files.
+The workflow owns predictable output paths below `outDir`: `reports/`, `leads.csv`, `discovery-summary.json`, `shortlist.csv`, `shortlist-summary.json`, `workflow-checkpoint.json`, `workflow-summary.json`, and `workflow-state.json`; it also writes `review-summary.json` when `review` is configured and `packages/` when `packageReports` is enabled. `workflow-state.json` is current lifecycle metadata for status inspection, not part of `WorkflowManagedPaths` or checkpoint outputs. Rerunning the same configuration replaces those managed outputs without deleting unrelated files.
 
 Configuration validation happens before output creation. Invalid configuration or a failed workflow stage returns exit code `1`; when execution reaches a managed stage, inspect `workflow-summary.json` for stage status and output paths. The workflow writes local files only: it does not send outreach, upload reports, or synchronize a CRM. A `google-places` discovery configuration requires `GOOGLE_MAPS_API_KEY` and can incur Google Maps Platform billing; the API key is not stored in the configuration.
 
@@ -278,8 +278,9 @@ open-local-audit workflow --config workflow.json --status --format json
 
 The status is `not-started` when no state or checkpoint exists,
 `running-or-interrupted` when the last recorded run was not finished and its
-process liveness is unknown, `failed` after a controlled failure, `completed`
-when every enabled stage succeeds, or `invalid` when local state, its
+process liveness is unknown, `failed` after a controlled failure whose failure
+state was persisted, `completed` when every enabled stage succeeds, or
+`invalid` when local state, its
 configuration identity, a checkpoint, or required managed artifacts cannot be
 trusted.
 
@@ -287,7 +288,11 @@ Status inspection is read-only: it makes no network calls, resolves no API
 keys, and does not create or change output files. `not-started`,
 `running-or-interrupted`, and `completed` exit `0`; `failed` and `invalid` exit
 `1`. Before following resume advice from a `running-or-interrupted` result,
-confirm that no workflow process is still active.
+confirm that no workflow process is still active. If a controlled failure cannot
+persist its failure transition, status reports the last durable state, which may
+be `running-or-interrupted`; the workflow command still exits `1` for the
+underlying failure. Checkpoint correlation gates status resume advice only;
+direct `workflow --resume` validates its v1 checkpoint independently.
 
 Google Places lead discovery:
 

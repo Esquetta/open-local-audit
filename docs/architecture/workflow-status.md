@@ -32,18 +32,25 @@ atomically through the existing guarded workflow output writer.
 The initial manifest is persisted before the first workflow stage or network
 call. Each stage start updates the current stage. After a stage succeeds, its
 checkpoint is persisted before the manifest records the successful transition.
-A controlled failure records `failed`; successful completion records
-`completed`. An abrupt process exit leaves the last persisted running state.
+A controlled failure records `failed` only when its failure transition is
+persisted; successful completion records `completed`. If persistence of the
+failure transition fails, the last durable state remains authoritative and can
+report as `running-or-interrupted`, while the workflow command still exits with
+the underlying failure. An abrupt process exit also leaves the last persisted
+running state.
 
 ## Checkpoint correlation
 
 The manifest `checkpointHash` is `null` until the first successful checkpoint
 write of the current run. After each successful stage checkpoint write, the
 workflow stores the SHA-256 hash of the exact checkpoint bytes in the manifest.
-Status accepts checkpoint correlation for resume only when the manifest hash
-equals the hash of a validated checkpoint. This prevents an older checkpoint
-for the same configuration from enabling resume when a newer run is interrupted
-before writing its first checkpoint.
+`checkpointHash` gates only status `resumeAvailable` and status-generated resume
+recommendations: status accepts correlation only when the manifest hash equals
+the hash of a validated checkpoint. This prevents an older checkpoint for the
+same configuration from enabling status resume advice when a newer run is
+interrupted before writing its first checkpoint. Direct `workflow --resume`
+validates and uses the v1 checkpoint independently; it does not read the state
+manifest and is not gated by this correlation.
 
 Failure to persist the initial manifest prevents stage execution. Failure to
 persist a later transition stops the workflow before another stage begins and
