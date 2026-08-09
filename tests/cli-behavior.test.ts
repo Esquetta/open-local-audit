@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -8,6 +9,9 @@ import { describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
 import { shouldFailOnThreshold } from "../src/exit-policy.js";
 import { renderTerminalSummary } from "../src/summary.js";
+import { readWorkflowConfig } from "../src/workflow-config.js";
+import { createWorkflowState, workflowStatePath } from "../src/workflow-state.js";
+import type { WorkflowSummary } from "../src/workflow.js";
 
 const report = auditSnapshot(
   {
@@ -109,7 +113,7 @@ async function startLocalBusinessServer(): Promise<{ server: Server; url: string
 }
 
 describe("CLI behavior helpers", () => {
-  it("lists workflow preflight and plan options in help", () => {
+  it("lists workflow preflight, plan, and status options in help", () => {
     const rootHelp = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], {
       cwd: process.cwd(),
       encoding: "utf8"
@@ -126,8 +130,249 @@ describe("CLI behavior helpers", () => {
     expect(workflowHelp.stdout).toContain("--check");
     expect(workflowHelp.stdout).toContain("--plan");
     expect(workflowHelp.stdout).toContain("--resume");
+    expect(workflowHelp.stdout).toContain("--status");
     expect(workflowHelp.stdout).toContain("--format <format>");
   });
+
+  it("reports a not-started workflow status in terminal and JSON without creating output", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-status-not-started-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const outDir = join(tmp, "workflow-output");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      for (const statusArguments of [
+        ["--status"],
+        ["--status", "--format", "json"],
+        ["--format", "json", "--status"]
+      ]) {
+        const result = spawnSync(
+          process.execPath,
+          ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, ...statusArguments],
+          { cwd: process.cwd(), encoding: "utf8" }
+        );
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        if (statusArguments.includes("json")) {
+          expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "not-started" });
+        } else {
+          expect(result.stdout).toContain("Workflow status: NOT STARTED");
+        }
+      }
+      expect(existsSync(outDir)).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("reports Google workflow status without billing warnings, credentials, query output, or output creation", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-status-google-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      const outDir = join(tmp, "workflow-output");
+      const querySentinel = "workflow-status-cli-query-sentinel";
+      const secretSentinel = "workflow-status-cli-secret-sentinel";
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "google-places", query: querySentinel },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--status", "--format", "json"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, GOOGLE_MAPS_API_KEY: secretSentinel }
+        }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, status: "not-started" });
+      expect(`${result.stdout}${result.stderr}`).not.toContain("Google Maps Platform billing may apply");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(querySentinel);
+      expect(`${result.stdout}${result.stderr}`).not.toContain(secretSentinel);
+      expect(existsSync(outDir)).toBe(false);
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
+  it("uses the status exit-code matrix for persisted workflow states", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-status-exit-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          outDir: "./workflow-output",
+          discovery: { provider: "manual-csv", input: "./places.csv" },
+          shortlist: {}
+        }),
+        "utf8"
+      );
+      const config = await readWorkflowConfig(configPath);
+      const completedSummary: WorkflowSummary = {
+        version: 1,
+        status: "success",
+        stages: {
+          discovery: { status: "success" },
+          shortlist: { status: "success", selected: 0 },
+          review: { status: "skipped" },
+          packaging: { status: "skipped" }
+        },
+        outputs: config.paths,
+        discoveredLeads: 0,
+        selectedLeads: 0,
+        packages: { packaged: 0, skipped: 0, failed: 0, entries: [] }
+      };
+      const runStatus = () =>
+        spawnSync(
+          process.execPath,
+          ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--status", "--format", "json"],
+          { cwd: process.cwd(), encoding: "utf8" }
+        );
+
+      let result = runStatus();
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).status).toBe("not-started");
+
+      mkdirSync(config.outDir, { recursive: true });
+      const runningState = createWorkflowState(
+        config,
+        {
+          ...completedSummary,
+          stages: {
+            ...completedSummary.stages,
+            discovery: { status: "not-run" },
+            shortlist: { status: "not-run" }
+          }
+        },
+        "2026-08-09T10:00:00.000Z"
+      );
+      runningState.currentStage = "discovery";
+      writeFileSync(workflowStatePath(config), JSON.stringify(runningState), "utf8");
+      result = runStatus();
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).status).toBe("running-or-interrupted");
+
+      const failedState = createWorkflowState(
+        config,
+        {
+          ...completedSummary,
+          status: "failed",
+          stages: {
+            ...completedSummary.stages,
+            discovery: { status: "failed" },
+            shortlist: { status: "not-run" }
+          },
+          error: { stage: "discovery", message: "fixture failure" }
+        },
+        "2026-08-09T10:00:00.000Z"
+      );
+      failedState.phase = "failed";
+      failedState.currentStage = "discovery";
+      writeFileSync(workflowStatePath(config), JSON.stringify(failedState), "utf8");
+      result = runStatus();
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout).status).toBe("failed");
+
+      for (const path of [
+        config.paths.leadsCsv,
+        config.paths.discoverySummaryJson,
+        config.paths.shortlistCsv,
+        config.paths.shortlistSummaryJson
+      ]) {
+        writeFileSync(path, "fixture\n", "utf8");
+      }
+      const checkpoint = {
+        version: 1,
+        configFingerprint: runningState.configFingerprint,
+        summary: completedSummary,
+        integrity: Object.fromEntries(
+          [
+            ["leadsCsv", config.paths.leadsCsv],
+            ["discoverySummaryJson", config.paths.discoverySummaryJson],
+            ["shortlistCsv", config.paths.shortlistCsv],
+            ["shortlistSummaryJson", config.paths.shortlistSummaryJson]
+          ].map(([name, path]) => [name, createHash("sha256").update(readFileSync(path)).digest("hex")])
+        ),
+        shortlistLeads: []
+      };
+      const checkpointContent = `${JSON.stringify(checkpoint, null, 2)}\n`;
+      writeFileSync(join(config.outDir, "workflow-checkpoint.json"), checkpointContent, "utf8");
+      const completedState = createWorkflowState(config, completedSummary, "2026-08-09T10:00:00.000Z");
+      completedState.phase = "completed";
+      completedState.checkpointHash = createHash("sha256").update(checkpointContent).digest("hex");
+      writeFileSync(workflowStatePath(config), JSON.stringify(completedState), "utf8");
+      result = runStatus();
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).status).toBe("completed");
+
+      writeFileSync(workflowStatePath(config), "{ malformed", "utf8");
+      result = runStatus();
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout).status).toBe("invalid");
+    } finally {
+      removeTempDir(tmp);
+    }
+  }, 15_000);
+
+  it("rejects status conflicts and format misuse before reading the workflow configuration", () => {
+    for (const modeArguments of [
+      ["--status", "--check"],
+      ["--check", "--status"],
+      ["--status", "--plan"],
+      ["--plan", "--status"],
+      ["--status", "--resume"],
+      ["--resume", "--status"]
+    ]) {
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "src/cli.ts", "workflow", "--config", "missing-workflow.json", ...modeArguments],
+        { cwd: process.cwd(), encoding: "utf8" }
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("workflow modes cannot be used together");
+    }
+
+    const formatWithoutReadOnlyMode = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", "--format", "json"],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+    const unsupportedFormat = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "workflow", "--config", "workflow.json", "--status", "--format", "yaml"],
+      { cwd: process.cwd(), encoding: "utf8" }
+    );
+
+    expect(formatWithoutReadOnlyMode.status).toBe(1);
+    expect(formatWithoutReadOnlyMode.stderr).toBe(
+      "open-local-audit: --format is only supported with workflow --check, --plan, or --status\n"
+    );
+    expect(unsupportedFormat.status).toBe(1);
+    expect(unsupportedFormat.stderr).toBe("open-local-audit: workflow --format must be terminal or json\n");
+  }, 15_000);
 
   it("rejects resume mode conflicts before reading the workflow configuration", () => {
     for (const argumentsAfterConfig of [["--resume", "--check"], ["--resume", "--plan"], ["--resume", "--format", "json"]]) {
@@ -374,7 +619,7 @@ describe("CLI behavior helpers", () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toBe("open-local-audit: --format is only supported with workflow --check or --plan\n");
+    expect(result.stderr).toBe("open-local-audit: --format is only supported with workflow --check, --plan, or --status\n");
   });
 
   it("rejects unsupported workflow preflight formats", () => {

@@ -58,6 +58,11 @@ export {
   renderWorkflowPreflightTerminal,
   runWorkflowPreflight
 } from "./workflow-preflight.js";
+export {
+  renderWorkflowStatusJson,
+  renderWorkflowStatusTerminal,
+  runWorkflowStatus
+} from "./workflow-status.js";
 export { renderTerminalSummary } from "./summary.js";
 export type {
   BatchAuditContext,
@@ -129,6 +134,13 @@ export type {
   WorkflowPreflightStage,
   WorkflowPreflightStatus
 } from "./workflow-preflight.js";
+export type {
+  WorkflowArtifactValidation,
+  WorkflowStatusNextAction,
+  WorkflowStatusNextActionKind,
+  WorkflowStatusReport,
+  WorkflowStatusReportStatus
+} from "./workflow-status.js";
 export type {
   WorkflowDependencies,
   WorkflowDiscoveryStageSummary,

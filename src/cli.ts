@@ -36,6 +36,11 @@ import {
   runWorkflowPreflight
 } from "./workflow-preflight.js";
 import { renderWorkflowPlanJson, renderWorkflowPlanTerminal, runWorkflowPlan } from "./workflow-plan.js";
+import {
+  renderWorkflowStatusJson,
+  renderWorkflowStatusTerminal,
+  runWorkflowStatus
+} from "./workflow-status.js";
 import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command().enablePositionalOptions();
@@ -161,15 +166,27 @@ const workflowProgram = program
   .option("--check", "validate workflow readiness without running it", false)
   .option("--plan", "show readiness and resolved execution plan without running it", false)
   .option("--resume", "resume from the latest valid workflow checkpoint", false)
-  .option("--format <format>", "workflow check or plan output format: terminal or json");
+  .option("--status", "show latest persisted workflow state without running it", false)
+  .option("--format <format>", "workflow check, plan, or status output format: terminal or json");
 
 workflowProgram.action(async () => {
   try {
-    const options = workflowProgram.opts<{ config?: string; check: boolean; plan: boolean; resume: boolean; format?: string }>();
+    const options = workflowProgram.opts<{
+      config?: string;
+      check: boolean;
+      plan: boolean;
+      resume: boolean;
+      status: boolean;
+      format?: string;
+    }>();
     const format = workflowProgram.getOptionValueSource("format") === "cli" ? options.format : undefined;
     const config = options.config;
     if (!config) {
       throw new Error("--config is required for workflow");
+    }
+
+    if (options.status && (options.check || options.plan || options.resume)) {
+      throw new Error("workflow modes cannot be used together: --status, --check, --plan, and --resume are mutually exclusive");
     }
 
     if (options.resume && (options.check || options.plan || format !== undefined)) {
@@ -180,14 +197,30 @@ workflowProgram.action(async () => {
       throw new Error("workflow --check and --plan cannot be used together");
     }
 
-    if (!options.check && !options.plan && format !== undefined) {
-      throw new Error("--format is only supported with workflow --check or --plan");
+    if (!options.check && !options.plan && !options.status && format !== undefined) {
+      throw new Error("--format is only supported with workflow --check, --plan, or --status");
     }
 
-    if (options.check || options.plan) {
+    if (options.check || options.plan || options.status) {
       const outputFormat = format ?? "terminal";
       if (outputFormat !== "terminal" && outputFormat !== "json") {
         throw new Error("workflow --format must be terminal or json");
+      }
+
+      if (options.status) {
+        const report = await runWorkflowStatus(config);
+        process.stdout.write(
+          outputFormat === "json"
+            ? renderWorkflowStatusJson(report)
+            : renderWorkflowStatusTerminal(report, config)
+        );
+        if (report.status === "failed" || report.status === "invalid") {
+          if (outputFormat === "terminal") {
+            process.stderr.write(`open-local-audit: workflow status ${report.status}\n`);
+          }
+          process.exitCode = 1;
+        }
+        return;
       }
 
       if (options.check) {
