@@ -262,6 +262,33 @@ The workflow owns predictable output paths below `outDir`: `reports/`, `leads.cs
 
 Configuration validation happens before output creation. Invalid configuration or a failed workflow stage returns exit code `1`; when execution reaches a managed stage, inspect `workflow-summary.json` for stage status and output paths. The workflow writes local files only: it does not send outreach, upload reports, or synchronize a CRM. A `google-places` discovery configuration requires `GOOGLE_MAPS_API_KEY` and can incur Google Maps Platform billing; the API key is not stored in the configuration.
 
+### Check workflow status
+
+Inspect the latest persisted state without running the workflow:
+
+```bash
+open-local-audit workflow --config workflow.json --status
+```
+
+Use JSON for scripts and integrations:
+
+```bash
+open-local-audit workflow --config workflow.json --status --format json
+```
+
+The status is `not-started` when no state or checkpoint exists,
+`running-or-interrupted` when the last recorded run was not finished and its
+process liveness is unknown, `failed` after a controlled failure, `completed`
+when every enabled stage succeeds, or `invalid` when local state, its
+configuration identity, a checkpoint, or required managed artifacts cannot be
+trusted.
+
+Status inspection is read-only: it makes no network calls, resolves no API
+keys, and does not create or change output files. `not-started`,
+`running-or-interrupted`, and `completed` exit `0`; `failed` and `invalid` exit
+`1`. Before following resume advice from a `running-or-interrupted` result,
+confirm that no workflow process is still active.
+
 Google Places lead discovery:
 
 ```bash

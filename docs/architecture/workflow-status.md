@@ -35,6 +35,16 @@ checkpoint is persisted before the manifest records the successful transition.
 A controlled failure records `failed`; successful completion records
 `completed`. An abrupt process exit leaves the last persisted running state.
 
+## Checkpoint correlation
+
+The manifest `checkpointHash` is `null` until the first successful checkpoint
+write of the current run. After each successful stage checkpoint write, the
+workflow stores the SHA-256 hash of the exact checkpoint bytes in the manifest.
+Status accepts checkpoint correlation for resume only when the manifest hash
+equals the hash of a validated checkpoint. This prevents an older checkpoint
+for the same configuration from enabling resume when a newer run is interrupted
+before writing its first checkpoint.
+
 Failure to persist the initial manifest prevents stage execution. Failure to
 persist a later transition stops the workflow before another stage begins and
 does not discard the last verified checkpoint. The workflow must never report
