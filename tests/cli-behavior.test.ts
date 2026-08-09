@@ -336,6 +336,33 @@ describe("CLI behavior helpers", () => {
     }
   }, 15_000);
 
+  it.each([
+    ["missing", undefined],
+    ["malformed", "{ malformed"]
+  ] as const)("writes no status report when the workflow configuration is %s", (_label, content) => {
+    const tmp = mkdtempSync(join(tmpdir(), "open-local-audit-cli-workflow-status-config-"));
+    try {
+      const configPath = join(tmp, "workflow.json");
+      if (content !== undefined) {
+        writeFileSync(configPath, content, "utf8");
+      }
+
+      for (const format of ["terminal", "json"]) {
+        const result = spawnSync(
+          process.execPath,
+          ["--import", "tsx", "src/cli.ts", "workflow", "--config", configPath, "--status", "--format", format],
+          { cwd: process.cwd(), encoding: "utf8" }
+        );
+
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toMatch(/^open-local-audit: /);
+      }
+    } finally {
+      removeTempDir(tmp);
+    }
+  });
+
   it("rejects status conflicts and format misuse before reading the workflow configuration", () => {
     for (const modeArguments of [
       ["--status", "--check"],

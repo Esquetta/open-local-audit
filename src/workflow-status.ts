@@ -36,15 +36,6 @@ function initialStages(config: ResolvedWorkflowConfig): WorkflowSummary["stages"
   };
 }
 
-function unknownStages(): WorkflowSummary["stages"] {
-  return {
-    discovery: { status: "not-run" },
-    shortlist: { status: "not-run" },
-    review: { status: "not-run" },
-    packaging: { status: "not-run" }
-  };
-}
-
 function lastSuccessfulStage(stages: WorkflowSummary["stages"]): WorkflowStageName | null {
   let last: WorkflowStageName | null = null;
   for (const stage of stageNames) {
@@ -111,12 +102,7 @@ function checkpointIsUsable(inspection: WorkflowCheckpointInspection, hash: stri
 }
 
 export async function runWorkflowStatus(configPath: string): Promise<WorkflowStatusReport> {
-  let config: ResolvedWorkflowConfig;
-  try {
-    config = await readWorkflowConfig(configPath);
-  } catch {
-    return invalidReport(unknownStages(), "not-applicable", "Workflow configuration is invalid.");
-  }
+  const config = await readWorkflowConfig(configPath);
 
   const [stateResult, checkpoint] = await Promise.all([readWorkflowState(config), inspectWorkflowCheckpoint(config)]);
   if (stateResult.kind === "invalid") {
@@ -197,6 +183,7 @@ export async function runWorkflowStatus(configPath: string): Promise<WorkflowSta
 
 export function renderWorkflowStatusTerminal(report: WorkflowStatusReport, configPath: string): string {
   const command = report.nextAction.argv === null ? [] : [`Command: ${report.nextAction.argv.join(" ")}`];
+  const error = report.error === null ? [] : [`Error: ${report.error.message}`];
   return `${[
     `Workflow status: ${report.status.toUpperCase().replaceAll("-", " ")}`,
     `Config: ${configPath}`,
@@ -204,7 +191,8 @@ export function renderWorkflowStatusTerminal(report: WorkflowStatusReport, confi
     `Last successful stage: ${report.lastSuccessfulStage ?? "none"}`,
     `Artifact validation: ${report.artifactValidation.toUpperCase().replaceAll("-", " ")}`,
     `Next action: ${report.nextAction.kind.toUpperCase().replaceAll("-", " ")}`,
-    ...command
+    ...command,
+    ...error
   ].join("\n")}\n`;
 }
 

@@ -12,6 +12,7 @@ import type { ShortlistLead, ShortlistResult } from "../src/shortlist.js";
 import { readWorkflowConfig } from "../src/workflow-config.js";
 import { WorkflowRunError, runResolvedWorkflow, runWorkflow, safeLeadSlug, type WorkflowSummary } from "../src/workflow.js";
 import { writeWorkflowState as writeWorkflowStateReal } from "../src/workflow-state.js";
+import { runWorkflowStatus } from "../src/workflow-status.js";
 
 const fsValidationMock = vi.hoisted(() => ({
   linkedPath: "",
@@ -444,7 +445,38 @@ describe("workflow orchestrator", () => {
     });
   });
 
-  it("resumes with the hash of the checkpoint validated for that invocation", async () => {
+  it("keeps the durable running state when a failed transition cannot be written", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    let writes = 0;
+    const writeWorkflowState = vi.fn(async (...args: Parameters<typeof writeWorkflowStateReal>) => {
+      writes += 1;
+      if (writes === 3) {
+        throw new Error("failed state storage unavailable");
+      }
+      await writeWorkflowStateReal(...args);
+    });
+
+    await expect(
+      runWorkflow(configPath, {
+        writeWorkflowState,
+        runDiscovery: vi.fn(async () => {
+          throw new Error("discovery rejected");
+        })
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "running",
+      currentStage: "discovery",
+      summary: { stages: { discovery: { status: "not-run" } } }
+    });
+    await expect(runWorkflowStatus(configPath)).resolves.toMatchObject({
+      status: "running-or-interrupted",
+      resumeAvailable: false
+    });
+  });
+
+  it("starts a resumed invocation without correlating the prior checkpoint", async () => {
     await writeWorkflowConfig(manualWorkflowConfig());
     await expect(
       runWorkflow(configPath, {
@@ -458,7 +490,6 @@ describe("workflow orchestrator", () => {
         })
       })
     ).rejects.toBeInstanceOf(WorkflowRunError);
-    const validatedCheckpointHash = createHash("sha256").update(readFileSync(workflowCheckpointPath())).digest("hex");
     const observedStates: Array<Record<string, unknown>> = [];
     const shortlist = vi.fn(async () => {
       observedStates.push(JSON.parse(readFileSync(workflowStatePath(), "utf8")) as Record<string, unknown>);
@@ -476,56 +507,125 @@ describe("workflow orchestrator", () => {
       {
         phase: "running",
         currentStage: "shortlist",
-        checkpointHash: validatedCheckpointHash,
+        checkpointHash: null,
         summary: { stages: { discovery: { status: "success" }, shortlist: { status: "not-run" } } }
       }
     ]);
     expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({ phase: "completed", currentStage: null });
   });
 
-  it("propagates a shortlist checkpoint persistence error without fabricating a packaging failure", async () => {
+  it("leaves a resumed interruption uncorrelated until it writes a new checkpoint", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+          await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+          await writeFile(options.summaryJson!, "{}\n", "utf8");
+          return makeDiscoveryResult(1);
+        }),
+        runShortlistReport: vi.fn(async () => {
+          throw new Error("initial shortlist interrupted");
+        })
+      })
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    await expect(
+      runWorkflow(
+        configPath,
+        { runShortlistReport: vi.fn(async () => { throw new Error("resumed shortlist interrupted"); }) },
+        { resume: true }
+      )
+    ).rejects.toBeInstanceOf(WorkflowRunError);
+
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "failed",
+      currentStage: "shortlist",
+      checkpointHash: null
+    });
+    await expect(runWorkflowStatus(configPath)).resolves.toMatchObject({
+      status: "failed",
+      resumeAvailable: false,
+      artifactValidation: "not-applicable"
+    });
+  });
+
+  it("isolates invalid package sources to their packaging entries and retains a conservative checkpoint", async () => {
     await writeWorkflowConfig(
       manualWorkflowConfig({
         review: { csv: "./operator/review.csv", staleBefore: "2026-06-01" },
         packageReports: true
       })
     );
+    const invalidLead = makeLead({
+      companyName: "Missing Report",
+      leadKey: "url:https://missing.test",
+      reportPath: "missing/open-local-audit-report.html"
+    });
+    const validLead = makeLead({
+      companyName: "Valid Report",
+      leadKey: "url:https://valid.test",
+      reportPath: "valid/open-local-audit-report.html"
+    });
+    await createReportDirectories([validLead]);
     const review = vi.fn(async () => makeReviewSummary());
     const packageReport = vi.fn(async ({ outDir }: { outDir: string }) => makePackResult(outDir));
-    let capturedError: unknown;
+    const dependencies = {
+      runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+        await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+        await writeFile(options.summaryJson!, "{}\n", "utf8");
+        return makeDiscoveryResult(2);
+      }),
+      runShortlistReport: vi.fn(async () => makeShortlistResult([invalidLead, validLead])),
+      summarizeReviewCsvFile: review,
+      packageReport
+    };
 
-    try {
-      await runWorkflow(configPath, {
-        runDiscovery: vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
-          await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
-          await writeFile(options.summaryJson!, "{}\n", "utf8");
-          return makeDiscoveryResult(1);
-        }),
-        runShortlistReport: vi.fn(async () =>
-          makeShortlistResult([makeLead({ reportPath: "missing/open-local-audit-report.html" })])
-        ),
-        summarizeReviewCsvFile: review,
-        packageReport
-      });
-    } catch (error) {
-      capturedError = error;
-    }
+    await expect(runWorkflow(configPath, dependencies)).rejects.toBeInstanceOf(WorkflowRunError);
 
-    expect(capturedError).toBeInstanceOf(Error);
-    expect(capturedError).not.toBeInstanceOf(WorkflowRunError);
-    expect((capturedError as Error).message).toBe("Checkpoint package source report is missing");
-    expect(review).not.toHaveBeenCalled();
-    expect(packageReport).not.toHaveBeenCalled();
-    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
-    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
-      phase: "running",
-      currentStage: "shortlist",
-      checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-      summary: {
-        status: "success",
-        stages: { discovery: { status: "success" }, shortlist: { status: "not-run" }, packaging: { status: "not-run" } }
+    expect(review).toHaveBeenCalledTimes(1);
+    expect(packageReport).toHaveBeenCalledTimes(1);
+    expect(readSummaryFile().summary).toMatchObject({
+      status: "failed",
+      error: { stage: "packaging", message: "1 package entry failed" },
+      stages: { review: { status: "success" }, packaging: { status: "failed" } },
+      packages: {
+        packaged: 1,
+        failed: 1,
+        entries: [
+          { leadKey: invalidLead.leadKey, status: "failed" },
+          { leadKey: validLead.leadKey, status: "packaged" }
+        ]
       }
     });
+    expect(JSON.parse(readFileSync(workflowStatePath(), "utf8"))).toMatchObject({
+      phase: "failed",
+      currentStage: "packaging",
+      checkpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      summary: { stages: { packaging: { status: "failed" } } }
+    });
+
+    await expect(runWorkflow(configPath, dependencies, { resume: true })).rejects.toBeInstanceOf(WorkflowRunError);
+    expect(dependencies.runDiscovery).toHaveBeenCalledTimes(1);
+    expect(dependencies.runShortlistReport).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retain an earlier checkpoint when package-source validation fails after packaging", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
+    const lead = makeLead({ reportPath: "acme/open-local-audit-report.html" });
+    await createReportDirectories([lead]);
+
+    await expect(
+      runWorkflow(configPath, {
+        runDiscovery: vi.fn(async () => makeDiscoveryResult(1)),
+        runShortlistReport: vi.fn(async () => makeShortlistResult([lead])),
+        packageReport: vi.fn(async ({ inputDir, outDir }: { inputDir: string; outDir: string }) => {
+          await rm(join(inputDir, "open-local-audit-report.json"));
+          return makePackResult(outDir);
+        })
+      })
+    ).rejects.toThrow("Checkpoint package source report is missing");
+
+    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
   });
 
   it("sanitizes lead slugs, falls back safely, and appends duplicate suffixes during packaging", async () => {
@@ -1048,7 +1148,7 @@ describe("workflow orchestrator", () => {
     expect(capturedError?.summary).toEqual(readSummaryFile().summary);
   });
 
-  it("rejects traversal outside the reports directory per lead without calling packageReport", async () => {
+  it("records traversal outside the reports directory as a failed package entry while packaging valid leads", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const discovery = vi.fn(async () => makeDiscoveryResult(2));
@@ -1074,13 +1174,24 @@ describe("workflow orchestrator", () => {
         runShortlistReport: shortlist,
         packageReport
       })
-    ).rejects.toThrow("Report path escapes reports directory");
+    ).rejects.toBeInstanceOf(WorkflowRunError);
 
-    expect(packageReport).not.toHaveBeenCalled();
-    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
+    expect(packageReport).toHaveBeenCalledTimes(1);
+    const summary = readSummaryFile().summary;
+    expect(summary).toMatchObject({
+      status: "failed",
+      stages: { packaging: { status: "failed" } },
+      packages: { failed: 1 }
+    });
+    expect(summary.packages.entries).toContainEqual({
+      leadKey: "url:https://escape.test",
+      companyName: "Escaping Lead",
+      status: "failed",
+      error: "Report path escapes reports directory"
+    });
   });
 
-  it("rejects a report directory link that resolves outside reportsDir", async () => {
+  it("records a report directory link that resolves outside reportsDir as a failed package entry", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const paths = resolvedWorkflowPaths();
@@ -1105,10 +1216,14 @@ describe("workflow orchestrator", () => {
         ),
         packageReport
       })
-    ).rejects.toThrow("Report path escapes reports directory");
+    ).rejects.toBeInstanceOf(WorkflowRunError);
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
+    expect(readSummaryFile().summary).toMatchObject({
+      status: "failed",
+      stages: { packaging: { status: "failed" } },
+      packages: { failed: 1, entries: [{ leadKey: "url:https://linked.test", status: "failed", error: "Report path escapes reports directory" }] }
+    });
   });
 
   it("rejects a linked managed reports directory before discovery writes", async () => {
@@ -1159,7 +1274,7 @@ describe("workflow orchestrator", () => {
     expect(discovery).not.toHaveBeenCalled();
   });
 
-  it("rejects an expected report file reported as a symbolic link before packaging", async () => {
+  it("records an expected report file reported as a symbolic link as a failed package entry", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const paths = resolvedWorkflowPaths();
@@ -1186,15 +1301,19 @@ describe("workflow orchestrator", () => {
         ),
         packageReport
       })
-    ).rejects.toThrow("Linked report files are not allowed");
+    ).rejects.toBeInstanceOf(WorkflowRunError);
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
+    expect(readSummaryFile().summary).toMatchObject({
+      status: "failed",
+      stages: { packaging: { status: "failed" } },
+      packages: { failed: 1, entries: [{ leadKey: "url:https://linked-file.test", status: "failed", error: "Linked report files are not allowed" }] }
+    });
     expect(existsSync(join(paths.packagesDir, "linked-file", "reports", "open-local-audit-report.html"))).toBe(false);
     expect(readFileSync(externalFile, "utf8")).toBe(externalMarker);
   });
 
-  it("rejects an expected report file whose canonical path escapes inputDir", async () => {
+  it("records an expected report file whose canonical path escapes inputDir as a failed package entry", async () => {
     await writeWorkflowConfig(manualWorkflowConfig({ packageReports: true }));
 
     const paths = resolvedWorkflowPaths();
@@ -1221,10 +1340,14 @@ describe("workflow orchestrator", () => {
         ),
         packageReport
       })
-    ).rejects.toThrow("Report file escapes input directory");
+    ).rejects.toBeInstanceOf(WorkflowRunError);
 
     expect(packageReport).not.toHaveBeenCalled();
-    expect(existsSync(resolvedWorkflowPaths().workflowSummaryJson)).toBe(false);
+    expect(readSummaryFile().summary).toMatchObject({
+      status: "failed",
+      stages: { packaging: { status: "failed" } },
+      packages: { failed: 1, entries: [{ leadKey: "url:https://escaped-file.test", status: "failed", error: "Report file escapes input directory" }] }
+    });
     expect(existsSync(join(paths.packagesDir, "escaped-file"))).toBe(false);
   });
 
@@ -1379,6 +1502,41 @@ describe("workflow orchestrator", () => {
     expect(summary.status).toBe("success");
     expect(discovery).toHaveBeenCalledTimes(1);
     expect(shortlist).toHaveBeenCalledTimes(2);
+  });
+
+  it("resumes from a valid checkpoint without reading workflow state", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig());
+    const discovery = vi.fn(async (options: { exportCsv: string; summaryJson?: string }) => {
+      await writeFile(options.exportCsv, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+      await writeFile(options.summaryJson!, "{}\n", "utf8");
+      return makeDiscoveryResult(1);
+    });
+    const interruptedShortlist = vi.fn(async () => {
+      throw new Error("shortlist stopped");
+    });
+    const completedShortlist = vi.fn(async (options: { out: string; summaryJson?: string }) => {
+      await writeFile(options.out, "leadKey,companyName\nurl:https://acme.test,Acme Dental\n", "utf8");
+      await writeFile(options.summaryJson!, "{}\n", "utf8");
+      return makeShortlistResult([makeLead()]);
+    });
+    const resume = runWorkflow as unknown as (
+      path: string,
+      dependencies: { runDiscovery: typeof discovery; runShortlistReport: typeof completedShortlist },
+      options: { resume: boolean }
+    ) => Promise<WorkflowSummary>;
+
+    await expect(runWorkflow(configPath, { runDiscovery: discovery, runShortlistReport: interruptedShortlist })).rejects.toBeInstanceOf(
+      WorkflowRunError
+    );
+    await rm(workflowStatePath());
+    await expect(resume(configPath, { runDiscovery: discovery, runShortlistReport: completedShortlist }, { resume: true })).resolves.toMatchObject({
+      status: "success"
+    });
+
+    await writeFile(workflowStatePath(), "{ malformed", "utf8");
+    await expect(resume(configPath, { runDiscovery: discovery, runShortlistReport: completedShortlist }, { resume: true })).resolves.toMatchObject({
+      status: "success"
+    });
   });
 
   it("rejects malformed checkpoints before resolving a Google API key", async () => {

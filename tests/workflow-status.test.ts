@@ -76,6 +76,14 @@ describe("workflow status", () => {
     await expect(lstat(config.outDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it.each([
+    ["missing configuration", async () => await rm(configPath)],
+    ["malformed configuration", async () => await writeFile(configPath, "{ malformed", "utf8")]
+  ])("propagates %s errors instead of reporting an invalid workflow", async (_label, arrange) => {
+    await arrange();
+    await expect(runWorkflowStatus(configPath)).rejects.toThrow();
+  });
+
   it("does not resolve Google credentials or use fetch while reporting Google Places status", async () => {
     const querySentinel = "GOOGLE_QUERY_SENTINEL__ISTANBUL_DENTISTS";
     const secretSentinel = "GOOGLE_API_KEY_SENTINEL__DO_NOT_LEAK";
@@ -163,7 +171,7 @@ describe("workflow status", () => {
     const checkpoint = await writeValidCheckpoint();
     const state = createWorkflowState(config, checkpoint.value.summary, "2026-08-09T10:00:00.000Z");
     state.phase = "completed";
-    state.checkpointHash = `${checkpoint.hash.slice(0, -1)}0`;
+    state.checkpointHash = `${checkpoint.hash.startsWith("0") ? "1" : "0"}${checkpoint.hash.slice(1)}`;
     await writeFile(workflowStatePath(config), JSON.stringify(state), "utf8");
     expect((await runWorkflowStatus(configPath)).status).toBe("invalid");
 
@@ -255,6 +263,26 @@ describe("workflow status", () => {
     expect(source).not.toContain("fetch(");
   });
 
+  it("renders the sanitized failed-status error in terminal output", () => {
+    const terminal = renderWorkflowStatusTerminal(
+      {
+        version: 1,
+        status: "failed",
+        currentStage: "discovery",
+        lastSuccessfulStage: null,
+        resumeAvailable: false,
+        updatedAt: "2026-08-09T10:00:00.000Z",
+        stages: initialSummary().stages,
+        artifactValidation: "not-applicable",
+        nextAction: runActionForTest(),
+        error: { message: "provider rejected [REDACTED]" }
+      },
+      configPath
+    );
+
+    expect(terminal).toContain("Error: provider rejected [REDACTED]");
+  });
+
   async function writeValidCheckpoint(): Promise<{ path: string; hash: string; value: Checkpoint }> {
     await mkdir(config.outDir, { recursive: true });
     const summary = completedSummary();
@@ -307,6 +335,10 @@ describe("workflow status", () => {
         packaging: { status: "skipped" }
       }
     };
+  }
+
+  function runActionForTest(): WorkflowStatusReport["nextAction"] {
+    return { kind: "run", argv: ["workflow", "--config", configPath], message: "Run the workflow from the beginning." };
   }
 });
 

@@ -19,7 +19,8 @@ import {
   createWorkflowState,
   hashWorkflowCheckpoint,
   transitionWorkflowState,
-  writeWorkflowState
+  writeWorkflowState,
+  type WorkflowState
 } from "./workflow-state.js";
 
 export type WorkflowStatus = "success" | "failed";
@@ -130,6 +131,13 @@ export class WorkflowRunError extends Error {
     super(summary.error ? `Workflow failed during ${summary.error.stage}: ${summary.error.message}` : "Workflow failed");
     this.name = "WorkflowRunError";
     this.summary = summary;
+  }
+}
+
+class PackageSourceCheckpointValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PackageSourceCheckpointValidationError";
   }
 }
 
@@ -316,24 +324,37 @@ async function addPackageSourceIntegrity(
     if (!lead.reportPath.trim()) {
       continue;
     }
-    let source;
     try {
-      source = await resolvePackageInputDir(config.paths.reportsDir, lead.reportPath);
+      const source = await resolvePackageInputDir(config.paths.reportsDir, lead.reportPath);
+      await validatePackageSourceFiles(source.inputDir, source.realInputDir);
+      for (const fileName of packageReportFileNames) {
+        const hash = await hashManagedFile(join(source.inputDir, fileName));
+        if (!hash && fileName === "open-local-audit-report.json") {
+          throw new PackageSourceCheckpointValidationError("Checkpoint package source report is missing");
+        }
+        if (hash) {
+          integrity[packageSourceIntegrityId(index, fileName)] = hash;
+        }
+      }
     } catch (error) {
+      if (error instanceof PackageSourceCheckpointValidationError) {
+        throw error;
+      }
       if (isMissingPath(error)) {
-        throw new Error("Checkpoint package source report is missing");
+        throw new PackageSourceCheckpointValidationError("Checkpoint package source report is missing");
+      }
+      if (
+        error instanceof Error &&
+        [
+          "Report path escapes reports directory",
+          "Linked report files are not allowed",
+          "Report file escapes input directory",
+          "Workflow checkpoint managed artifact must be a regular file"
+        ].includes(error.message)
+      ) {
+        throw new PackageSourceCheckpointValidationError(error.message);
       }
       throw error;
-    }
-    await validatePackageSourceFiles(source.inputDir, source.realInputDir);
-    for (const fileName of packageReportFileNames) {
-      const hash = await hashManagedFile(join(source.inputDir, fileName));
-      if (!hash && fileName === "open-local-audit-report.json") {
-        throw new Error("Checkpoint package source report is missing");
-      }
-      if (hash) {
-        integrity[packageSourceIntegrityId(index, fileName)] = hash;
-      }
     }
   }
 }
@@ -847,8 +868,8 @@ export async function runResolvedWorkflow(
     : createInitialSummary(config);
   let shortlistLeads = checkpoint?.shortlistLeads ?? [];
   const knownSecrets: string[] = [];
-  let checkpointHash = resumeCheckpoint?.checkpointHash ?? null;
-  let state = {
+  let checkpointHash: string | null = null;
+  let state: WorkflowState = {
     ...createWorkflowState(config, summary, resolvedDependencies.now().toISOString()),
     checkpointHash
   };
@@ -866,6 +887,17 @@ export async function runResolvedWorkflow(
     state = nextState;
   };
   const persistFailedState = (): Promise<void> => persistState("failed", summary.error?.stage ?? null);
+  const writeCheckpointOrRetainPriorForPackageSourceFailure = async (): Promise<void> => {
+    try {
+      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      if (error instanceof PackageSourceCheckpointValidationError) {
+        return;
+      }
+      throw error;
+    }
+    checkpointHash = await hashWorkflowCheckpoint(config);
+  };
 
   await resolvedDependencies.writeWorkflowState(config, state);
 
@@ -918,8 +950,7 @@ export async function runResolvedWorkflow(
     } catch (error) {
       await throwStageFailure(summary, "shortlist", error, knownSecrets, persistFailedState);
     }
-    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
-    checkpointHash = await hashWorkflowCheckpoint(config);
+    await writeCheckpointOrRetainPriorForPackageSourceFailure();
     await persistState("running", null);
   }
 
@@ -934,8 +965,7 @@ export async function runResolvedWorkflow(
     } catch (error) {
       await throwStageFailure(summary, "review", error, knownSecrets, persistFailedState);
     }
-    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
-    checkpointHash = await hashWorkflowCheckpoint(config);
+    await writeCheckpointOrRetainPriorForPackageSourceFailure();
     await persistState("running", null);
   }
 
