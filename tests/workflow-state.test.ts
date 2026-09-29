@@ -172,7 +172,7 @@ describe("workflow state manifest", () => {
   it("rejects fingerprint and managed output paths that do not match the current configuration", async () => {
     await mkdir(config.outDir, { recursive: true });
     const state = createWorkflowState(config, summary(), "2026-08-09T10:00:00.000Z");
-    const fingerprintMismatch = { ...state, configFingerprint: `${state.configFingerprint.slice(0, -1)}0` };
+    const fingerprintMismatch = { ...state, configFingerprint: `${state.configFingerprint.slice(0, -1)}${state.configFingerprint.endsWith("0") ? "1" : "0"}` };
     const outputMismatch = {
       ...state,
       summary: { ...state.summary, outputs: { ...state.summary.outputs, leadsCsv: join(config.outDir, "forged.csv") } }
@@ -182,6 +182,7 @@ describe("workflow state manifest", () => {
       summary: { ...state.summary, outputs: { ...state.summary.outputs, unexpected: "forged" } }
     };
 
+    expect(fingerprintMismatch.configFingerprint).not.toBe(state.configFingerprint);
     expect(parseWorkflowState(fingerprintMismatch)).toMatchObject({ kind: "valid" });
     expect(parseWorkflowState(outputMismatch)).toMatchObject({ kind: "valid" });
     expect(parseWorkflowState(outputWithExtraPath)).toEqual({ kind: "invalid", message: "Workflow state is invalid" });
