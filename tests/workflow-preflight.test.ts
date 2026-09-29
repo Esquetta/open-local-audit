@@ -53,6 +53,21 @@ describe("workflow preflight", () => {
     return inputPath;
   }
 
+  it("does not resolve Google credentials for keyless Overture workflows", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", maxAudits: 0 } }));
+    const result = await runWorkflowPreflight(configPath, { resolveGoogleMapsApiKey: () => { throw new Error("Must not resolve credentials"); } });
+    expect(result.status).toBe("ready");
+    expect(result.checks.some((check) => check.id === "google-api-key")).toBe(false);
+    expect(result.limits?.maxCandidates).toBe(10);
+  });
+
+  it("blocks oversized Overture search areas before execution", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "overture", query: "dental", bbox: "0,0,6,1" } }));
+    const result = await runWorkflowPreflight(configPath);
+    expect(result.status).toBe("blocked");
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "configuration", status: "fail" }));
+  });
+
   it("reports a valid manual workflow as ready without creating its output tree", async () => {
     await writeConfig(manualConfig());
     await writeManualInput();

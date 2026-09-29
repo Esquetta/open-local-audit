@@ -7,14 +7,28 @@ import { summarizeReviewCsvFile, type ReviewSummary } from "./review.js";
 import { runShortlistReport, type ShortlistRunOptions } from "./shortlist-runner.js";
 import type { ShortlistLead, ShortlistResult } from "./shortlist.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
-import { readWorkflowConfig, type ResolvedWorkflowConfig, type WorkflowManagedPaths } from "./workflow-config.js";
+import {
+  readWorkflowConfig,
+  workflowConfigFingerprint,
+  type ResolvedWorkflowConfig,
+  type WorkflowManagedPaths
+} from "./workflow-config.js";
 import { prepareWorkflowManagedDirectories } from "./workflow-paths.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
+import {
+  createWorkflowState,
+  hashWorkflowCheckpoint,
+  transitionWorkflowState,
+  writeWorkflowState,
+  type WorkflowState
+} from "./workflow-state.js";
 
 export type WorkflowStatus = "success" | "failed";
 export type WorkflowStageStatus = "success" | "failed" | "skipped" | "not-run";
 export type WorkflowStageName = "discovery" | "shortlist" | "review" | "packaging";
 export type WorkflowPackageStatus = "packaged" | "skipped" | "failed";
+
+export { workflowConfigFingerprint } from "./workflow-config.js";
 
 export interface WorkflowDiscoveryStageSummary {
   status: WorkflowStageStatus;
@@ -89,6 +103,8 @@ export interface WorkflowDependencies {
   summarizeReviewCsvFile: typeof summarizeReviewCsvFile;
   packageReport: (options: Parameters<typeof packageReport>[0]) => Promise<ReportPackResult>;
   resolveGoogleMapsApiKey: typeof resolveGoogleMapsApiKey;
+  now: () => Date;
+  writeWorkflowState: typeof writeWorkflowState;
 }
 
 export interface WorkflowRunOptions {
@@ -102,6 +118,11 @@ interface WorkflowCheckpoint {
   integrity: Record<string, string>;
   shortlistLeads: ShortlistLead[];
 }
+
+export type WorkflowCheckpointInspection =
+  | { kind: "missing" }
+  | { kind: "invalid"; message: string }
+  | { kind: "valid"; summary: WorkflowSummary; checkpointPath: string; checkpointHash: string };
 
 export class WorkflowRunError extends Error {
   readonly summary: WorkflowSummary;
@@ -119,7 +140,9 @@ const defaultDependencies: WorkflowDependencies = {
   runShortlistReport,
   summarizeReviewCsvFile,
   packageReport,
-  resolveGoogleMapsApiKey
+  resolveGoogleMapsApiKey,
+  now: () => new Date(),
+  writeWorkflowState
 };
 
 const packageReportFileNames = [
@@ -128,6 +151,15 @@ const packageReportFileNames = [
   "open-local-audit-report.html",
   "open-local-audit-report.pdf"
 ];
+
+const packageSourceInvalidMarkerLabel = "open-local-audit:package-source-invalid:v1";
+type PackageSourceInvalidClassification =
+  | "required-json-missing"
+  | "report-path-escapes-reports-directory"
+  | "linked-report-file"
+  | "report-file-escapes-input-directory"
+  | "non-regular-report-file"
+  | "source-directory-missing";
 
 function slugify(value: string): string {
   return value
@@ -209,24 +241,6 @@ async function writeWorkflowSummary(summary: WorkflowSummary): Promise<void> {
   await writePrettyJson(summary.outputs.workflowSummaryJson, summary);
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function workflowConfigFingerprint(config: ResolvedWorkflowConfig): string {
-  const { paths: _paths, ...effectiveConfig } = config;
-  return createHash("sha256").update(stableJson(effectiveConfig)).digest("hex");
-}
-
 function workflowCheckpointPath(config: ResolvedWorkflowConfig): string {
   return join(config.outDir, "workflow-checkpoint.json");
 }
@@ -273,6 +287,69 @@ function isPackageSourceIntegrityId(id: string, shortlistLeads: readonly Shortli
   );
 }
 
+function packageSourceInvalidMarker(classification: PackageSourceInvalidClassification): string {
+  return createHash("sha256").update(`${packageSourceInvalidMarkerLabel}:${classification}`).digest("hex");
+}
+
+function packageSourceInvalidClassification(error: unknown): PackageSourceInvalidClassification | undefined {
+  if (isMissingPath(error)) {
+    return "source-directory-missing";
+  }
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+  switch (error.message) {
+    case "Report path escapes reports directory":
+      return "report-path-escapes-reports-directory";
+    case "Linked report files are not allowed":
+      return "linked-report-file";
+    case "Report file escapes input directory":
+      return "report-file-escapes-input-directory";
+    case "Workflow checkpoint managed artifact must be a regular file":
+      return "non-regular-report-file";
+    default:
+      return undefined;
+  }
+}
+
+async function capturePackageSourceIntegrity(
+  config: ResolvedWorkflowConfig,
+  summary: WorkflowSummary,
+  shortlistLeads: readonly ShortlistLead[]
+): Promise<Record<string, string>> {
+  const integrity: Record<string, string> = {};
+  if (!config.packageReports || summary.stages.shortlist.status !== "success") {
+    return integrity;
+  }
+
+  for (const [index, lead] of shortlistLeads.entries()) {
+    if (!lead.reportPath.trim()) {
+      continue;
+    }
+    try {
+      const source = await resolvePackageInputDir(config.paths.reportsDir, lead.reportPath);
+      await validatePackageSourceFiles(source.inputDir, source.realInputDir);
+      for (const fileName of packageReportFileNames) {
+        const hash = await hashManagedFile(join(source.inputDir, fileName));
+        if (!hash && fileName === "open-local-audit-report.json") {
+          integrity[packageSourceIntegrityId(index, fileName)] = packageSourceInvalidMarker("required-json-missing");
+          continue;
+        }
+        if (hash) {
+          integrity[packageSourceIntegrityId(index, fileName)] = hash;
+        }
+      }
+    } catch (error) {
+      const classification = packageSourceInvalidClassification(error);
+      if (!classification) {
+        throw error;
+      }
+      integrity[packageSourceIntegrityId(index, "open-local-audit-report.json")] = packageSourceInvalidMarker(classification);
+    }
+  }
+  return integrity;
+}
+
 async function validateCheckpointPackageSources(
   config: ResolvedWorkflowConfig,
   checkpoint: WorkflowCheckpoint
@@ -281,56 +358,15 @@ async function validateCheckpointPackageSources(
     return;
   }
 
-  for (const [index, lead] of checkpoint.shortlistLeads.entries()) {
-    if (!lead.reportPath.trim()) {
-      continue;
-    }
-    const source = await resolvePackageInputDir(config.paths.reportsDir, lead.reportPath);
-    await validatePackageSourceFiles(source.inputDir, source.realInputDir);
-    for (const fileName of packageReportFileNames) {
-      const id = packageSourceIntegrityId(index, fileName);
-      const expectedHash = checkpoint.integrity[id];
-      const actualHash = await hashManagedFile(join(source.inputDir, fileName));
-      if ((actualHash && !expectedHash) || (expectedHash && actualHash !== expectedHash)) {
-        throw new Error("Workflow checkpoint managed artifacts do not match");
-      }
-    }
-  }
-}
-
-async function addPackageSourceIntegrity(
-  config: ResolvedWorkflowConfig,
-  summary: WorkflowSummary,
-  shortlistLeads: ShortlistLead[],
-  integrity: Record<string, string>
-): Promise<void> {
-  if (!config.packageReports || summary.stages.shortlist.status !== "success") {
-    return;
-  }
-
-  for (const [index, lead] of shortlistLeads.entries()) {
-    if (!lead.reportPath.trim()) {
-      continue;
-    }
-    let source;
-    try {
-      source = await resolvePackageInputDir(config.paths.reportsDir, lead.reportPath);
-    } catch (error) {
-      if (isMissingPath(error)) {
-        throw new Error("Checkpoint package source report is missing");
-      }
-      throw error;
-    }
-    await validatePackageSourceFiles(source.inputDir, source.realInputDir);
-    for (const fileName of packageReportFileNames) {
-      const hash = await hashManagedFile(join(source.inputDir, fileName));
-      if (!hash && fileName === "open-local-audit-report.json") {
-        throw new Error("Checkpoint package source report is missing");
-      }
-      if (hash) {
-        integrity[packageSourceIntegrityId(index, fileName)] = hash;
-      }
-    }
+  const actualIntegrity = await capturePackageSourceIntegrity(config, checkpoint.summary, checkpoint.shortlistLeads);
+  const expectedEntries = Object.entries(checkpoint.integrity).filter(([id]) =>
+    isPackageSourceIntegrityId(id, checkpoint.shortlistLeads)
+  );
+  if (
+    expectedEntries.length !== Object.keys(actualIntegrity).length ||
+    expectedEntries.some(([id, hash]) => actualIntegrity[id] !== hash)
+  ) {
+    throw new Error("Workflow checkpoint managed artifacts do not match");
   }
 }
 
@@ -362,7 +398,7 @@ async function createCheckpoint(
       integrity[id] = hash;
     }
   }
-  await addPackageSourceIntegrity(config, summary, shortlistLeads, integrity);
+  Object.assign(integrity, await capturePackageSourceIntegrity(config, summary, shortlistLeads));
   return {
     version: 1,
     configFingerprint: workflowConfigFingerprint(config),
@@ -572,35 +608,93 @@ function isWorkflowCheckpoint(value: unknown, config: ResolvedWorkflowConfig): v
   );
 }
 
-async function readWorkflowCheckpoint(config: ResolvedWorkflowConfig): Promise<WorkflowCheckpoint> {
+async function inspectWorkflowCheckpointInternal(
+  config: ResolvedWorkflowConfig
+): Promise<{ inspection: WorkflowCheckpointInspection; checkpoint?: WorkflowCheckpoint }> {
+  const checkpointPath = workflowCheckpointPath(config);
+  let content: Buffer;
+  try {
+    const info = await lstat(checkpointPath);
+    if (!isRegularFile(info)) {
+      return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
+    }
+    content = await readFile(checkpointPath);
+  } catch (error) {
+    if (isMissingPath(error)) {
+      return { inspection: { kind: "missing" } };
+    }
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
+  }
+
   let value: unknown;
   try {
-    value = JSON.parse(await readFile(workflowCheckpointPath(config), "utf8"));
+    value = JSON.parse(content.toString("utf8"));
   } catch {
-    throw new Error("Workflow checkpoint is missing or invalid");
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
   }
   if (!isWorkflowCheckpoint(value, config)) {
-    throw new Error("Workflow checkpoint is missing or invalid");
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint is missing or invalid" } };
   }
   if (value.configFingerprint !== workflowConfigFingerprint(config)) {
-    throw new Error("Workflow checkpoint does not match the current configuration");
+    return { inspection: { kind: "invalid", message: "Workflow checkpoint does not match the current configuration" } };
   }
 
-  for (const [id, path] of Object.entries(checkpointArtifactPaths(config, value.summary))) {
-    const expectedHash = value.integrity[id];
-    if (!expectedHash || (await hashManagedFile(path)) !== expectedHash) {
-      throw new Error("Workflow checkpoint managed artifacts do not match");
+  try {
+    for (const [id, path] of Object.entries(checkpointArtifactPaths(config, value.summary))) {
+      const expectedHash = value.integrity[id];
+      if (!expectedHash || (await hashManagedFile(path)) !== expectedHash) {
+        throw new Error("Workflow checkpoint managed artifacts do not match");
+      }
     }
+    await validateCheckpointPackageSources(config, value);
+  } catch (error) {
+    return {
+      inspection: {
+        kind: "invalid",
+        message: error instanceof Error ? error.message : "Workflow checkpoint managed artifacts do not match"
+      }
+    };
   }
-  await validateCheckpointPackageSources(config, value);
-  return value;
+
+  const checkpointHash = createHash("sha256").update(content).digest("hex");
+  return {
+    inspection: { kind: "valid", summary: value.summary, checkpointPath, checkpointHash },
+    checkpoint: value
+  };
 }
 
-async function throwPersistedWorkflowFailure(summary: WorkflowSummary): Promise<never> {
+export async function inspectWorkflowCheckpoint(config: ResolvedWorkflowConfig): Promise<WorkflowCheckpointInspection> {
+  return (await inspectWorkflowCheckpointInternal(config)).inspection;
+}
+
+async function readWorkflowCheckpoint(
+  config: ResolvedWorkflowConfig
+): Promise<{ checkpoint: WorkflowCheckpoint; checkpointHash: string }> {
+  const { inspection, checkpoint } = await inspectWorkflowCheckpointInternal(config);
+  if (inspection.kind === "valid" && checkpoint && inspection.checkpointHash) {
+    return { checkpoint, checkpointHash: inspection.checkpointHash };
+  }
+  throw new Error(
+    inspection.kind === "invalid" ? inspection.message : "Workflow checkpoint is missing or invalid"
+  );
+}
+
+async function throwPersistedWorkflowFailure(
+  summary: WorkflowSummary,
+  persistFailedState?: () => Promise<void>
+): Promise<never> {
   try {
     await writeWorkflowSummary(summary);
   } catch {
     // The workflow failure remains authoritative if its summary cannot be persisted.
+  }
+
+  if (persistFailedState) {
+    try {
+      await persistFailedState();
+    } catch {
+      // The controlled stage failure remains authoritative if lifecycle state cannot be persisted.
+    }
   }
 
   throw new WorkflowRunError(summary);
@@ -610,10 +704,11 @@ async function throwStageFailure(
   summary: WorkflowSummary,
   stage: WorkflowStageName,
   error: unknown,
-  knownSecrets: readonly string[]
+  knownSecrets: readonly string[],
+  persistFailedState?: () => Promise<void>
 ): Promise<never> {
   markStageFailure(summary, stage, sanitizeErrorMessage(error, knownSecrets));
-  return throwPersistedWorkflowFailure(summary);
+  return throwPersistedWorkflowFailure(summary, persistFailedState);
 }
 
 function markStageFailure(summary: WorkflowSummary, stage: WorkflowStageName, message: string): void {
@@ -776,16 +871,39 @@ export async function runResolvedWorkflow(
     ...dependencies
   };
 
-  const checkpoint = options.resume ? await readWorkflowCheckpoint(config) : undefined;
+  const resumeCheckpoint = options.resume ? await readWorkflowCheckpoint(config) : undefined;
+  const checkpoint = resumeCheckpoint?.checkpoint;
   await prepareWorkflowManagedDirectories(config);
   const summary = checkpoint
     ? { ...checkpoint.summary, outputs: config.paths, error: undefined, status: "success" as const }
     : createInitialSummary(config);
   let shortlistLeads = checkpoint?.shortlistLeads ?? [];
   const knownSecrets: string[] = [];
+  let checkpointHash: string | null = null;
+  let state: WorkflowState = {
+    ...createWorkflowState(config, summary, resolvedDependencies.now().toISOString()),
+    checkpointHash
+  };
 
-  try {
-    if (summary.stages.discovery.status !== "success") {
+  const persistState = async (
+    phase: "running" | "failed" | "completed",
+    currentStage: WorkflowStageName | null
+  ): Promise<void> => {
+    const nextState = transitionWorkflowState(
+      state,
+      { phase, currentStage, checkpointHash, summary },
+      resolvedDependencies.now().toISOString()
+    );
+    await resolvedDependencies.writeWorkflowState(config, nextState);
+    state = nextState;
+  };
+  const persistFailedState = (): Promise<void> => persistState("failed", summary.error?.stage ?? null);
+
+  await resolvedDependencies.writeWorkflowState(config, state);
+
+  if (summary.stages.discovery.status !== "success") {
+    await persistState("running", "discovery");
+    try {
       const googleApiKey =
         config.discovery.provider === "google-places" ? resolvedDependencies.resolveGoogleMapsApiKey() : undefined;
       if (googleApiKey) {
@@ -795,6 +913,7 @@ export async function runResolvedWorkflow(
         provider: config.discovery.provider,
         ...(config.discovery.provider === "manual-csv" ? { input: config.discovery.input } : {}),
         ...(config.discovery.provider === "google-places" ? { query: config.discovery.query } : {}),
+        ...(config.discovery.provider === "overture" ? { query: config.discovery.query, bbox: config.discovery.bbox, release: config.discovery.release } : {}),
         profile: config.discovery.profile,
         outDir: config.paths.reportsDir,
         managedOutputRoot: config.paths.reportsDir,
@@ -804,14 +923,21 @@ export async function runResolvedWorkflow(
         dryRun: false,
         concurrency: config.discovery.concurrency,
         ...(config.discovery.maxAudits !== undefined ? { maxAudits: config.discovery.maxAudits } : {}),
-        ...(config.discovery.provider === "google-places" ? { limit: config.discovery.limit } : {}),
+        ...(config.discovery.provider !== "manual-csv" ? { limit: config.discovery.limit } : {}),
         ...(googleApiKey !== undefined ? { apiKey: googleApiKey } : {})
       });
       updateDiscoveryStage(summary, discoveryResult);
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      await throwStageFailure(summary, "discovery", error, knownSecrets, persistFailedState);
     }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
+  }
 
-    if (summary.stages.shortlist.status !== "success") {
+  if (summary.stages.shortlist.status !== "success") {
+    await persistState("running", "shortlist");
+    try {
       const shortlistResult = await resolvedDependencies.runShortlistReport({
         input: config.paths.leadsCsv,
         out: config.paths.shortlistCsv,
@@ -822,67 +948,68 @@ export async function runResolvedWorkflow(
       });
       updateShortlistStage(summary, shortlistResult);
       shortlistLeads = shortlistResult.leads;
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      await throwStageFailure(summary, "shortlist", error, knownSecrets, persistFailedState);
     }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
+  }
 
-    if (config.review && summary.stages.review.status !== "success") {
+  if (config.review && summary.stages.review.status !== "success") {
+    await persistState("running", "review");
+    try {
       const reviewSummary = await resolvedDependencies.summarizeReviewCsvFile(config.review.csv, {
         staleBefore: config.review.staleBefore
       });
       await writePrettyJson(config.paths.reviewSummaryJson, reviewSummary);
       updateReviewStage(summary, reviewSummary);
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    } catch (error) {
+      await throwStageFailure(summary, "review", error, knownSecrets, persistFailedState);
     }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
+  }
 
-    if (config.packageReports && summary.stages.packaging.status !== "success") {
-      summary.packages = { packaged: 0, skipped: 0, failed: 0, entries: [] };
-      const slugCounts = new Map<string, number>();
-      for (const lead of shortlistLeads) {
-        const packageEntry = await packageLead(
-          config.paths,
-          lead,
-          slugCounts,
-          resolvedDependencies.packageReport,
-          knownSecrets
-        );
-        summary.packages.entries.push(packageEntry);
-        if (packageEntry.status === "packaged") {
-          summary.packages.packaged += 1;
-        } else if (packageEntry.status === "skipped") {
-          summary.packages.skipped += 1;
-        } else {
-          summary.packages.failed += 1;
-        }
+  if (config.packageReports && summary.stages.packaging.status !== "success") {
+    await persistState("running", "packaging");
+    summary.packages = { packaged: 0, skipped: 0, failed: 0, entries: [] };
+    const slugCounts = new Map<string, number>();
+    for (const lead of shortlistLeads) {
+      const packageEntry = await packageLead(
+        config.paths,
+        lead,
+        slugCounts,
+        resolvedDependencies.packageReport,
+        knownSecrets
+      );
+      summary.packages.entries.push(packageEntry);
+      if (packageEntry.status === "packaged") {
+        summary.packages.packaged += 1;
+      } else if (packageEntry.status === "skipped") {
+        summary.packages.skipped += 1;
+      } else {
+        summary.packages.failed += 1;
       }
-
-      updatePackagingStage(summary);
-      if (summary.packages.failed > 0) {
-        summary.status = "failed";
-        summary.error = {
-          stage: "packaging",
-          message: `${summary.packages.failed} package ${summary.packages.failed === 1 ? "entry" : "entries"} failed`
-        };
-        await throwPersistedWorkflowFailure(summary);
-      }
-      await writeWorkflowCheckpoint(config, summary, shortlistLeads);
-    }
-  } catch (error) {
-    if (error instanceof WorkflowRunError) {
-      throw error;
     }
 
-    const failedStage =
-      summary.stages.discovery.status !== "success"
-        ? "discovery"
-        : summary.stages.shortlist.status !== "success"
-          ? "shortlist"
-          : summary.stages.review.status === "not-run"
-            ? "review"
-            : "packaging";
-    await throwStageFailure(summary, failedStage, error, knownSecrets);
+    updatePackagingStage(summary);
+    if (summary.packages.failed > 0) {
+      summary.status = "failed";
+      summary.error = {
+        stage: "packaging",
+        message: `${summary.packages.failed} package ${summary.packages.failed === 1 ? "entry" : "entries"} failed`
+      };
+      await throwPersistedWorkflowFailure(summary, persistFailedState);
+    }
+    await writeWorkflowCheckpoint(config, summary, shortlistLeads);
+    checkpointHash = await hashWorkflowCheckpoint(config);
+    await persistState("running", null);
   }
 
   await writeWorkflowSummary(summary);
+  await persistState("completed", null);
   return summary;
 }
 

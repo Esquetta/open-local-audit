@@ -5,8 +5,20 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderProspectRowsCsv } from "../src/discovery.js";
 import { runDiscovery, type DiscoveryRunOptions } from "../src/discovery-runner.js";
+import * as overture from "../src/overture.js";
 
 describe("runDiscovery", () => {
+  it("runs keyless discovery and preserves business detail without auditing in dry-run", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-free-discovery-"));
+    try {
+      const source = vi.spyOn(overture, "fetchOvertureCandidates").mockResolvedValue([{ source: "overture", sourceId: "place-1", label: "Sample", sourceMetadata: { phones: ["+902121234567"], country: "TR" } }]);
+      const result = await runDiscovery({ provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", profile: "dental", exportCsv: join(dir, "leads.csv"), dryRun: true, concurrency: 1 });
+      expect(source).toHaveBeenCalledWith(expect.objectContaining({ bbox: [28.8, 40.9, 29.1, 41.1], category: "dental" }));
+      expect(result.rows[0]).toMatchObject({ publicPhone: "+902121234567", hasWebsite: "unknown", auditStatus: "not-audited" });
+      expect(result.metrics?.discoveryMs).toBeGreaterThanOrEqual(0);
+      expect(result.metrics?.websites).toEqual([]);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();

@@ -31,7 +31,7 @@ export interface WorkflowPreflightReport {
   version: 1;
   status: WorkflowPreflightStatus;
   checks: WorkflowPreflightCheck[];
-  provider?: "manual-csv" | "google-places";
+  provider?: ResolvedWorkflowConfig["discovery"]["provider"];
   stages?: WorkflowPreflightStage[];
   outputs?: { outDir: string } & WorkflowManagedPaths;
   limits?: { maxCandidates: number | null; maxAudits: number | null };
@@ -221,7 +221,7 @@ export async function runWorkflowPreflightEvaluationWithDependencies(
       message: inputStatus === "readable" ? "Discovery input is readable" : "Discovery input must be a readable regular file",
       path: config.discovery.input
     });
-  } else {
+  } else if (config.discovery.provider === "google-places") {
     const hasApiKey = Boolean(dependencies.resolveGoogleMapsApiKey()?.trim());
     checks.push({
       id: "google-api-key",
@@ -286,7 +286,7 @@ export async function runWorkflowPreflightEvaluationWithDependencies(
       stages,
       outputs: { outDir: config.outDir, ...config.paths },
       limits: {
-        maxCandidates: config.discovery.provider === "google-places" ? config.discovery.limit : null,
+        maxCandidates: config.discovery.provider !== "manual-csv" ? config.discovery.limit : null,
         maxAudits: config.discovery.maxAudits ?? null
       }
     }

@@ -36,6 +36,11 @@ import {
   runWorkflowPreflight
 } from "./workflow-preflight.js";
 import { renderWorkflowPlanJson, renderWorkflowPlanTerminal, runWorkflowPlan } from "./workflow-plan.js";
+import {
+  renderWorkflowStatusJson,
+  renderWorkflowStatusTerminal,
+  runWorkflowStatus
+} from "./workflow-status.js";
 import { runResolvedWorkflow } from "./workflow.js";
 
 const program = new Command().enablePositionalOptions();
@@ -59,7 +64,12 @@ const discoveryProgram = program
   .description("Discover local lead candidates from an operator-provided source and prepare prospect triage output.")
   .argument("[query]", "provider-specific discovery query")
   .option("--input <path>", "read candidate businesses from a manual CSV file")
-  .option("--provider <provider>", "discovery provider: manual-csv or google-places", "manual-csv")
+  .option("--provider <provider>", "discovery provider: overture (default), manual-csv (with --input), or google-places")
+  .option("--city <name>", "city name for keyless Overture discovery")
+  .option("--country <code>", "two-letter country code, for example TR, US, DE, GB")
+  .option("--bbox <bounds>", "search bounds west,south,east,north instead of a city")
+  .option("--radius-km <km>", "city search bounding-box half-width in km (maximum 50)", "10")
+  .option("--release <release>", "pin an Overture release for repeatable searches")
   .option("--profile <profile>", "default industry profile for candidates", "generic")
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--brand-config <path>", "read report branding from a JSON file")
@@ -70,7 +80,7 @@ const discoveryProgram = program
   .option("--review-csv <path>", "write or merge a local discovery review queue CSV")
   .option("--duplicates-json <path>", "write duplicate lead groups as JSON")
   .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
-  .option("--limit <count>", "maximum Google Places candidates to request", "10")
+  .option("--limit <count>", "maximum discovered candidates to return", "10")
   .option("--max-audits <count>", "maximum website-present candidates to audit")
   .option("--min-opportunity-score <score>", "export only leads at or above an opportunity score")
   .option("--concurrency <count>", "maximum concurrent audits when dry-run is not used", "1")
@@ -78,6 +88,9 @@ const discoveryProgram = program
     "after",
     `
 Discovery boundaries:
+  Overture discovery needs no API key. Use: discover dental --city Istanbul --country TR
+  City lookup uses GeoNames cities15000 (CC BY 4.0); smaller places can use --bbox.
+  Public source data can be incomplete. Missing website data means unknown, not no website.
   --provider google-places requires GOOGLE_MAPS_API_KEY and uses the official Places Text Search API.
   Google Maps scraping, reviews/photos collection, and outreach sending are not supported.
 `
@@ -99,6 +112,7 @@ function renderDiscoverySummary(summary: DiscoverySummary): string {
 discoveryProgram.action(async (query?: string) => {
   try {
     const rawDiscoveryOptions = optsWithLocalCliPrecedence(discoveryProgram);
+    rawDiscoveryOptions.provider ??= rawDiscoveryOptions.input ? "manual-csv" : "overture";
     const options = cliOptionsSchema
       .pick({
         input: true,
@@ -110,6 +124,11 @@ discoveryProgram.action(async (query?: string) => {
         dryRun: true,
         concurrency: true,
         provider: true,
+        city: true,
+        country: true,
+        bbox: true,
+        radiusKm: true,
+        release: true,
         limit: true,
         maxAudits: true,
         summaryJson: true,
@@ -127,6 +146,11 @@ discoveryProgram.action(async (query?: string) => {
 
     const { rows, summary } = await runDiscovery({
       provider: options.provider,
+      city: options.city,
+      country: options.country,
+      bbox: options.bbox,
+      radiusKm: options.radiusKm,
+      release: options.release,
       query,
       input: options.input,
       profile: options.profile,
@@ -161,15 +185,27 @@ const workflowProgram = program
   .option("--check", "validate workflow readiness without running it", false)
   .option("--plan", "show readiness and resolved execution plan without running it", false)
   .option("--resume", "resume from the latest valid workflow checkpoint", false)
-  .option("--format <format>", "workflow check or plan output format: terminal or json");
+  .option("--status", "show latest persisted workflow state without running it", false)
+  .option("--format <format>", "workflow check, plan, or status output format: terminal or json");
 
 workflowProgram.action(async () => {
   try {
-    const options = workflowProgram.opts<{ config?: string; check: boolean; plan: boolean; resume: boolean; format?: string }>();
+    const options = workflowProgram.opts<{
+      config?: string;
+      check: boolean;
+      plan: boolean;
+      resume: boolean;
+      status: boolean;
+      format?: string;
+    }>();
     const format = workflowProgram.getOptionValueSource("format") === "cli" ? options.format : undefined;
     const config = options.config;
     if (!config) {
       throw new Error("--config is required for workflow");
+    }
+
+    if (options.status && (options.check || options.plan || options.resume)) {
+      throw new Error("workflow modes cannot be used together: --status, --check, --plan, and --resume are mutually exclusive");
     }
 
     if (options.resume && (options.check || options.plan || format !== undefined)) {
@@ -180,14 +216,30 @@ workflowProgram.action(async () => {
       throw new Error("workflow --check and --plan cannot be used together");
     }
 
-    if (!options.check && !options.plan && format !== undefined) {
-      throw new Error("--format is only supported with workflow --check or --plan");
+    if (!options.check && !options.plan && !options.status && format !== undefined) {
+      throw new Error("--format is only supported with workflow --check, --plan, or --status");
     }
 
-    if (options.check || options.plan) {
+    if (options.check || options.plan || options.status) {
       const outputFormat = format ?? "terminal";
       if (outputFormat !== "terminal" && outputFormat !== "json") {
         throw new Error("workflow --format must be terminal or json");
+      }
+
+      if (options.status) {
+        const report = await runWorkflowStatus(config);
+        process.stdout.write(
+          outputFormat === "json"
+            ? renderWorkflowStatusJson(report)
+            : renderWorkflowStatusTerminal(report, config)
+        );
+        if (report.status === "failed" || report.status === "invalid") {
+          if (outputFormat === "terminal") {
+            process.stderr.write(`open-local-audit: workflow status ${report.status}\n`);
+          }
+          process.exitCode = 1;
+        }
+        return;
       }
 
       if (options.check) {

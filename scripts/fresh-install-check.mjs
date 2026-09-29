@@ -36,13 +36,22 @@ try {
     [
       "--input-type=module",
       "--eval",
-      `const api = await import(${JSON.stringify(pkg.name)});\nfor (const name of ["runWorkflowPreflight", "renderWorkflowPreflightTerminal", "renderWorkflowPreflightJson", "runWorkflowPlan", "renderWorkflowPlanTerminal", "renderWorkflowPlanJson"]) {\n  if (typeof api[name] !== "function") throw new Error(\`Expected package export \${name} to be a function\`);\n}`
+      `const { existsSync, writeFileSync } = await import("node:fs");\nconst { join } = await import("node:path");\nconst api = await import(${JSON.stringify(pkg.name)});\nfor (const name of ["runWorkflowPreflight", "renderWorkflowPreflightTerminal", "renderWorkflowPreflightJson", "runWorkflowPlan", "renderWorkflowPlanTerminal", "renderWorkflowPlanJson", "runWorkflowStatus", "renderWorkflowStatusTerminal", "renderWorkflowStatusJson"]) {\n  if (typeof api[name] !== "function") throw new Error(\`Expected package export \${name} to be a function\`);\n}\nconst configPath = join(process.cwd(), "workflow-status.json");\nconst outDir = join(process.cwd(), "workflow-status-output");\nwriteFileSync(configPath, JSON.stringify({ version: 1, outDir: "./workflow-status-output", discovery: { provider: "manual-csv", input: "./places.csv" }, shortlist: {} }));\nconst report = await api.runWorkflowStatus(configPath);\nif (report.status !== "not-started") throw new Error(\`Expected not-started workflow status, received \${report.status}\`);\nif (existsSync(outDir)) throw new Error("Workflow status created the output directory");`
+    ],
+    { cwd: consumerDir, encoding: "utf8" }
+  );
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `const api = await import(${JSON.stringify(pkg.name)});\nfor (const name of ["fetchOvertureCandidates", "enrichWebsite", "parseDiscoveryBbox", "resolveDiscoveryCity"]) {\n  if (typeof api[name] !== "function") throw new Error("Missing free discovery export: " + name);\n}\nconst bbox = api.parseDiscoveryBbox("28.8,40.9,29.1,41.1");\nif (bbox.length !== 4 || bbox[0] !== 28.8) throw new Error("Packaged discovery bounds failed");`
     ],
     { cwd: consumerDir, encoding: "utf8" }
   );
   writeFileSync(
     join(consumerDir, "consumer-check.ts"),
-    `import { renderWorkflowPlanJson, renderWorkflowPlanTerminal, runWorkflowPlan } from ${JSON.stringify(pkg.name)};\nimport type {\n  WorkflowPlanArtifactId,\n  WorkflowPlanNetworkAccess,\n  WorkflowPlanReport,\n  WorkflowPlanStatus,\n  WorkflowPlanStep,\n  WorkflowPlanStepId,\n  WorkflowPlanStepState\n} from ${JSON.stringify(pkg.name)};\n\nconst artifactId: WorkflowPlanArtifactId = "leads-csv";\nconst networkAccess: WorkflowPlanNetworkAccess = "website-audits";\nconst status: WorkflowPlanStatus = "ready";\nconst stepId: WorkflowPlanStepId = "discovery";\nconst stepState: WorkflowPlanStepState = "will-run";\nconst step: WorkflowPlanStep = {\n  id: stepId,\n  state: stepState,\n  dependsOn: [],\n  inputs: [],\n  outputs: [artifactId],\n  networkAccess: [networkAccess],\n  settings: {\n    provider: "manual-csv",\n    profile: "dental",\n    concurrency: 1,\n    maxCandidates: null,\n    maxAudits: null\n  }\n};\nconst report: WorkflowPlanReport = {\n  version: 1,\n  status,\n  preflight: { version: 1, status, checks: [], stages: [] },\n  artifacts: { [artifactId]: "C:/work/leads.csv" },\n  steps: [step]\n};\n\nvoid renderWorkflowPlanTerminal(report, "workflow.json");\nvoid renderWorkflowPlanJson(report);\nvoid runWorkflowPlan("workflow.json");\n`
+    `import {\n  renderWorkflowPlanJson,\n  renderWorkflowPlanTerminal,\n  renderWorkflowStatusJson,\n  renderWorkflowStatusTerminal,\n  runWorkflowPlan,\n  runWorkflowStatus\n} from ${JSON.stringify(pkg.name)};\nimport type {\n  WorkflowArtifactValidation,\n  WorkflowPlanArtifactId,\n  WorkflowPlanNetworkAccess,\n  WorkflowPlanReport,\n  WorkflowPlanStatus,\n  WorkflowPlanStep,\n  WorkflowPlanStepId,\n  WorkflowPlanStepState,\n  WorkflowStatusNextAction,\n  WorkflowStatusNextActionKind,\n  WorkflowStatusReport,\n  WorkflowStatusReportStatus\n} from ${JSON.stringify(pkg.name)};\n\nconst artifactId: WorkflowPlanArtifactId = "leads-csv";\nconst networkAccess: WorkflowPlanNetworkAccess = "website-audits";\nconst status: WorkflowPlanStatus = "ready";\nconst stepId: WorkflowPlanStepId = "discovery";\nconst stepState: WorkflowPlanStepState = "will-run";\nconst step: WorkflowPlanStep = {\n  id: stepId,\n  state: stepState,\n  dependsOn: [],\n  inputs: [],\n  outputs: [artifactId],\n  networkAccess: [networkAccess],\n  settings: {\n    provider: "manual-csv",\n    profile: "dental",\n    concurrency: 1,\n    maxCandidates: null,\n    maxAudits: null\n  }\n};\nconst report: WorkflowPlanReport = {\n  version: 1,\n  status,\n  preflight: { version: 1, status, checks: [], stages: [] },\n  artifacts: { [artifactId]: "C:/work/leads.csv" },\n  steps: [step]\n};\nconst statusValue: WorkflowStatusReportStatus = "not-started";\nconst artifactValidation: WorkflowArtifactValidation = "not-applicable";\nconst nextActionKind: WorkflowStatusNextActionKind = "run";\nconst nextAction: WorkflowStatusNextAction = { kind: nextActionKind, argv: ["workflow", "--config", "workflow.json"], message: "Run the workflow from the beginning." };\nconst statusReport: WorkflowStatusReport = {\n  version: 1,\n  status: statusValue,\n  currentStage: null,\n  lastSuccessfulStage: null,\n  resumeAvailable: false,\n  updatedAt: null,\n  stages: { discovery: { status: "not-run" }, shortlist: { status: "not-run" }, review: { status: "skipped" }, packaging: { status: "skipped" } },\n  artifactValidation,\n  nextAction,\n  error: null\n};\n\nvoid renderWorkflowPlanTerminal(report, "workflow.json");\nvoid renderWorkflowPlanJson(report);\nvoid runWorkflowPlan("workflow.json");\nvoid renderWorkflowStatusTerminal(statusReport, "workflow.json");\nvoid renderWorkflowStatusJson(statusReport);\nvoid runWorkflowStatus("workflow.json");\n`
   );
   execFileSync(
     process.execPath,
@@ -61,9 +70,11 @@ try {
     { cwd: consumerDir, encoding: "utf8" }
   );
   for (const documentationPath of [
+    "docs/guides/free-discovery.md",
     "docs/architecture/workflow-command.md",
     "docs/architecture/workflow-preflight.md",
-    "docs/architecture/workflow-plan.md"
+    "docs/architecture/workflow-plan.md",
+    "docs/architecture/workflow-status.md"
   ]) {
     readFileSync(join(consumerDir, "node_modules", pkg.name, documentationPath), "utf8");
   }

@@ -5,7 +5,10 @@ import {
   renderWorkflowPreflightJson,
   renderWorkflowPreflightTerminal,
   runWorkflowPlan,
-  runWorkflowPreflight
+  runWorkflowPreflight,
+  renderWorkflowStatusJson,
+  renderWorkflowStatusTerminal,
+  runWorkflowStatus
 } from "../src/index.js";
 import * as publicApi from "../src/index.js";
 import type {
@@ -21,7 +24,12 @@ import type {
   WorkflowPreflightCheckStatus,
   WorkflowPreflightReport,
   WorkflowPreflightStage,
-  WorkflowPreflightStatus
+  WorkflowPreflightStatus,
+  WorkflowArtifactValidation,
+  WorkflowStatusNextAction,
+  WorkflowStatusNextActionKind,
+  WorkflowStatusReport,
+  WorkflowStatusReportStatus
 } from "../src/index.js";
 
 describe("public API", () => {
@@ -95,6 +103,49 @@ describe("public API", () => {
     if (false) {
       // @ts-expect-error The package-root preflight API does not accept dependency overrides.
       void runWorkflowPreflight("workflow.json", {});
+    }
+  });
+
+  it("exports workflow status values and report contract types without internal seams", () => {
+    const status: WorkflowStatusReportStatus = "not-started";
+    const artifactValidation: WorkflowArtifactValidation = "not-applicable";
+    const nextActionKind: WorkflowStatusNextActionKind = "run";
+    const nextAction: WorkflowStatusNextAction = {
+      kind: nextActionKind,
+      argv: ["workflow", "--config", "workflow.json"],
+      message: "Run the workflow from the beginning."
+    };
+    const report: WorkflowStatusReport = {
+      version: 1,
+      status,
+      currentStage: null,
+      lastSuccessfulStage: null,
+      resumeAvailable: false,
+      updatedAt: null,
+      stages: {
+        discovery: { status: "not-run" },
+        shortlist: { status: "not-run" },
+        review: { status: "skipped" },
+        packaging: { status: "skipped" }
+      },
+      artifactValidation,
+      nextAction,
+      error: null
+    };
+
+    expect(runWorkflowStatus).toBeTypeOf("function");
+    expect(renderWorkflowStatusTerminal(report, "workflow.json")).toContain("NOT STARTED");
+    expect(JSON.parse(renderWorkflowStatusJson(report))).toEqual(report);
+    expect(publicApi).not.toHaveProperty("inspectWorkflowCheckpoint");
+    expect(publicApi).not.toHaveProperty("workflowConfigFingerprint");
+    expect(publicApi).not.toHaveProperty("readWorkflowState");
+    expect(publicApi).not.toHaveProperty("createWorkflowState");
+  });
+
+  it("accepts only a configuration path for workflow status", () => {
+    if (false) {
+      // @ts-expect-error The package-root status API does not accept dependency overrides.
+      void runWorkflowStatus("workflow.json", {});
     }
   });
 });

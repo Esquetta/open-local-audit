@@ -59,6 +59,14 @@ describe("workflow plan", () => {
     await writeFile(inputPath, "name\nExample\n", "utf8");
   }
 
+  it("declares open-data network access without requesting Google credentials", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", maxAudits: 0 } }));
+    const report = await runWorkflowPlan(configPath);
+    expect(report.status).toBe("ready");
+    expect(findStep(report, "discovery").networkAccess).toEqual(["overture"]);
+    expect(renderWorkflowPlanTerminal(report, configPath)).toContain("Overture open data");
+  });
+
   it("builds a deterministic manual workflow plan with only enabled artifacts", async () => {
     await writeConfig(manualConfig());
     await writeManualInput();

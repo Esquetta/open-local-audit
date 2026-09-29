@@ -22,6 +22,26 @@ describe("workflow configuration", () => {
     await writeFile(configPath, JSON.stringify(config), "utf8");
   }
 
+  it("accepts keyless Overture discovery with bounded geography", async () => {
+    await writeConfig({ version: 1, outDir: "./output", discovery: { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1" }, shortlist: {} });
+    const config = await readWorkflowConfig(configPath);
+    expect(config.discovery).toMatchObject({ provider: "overture", query: "dental", limit: 10 });
+  });
+
+  it("rejects unbounded Overture discovery before creating output", async () => {
+    await writeConfig({ version: 1, outDir: "./output", discovery: { provider: "overture", query: "dental", bbox: "29,41,28,40" }, shortlist: {} });
+    await expect(readWorkflowConfig(configPath)).rejects.toThrow();
+  });
+
+  it.each([
+    { bbox: "0,0,6,1" },
+    { concurrency: 9 },
+    { query: "invalid category" }
+  ])("rejects Overture configuration that the runner cannot execute: %j", async (invalid) => {
+    await writeConfig({ version: 1, outDir: "./output", discovery: { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", ...invalid }, shortlist: {} });
+    await expect(readWorkflowConfig(configPath)).rejects.toThrow();
+  });
+
   function validManualConfig(): Record<string, unknown> {
     return {
       version: 1,
