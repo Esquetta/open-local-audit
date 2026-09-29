@@ -3,7 +3,7 @@ import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditProfile, PublicContact } from "./types.js";
 
-export type DiscoveryProviderName = "manual-csv" | "google-places";
+export type DiscoveryProviderName = "manual-csv" | "google-places" | "overture";
 
 export interface PlaceCandidate {
   source: DiscoveryProviderName;
@@ -54,7 +54,7 @@ export interface ProspectExportRow {
   opportunityReasons: string[];
   pitchAngle: string;
   recommendedOffer: string;
-  estimatedNeed: "High" | "Medium" | "Low";
+  estimatedNeed: "High" | "Medium" | "Low" | "Unknown";
   outreachPriorityReason: string;
   publicEmail?: string;
   publicPhone?: string;
@@ -73,6 +73,18 @@ export interface ProspectExportRow {
   lastReviewedAt?: string;
   reportPath?: string;
   error?: string;
+  address?: string;
+  country?: string;
+  locality?: string;
+  region?: string;
+  latitude?: number;
+  longitude?: number;
+  datasetRelease?: string;
+  sourceUrl?: string;
+  retrievedAt?: string;
+  confidence?: number;
+  operatingStatus?: string;
+  sourceProvenance?: Array<Record<string, string>>;
 }
 
 export interface LeadSuppressionEntry {
@@ -459,12 +471,12 @@ export async function fetchGooglePlacesCandidates(
   }));
 }
 
-export function resolveCandidateWebsite(candidate: Pick<PlaceCandidate, "websiteUri">): WebsiteResolution {
+export function resolveCandidateWebsite(candidate: Pick<PlaceCandidate, "websiteUri"> & Partial<Pick<PlaceCandidate, "source">>): WebsiteResolution {
   if (!candidate.websiteUri?.trim()) {
     return {
       hasWebsite: false,
-      status: "missing",
-      reason: "No website URL provided"
+      status: candidate.source === "overture" ? "skipped" : "missing",
+      reason: candidate.source === "overture" ? "Website availability is unknown; source contains no website URL" : "No website URL provided"
     };
   }
 
@@ -729,6 +741,9 @@ export function findFuzzyDuplicateProspectGroups(rows: ProspectExportRow[]): Fuz
 }
 
 function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority" | "nextAction"> {
+  if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
+    return { priority: "medium", nextAction: "Verify the business and its website before proposing work." };
+  }
   if (input.resolution.status === "missing") {
     return {
       priority: "high",
@@ -781,6 +796,7 @@ function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority
 }
 
 function opportunityScoreFor(input: ProspectRowInput): number {
+  if (input.candidate.source === "overture" && !input.resolution.hasWebsite) return 0;
   if (input.resolution.status === "missing") {
     return 95;
   }
@@ -810,6 +826,9 @@ function opportunityScoreFor(input: ProspectRowInput): number {
 }
 
 function opportunityReasonsFor(input: ProspectRowInput): string[] {
+  if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
+    return ["Website availability is unknown; missing source data is not evidence of a website-build opportunity"];
+  }
   if (input.resolution.status === "missing") {
     return ["No website URL found", "Website-build opportunity"];
   }
@@ -848,6 +867,9 @@ function enrichmentFor(input: ProspectRowInput): Pick<
   "pitchAngle" | "recommendedOffer" | "estimatedNeed" | "outreachPriorityReason"
 > {
   const reasons = opportunityReasonsFor(input);
+  if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
+    return { pitchAngle: "Verify business information", recommendedOffer: "Manual qualification", estimatedNeed: "Unknown", outreachPriorityReason: reasons.join("; ") };
+  }
   if (input.resolution.status === "missing") {
     return {
       pitchAngle: "Launch a credible local website",
@@ -906,7 +928,14 @@ function contactHandoffFor(input: ProspectRowInput): Pick<
   ProspectExportRow,
   "preferredContactChannel" | "outreachAction" | "contactabilityReason"
 > {
-  const contact = input.audit?.contact;
+  const contact = prospectContact(input);
+  if (input.candidate.source === "overture" && (contact?.publicEmail || contact?.publicPhone)) {
+    return {
+      preferredContactChannel: contact.publicEmail ? "email" : "phone",
+      outreachAction: "Verify the business contact and review available evidence before outreach.",
+      contactabilityReason: "Public contact found in the business source or website; ownership and deliverability are not verified."
+    };
+  }
   if (contact?.publicEmail) {
     return {
       preferredContactChannel: "email",
@@ -982,12 +1011,34 @@ function hasWebsiteValue(resolution: WebsiteResolution): ProspectExportRow["hasW
   return "unknown";
 }
 
+function prospectContact(input: ProspectRowInput): PublicContact | undefined {
+  if (input.candidate.source !== "overture") return input.audit?.contact;
+  const metadata = input.candidate.sourceMetadata ?? {};
+  const first = (key: string): string | undefined => Array.isArray(metadata[key]) ? metadata[key].find((value: unknown) => typeof value === "string" && value.trim()) : undefined;
+  const websiteContact = input.audit?.contact;
+  const publicEmail = websiteContact?.publicEmail ?? first("emails");
+  const publicPhone = websiteContact?.publicPhone ?? first("phones");
+  return {
+    ...websiteContact,
+    publicEmail,
+    publicPhone,
+    socialProfiles: Array.from(new Set([...(websiteContact?.socialProfiles ?? []), ...(Array.isArray(metadata.socials) ? metadata.socials.filter((value): value is string => typeof value === "string") : [])])),
+    contactConfidence: websiteContact?.contactConfidence !== undefined && websiteContact.contactConfidence !== "None" ? websiteContact.contactConfidence : publicEmail || publicPhone ? "Low" : "None",
+    contactSource: [websiteContact?.contactSource, "Overture Places (source data; not independently verified)"].filter(Boolean).join("; ")
+  };
+}
+
 export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow[] {
   return inputs.map((input) => {
     const audit = input.audit ?? { status: "not-audited" as const };
     const priority = priorityFor(input);
     const enrichment = enrichmentFor(input);
     const handoff = contactHandoffFor(input);
+    const contact = prospectContact(input);
+    const metadata = input.candidate.sourceMetadata ?? {};
+    const details = input.candidate.source === "overture" ? Object.fromEntries(
+      ["address", "country", "locality", "region", "latitude", "longitude", "datasetRelease", "sourceUrl", "retrievedAt", "confidence", "operatingStatus", "sourceProvenance"].map((key) => [key, metadata[key]])
+    ) : {};
 
     return {
       leadKey: stableLeadKey(input),
@@ -1004,13 +1055,14 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       opportunityScore: opportunityScoreFor(input),
       opportunityReasons: opportunityReasonsFor(input),
       ...enrichment,
-      publicEmail: audit.contact?.publicEmail,
-      publicPhone: audit.contact?.publicPhone,
-      whatsappUrl: audit.contact?.whatsappUrl,
-      contactPageUrl: audit.contact?.contactPageUrl,
-      socialProfiles: audit.contact?.socialProfiles ?? [],
-      contactConfidence: audit.contact?.contactConfidence ?? "None",
-      contactSource: audit.contact?.contactSource,
+      ...details,
+      publicEmail: contact?.publicEmail,
+      publicPhone: contact?.publicPhone,
+      whatsappUrl: contact?.whatsappUrl,
+      contactPageUrl: contact?.contactPageUrl,
+      socialProfiles: contact?.socialProfiles ?? [],
+      contactConfidence: contact?.contactConfidence ?? "None",
+      contactSource: contact?.contactSource,
       ...handoff,
       ...priority,
       reviewStatus: "new",
@@ -1110,6 +1162,9 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
     return renderCrmProspectRowsCsv(rows);
   }
 
+  const detailColumns = rows.some((row) => row.source === "overture")
+    ? ["address", "country", "locality", "region", "latitude", "longitude", "datasetRelease", "sourceUrl", "retrievedAt", "confidence", "operatingStatus", "sourceProvenance"] as const
+    : [];
   const header = [
     "leadKey",
     "source",
@@ -1144,7 +1199,8 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
     "reviewReason",
     "lastReviewedAt",
     "reportPath",
-    "error"
+    "error",
+    ...detailColumns
   ];
   const body = rows.map((row) =>
     [
@@ -1181,7 +1237,8 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
       row.reviewReason ?? "",
       row.lastReviewedAt ?? "",
       row.reportPath ?? "",
-      row.error ?? ""
+      row.error ?? "",
+      ...detailColumns.map((key) => key === "sourceProvenance" ? JSON.stringify(row[key] ?? []) : String(row[key] ?? ""))
     ]
       .map(escapeCsvCell)
       .join(",")

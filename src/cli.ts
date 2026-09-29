@@ -64,7 +64,12 @@ const discoveryProgram = program
   .description("Discover local lead candidates from an operator-provided source and prepare prospect triage output.")
   .argument("[query]", "provider-specific discovery query")
   .option("--input <path>", "read candidate businesses from a manual CSV file")
-  .option("--provider <provider>", "discovery provider: manual-csv or google-places", "manual-csv")
+  .option("--provider <provider>", "discovery provider: overture (default), manual-csv (with --input), or google-places")
+  .option("--city <name>", "city name for keyless Overture discovery")
+  .option("--country <code>", "two-letter country code, for example TR, US, DE, GB")
+  .option("--bbox <bounds>", "search bounds west,south,east,north instead of a city")
+  .option("--radius-km <km>", "city search bounding-box half-width in km (maximum 50)", "10")
+  .option("--release <release>", "pin an Overture release for repeatable searches")
   .option("--profile <profile>", "default industry profile for candidates", "generic")
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--brand-config <path>", "read report branding from a JSON file")
@@ -75,7 +80,7 @@ const discoveryProgram = program
   .option("--review-csv <path>", "write or merge a local discovery review queue CSV")
   .option("--duplicates-json <path>", "write duplicate lead groups as JSON")
   .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
-  .option("--limit <count>", "maximum Google Places candidates to request", "10")
+  .option("--limit <count>", "maximum discovered candidates to return", "10")
   .option("--max-audits <count>", "maximum website-present candidates to audit")
   .option("--min-opportunity-score <score>", "export only leads at or above an opportunity score")
   .option("--concurrency <count>", "maximum concurrent audits when dry-run is not used", "1")
@@ -83,6 +88,9 @@ const discoveryProgram = program
     "after",
     `
 Discovery boundaries:
+  Overture discovery needs no API key. Use: discover dental --city Istanbul --country TR
+  City lookup uses GeoNames cities15000 (CC BY 4.0); smaller places can use --bbox.
+  Public source data can be incomplete. Missing website data means unknown, not no website.
   --provider google-places requires GOOGLE_MAPS_API_KEY and uses the official Places Text Search API.
   Google Maps scraping, reviews/photos collection, and outreach sending are not supported.
 `
@@ -104,6 +112,7 @@ function renderDiscoverySummary(summary: DiscoverySummary): string {
 discoveryProgram.action(async (query?: string) => {
   try {
     const rawDiscoveryOptions = optsWithLocalCliPrecedence(discoveryProgram);
+    rawDiscoveryOptions.provider ??= rawDiscoveryOptions.input ? "manual-csv" : "overture";
     const options = cliOptionsSchema
       .pick({
         input: true,
@@ -115,6 +124,11 @@ discoveryProgram.action(async (query?: string) => {
         dryRun: true,
         concurrency: true,
         provider: true,
+        city: true,
+        country: true,
+        bbox: true,
+        radiusKm: true,
+        release: true,
         limit: true,
         maxAudits: true,
         summaryJson: true,
@@ -132,6 +146,11 @@ discoveryProgram.action(async (query?: string) => {
 
     const { rows, summary } = await runDiscovery({
       provider: options.provider,
+      city: options.city,
+      country: options.country,
+      bbox: options.bbox,
+      radiusKm: options.radiusKm,
+      release: options.release,
       query,
       input: options.input,
       profile: options.profile,

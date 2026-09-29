@@ -43,6 +43,11 @@ export interface DiscoveryRunOptions {
   minOpportunityScore?: number;
   concurrency: number;
   apiKey?: string;
+  city?: string;
+  country?: string;
+  bbox?: string;
+  radiusKm?: number;
+  release?: string;
   managedOutputRoot?: string;
   brand?: ReportBrandConfig;
 }
@@ -50,6 +55,13 @@ export interface DiscoveryRunOptions {
 export interface DiscoveryRunResult {
   rows: ProspectExportRow[];
   summary: DiscoverySummary;
+  metrics?: {
+    discoveryMs: number;
+    auditMs: number;
+    totalMs: number;
+    sourceCoverage?: { denominator: number; website: number; phone: number; email: number; address: number };
+    websites: Array<{ url: string; status: string; durationMs: number; pagesFetched: number; sourceUrls: string[]; error?: string; warnings?: string[] }>;
+  };
 }
 
 function preferredReportPath(slug: string, outputs: Array<{ format: string; path?: string }>): string | undefined {
@@ -77,6 +89,12 @@ async function readOptionalReviewCsv(path: string | undefined): Promise<LeadRevi
 }
 
 export async function runDiscovery(options: DiscoveryRunOptions): Promise<DiscoveryRunResult> {
+  const started = performance.now();
+  const websiteMetrics: NonNullable<DiscoveryRunResult["metrics"]>["websites"] = [];
+  const hostQueues = new Map<string, Promise<void>>();
+  if (options.provider === "overture" && (!Number.isInteger(options.concurrency) || options.concurrency < 1 || options.concurrency > 8)) {
+    throw new Error("Overture website concurrency must be between 1 and 8");
+  }
   if (!options.exportCsv) {
     throw new Error("--export-csv is required for discover output");
   }
@@ -95,20 +113,36 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
     }
   }
 
-  if (options.provider === "google-places" && options.input) {
+  if (options.provider !== "manual-csv" && options.input) {
     throw new Error("--input is only supported when --provider manual-csv is used");
   }
 
-  const candidates =
-    options.provider === "manual-csv"
-      ? await readManualDiscoveryCsv(options.input ?? "", {
+  let candidates;
+  if (options.provider === "overture") {
+    const { fetchOvertureCandidates } = await import("./overture.js");
+    const { cityBoundingBox, parseDiscoveryBbox, resolveDiscoveryCity } = await import("./discovery-location.js");
+    if (!options.query?.trim()) throw new Error("An industry category is required for Overture discovery");
+    if (options.bbox && (options.city || options.country)) throw new Error("Use either --bbox or --city with --country, not both");
+    if (!options.bbox && (!options.city || !options.country)) throw new Error("Overture discovery requires --city and --country, or --bbox");
+    const { join } = await import("node:path");
+    const bbox = options.bbox ? parseDiscoveryBbox(options.bbox) : cityBoundingBox(
+      await resolveDiscoveryCity(options.city!, options.country!, join(options.outDir ?? "reports", ".cache")), options.radiusKm
+    );
+    candidates = await fetchOvertureCandidates({ bbox, category: options.query, limit: options.limit, defaultProfile: options.profile, release: options.release });
+  } else if (options.provider === "manual-csv") {
+    candidates = await readManualDiscoveryCsv(options.input ?? "", {
           defaultProfile: options.profile
-        })
-      : await fetchGooglePlacesCandidates(options.query ?? "", {
+        });
+  } else if (options.provider === "google-places") {
+    candidates = await fetchGooglePlacesCandidates(options.query ?? "", {
           apiKey: options.apiKey,
           defaultProfile: options.profile,
           limit: options.limit
         });
+  } else {
+    throw new Error("Unsupported discovery provider");
+  }
+  const discoveryMs = performance.now() - started;
 
   const resolutions = candidates.map(resolveCandidateWebsite);
   let prospectInputs: ProspectRowInput[] = candidates.map((candidate, index) => ({
@@ -122,7 +156,16 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
   ];
   const suppressionResult = filterSuppressedProspects(prospectInputs, suppressionEntries);
   prospectInputs = suppressionResult.included;
+  const sourceRows = options.provider === "overture" ? buildProspectRows(prospectInputs) : [];
+  const sourceCoverage = {
+    denominator: sourceRows.length,
+    website: sourceRows.filter((row) => row.hasWebsite === "yes").length,
+    phone: sourceRows.filter((row) => row.publicPhone).length,
+    email: sourceRows.filter((row) => row.publicEmail).length,
+    address: sourceRows.filter((row) => row.address).length
+  };
 
+  const auditStarted = performance.now();
   if (!options.dryRun) {
     const auditable = prospectInputs
       .map((input, index) => ({ ...input, index }))
@@ -142,6 +185,29 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
         concurrency: options.concurrency,
         profile: options.profile,
         brand: options.brand,
+        ...(options.provider === "overture" ? {
+          audit: async (url: string, context: { profile: AuditProfile }) => {
+            const host = new URL(url).hostname.replace(/^www\./, "");
+            const previous = hostQueues.get(host) ?? Promise.resolve();
+            let unlock!: () => void;
+            const lock = new Promise<void>((resolve) => { unlock = resolve; });
+            hostQueues.set(host, lock);
+            await previous;
+            try {
+            const { enrichWebsite } = await import("./website-enrichment.js");
+            const { auditSnapshot } = await import("./audit.js");
+            const enriched = await enrichWebsite(url);
+            websiteMetrics.push({ url, status: enriched.status, durationMs: enriched.durationMs, pagesFetched: enriched.pagesFetched, sourceUrls: enriched.sourceUrls, error: enriched.error, warnings: enriched.warnings });
+            if (enriched.status !== "success" || !enriched.snapshot) throw new Error(enriched.error ?? "Website enrichment did not return an auditable page");
+            const report = auditSnapshot(enriched.snapshot, undefined, { profile: context.profile });
+            report.evidence.push(...(enriched.warnings ?? []).map((value) => ({ label: "Website enrichment warning", value })));
+            return { ...report, contact: enriched.contact };
+            } finally {
+              unlock();
+              if (hostQueues.get(host) === lock) hostQueues.delete(host);
+            }
+          }
+        } : {}),
         managedOutputRoot: options.managedOutputRoot
       }
     );
@@ -179,6 +245,7 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
     });
   }
 
+  const auditMs = performance.now() - auditStarted;
   const rows = buildProspectRows(prospectInputs).filter((row) =>
     options.minOpportunityScore === undefined ? true : row.opportunityScore >= options.minOpportunityScore
   );
@@ -210,6 +277,7 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
 
   return {
     rows,
-    summary
+    summary,
+    ...(options.provider === "overture" ? { metrics: { discoveryMs, auditMs, totalMs: performance.now() - started, sourceCoverage, websites: websiteMetrics } } : {})
   };
 }

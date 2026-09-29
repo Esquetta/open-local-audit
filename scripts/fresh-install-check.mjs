@@ -40,6 +40,15 @@ try {
     ],
     { cwd: consumerDir, encoding: "utf8" }
   );
+  execFileSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `const api = await import(${JSON.stringify(pkg.name)});\nfor (const name of ["fetchOvertureCandidates", "enrichWebsite", "parseDiscoveryBbox", "resolveDiscoveryCity"]) {\n  if (typeof api[name] !== "function") throw new Error("Missing free discovery export: " + name);\n}\nconst bbox = api.parseDiscoveryBbox("28.8,40.9,29.1,41.1");\nif (bbox.length !== 4 || bbox[0] !== 28.8) throw new Error("Packaged discovery bounds failed");`
+    ],
+    { cwd: consumerDir, encoding: "utf8" }
+  );
   writeFileSync(
     join(consumerDir, "consumer-check.ts"),
     `import {\n  renderWorkflowPlanJson,\n  renderWorkflowPlanTerminal,\n  renderWorkflowStatusJson,\n  renderWorkflowStatusTerminal,\n  runWorkflowPlan,\n  runWorkflowStatus\n} from ${JSON.stringify(pkg.name)};\nimport type {\n  WorkflowArtifactValidation,\n  WorkflowPlanArtifactId,\n  WorkflowPlanNetworkAccess,\n  WorkflowPlanReport,\n  WorkflowPlanStatus,\n  WorkflowPlanStep,\n  WorkflowPlanStepId,\n  WorkflowPlanStepState,\n  WorkflowStatusNextAction,\n  WorkflowStatusNextActionKind,\n  WorkflowStatusReport,\n  WorkflowStatusReportStatus\n} from ${JSON.stringify(pkg.name)};\n\nconst artifactId: WorkflowPlanArtifactId = "leads-csv";\nconst networkAccess: WorkflowPlanNetworkAccess = "website-audits";\nconst status: WorkflowPlanStatus = "ready";\nconst stepId: WorkflowPlanStepId = "discovery";\nconst stepState: WorkflowPlanStepState = "will-run";\nconst step: WorkflowPlanStep = {\n  id: stepId,\n  state: stepState,\n  dependsOn: [],\n  inputs: [],\n  outputs: [artifactId],\n  networkAccess: [networkAccess],\n  settings: {\n    provider: "manual-csv",\n    profile: "dental",\n    concurrency: 1,\n    maxCandidates: null,\n    maxAudits: null\n  }\n};\nconst report: WorkflowPlanReport = {\n  version: 1,\n  status,\n  preflight: { version: 1, status, checks: [], stages: [] },\n  artifacts: { [artifactId]: "C:/work/leads.csv" },\n  steps: [step]\n};\nconst statusValue: WorkflowStatusReportStatus = "not-started";\nconst artifactValidation: WorkflowArtifactValidation = "not-applicable";\nconst nextActionKind: WorkflowStatusNextActionKind = "run";\nconst nextAction: WorkflowStatusNextAction = { kind: nextActionKind, argv: ["workflow", "--config", "workflow.json"], message: "Run the workflow from the beginning." };\nconst statusReport: WorkflowStatusReport = {\n  version: 1,\n  status: statusValue,\n  currentStage: null,\n  lastSuccessfulStage: null,\n  resumeAvailable: false,\n  updatedAt: null,\n  stages: { discovery: { status: "not-run" }, shortlist: { status: "not-run" }, review: { status: "skipped" }, packaging: { status: "skipped" } },\n  artifactValidation,\n  nextAction,\n  error: null\n};\n\nvoid renderWorkflowPlanTerminal(report, "workflow.json");\nvoid renderWorkflowPlanJson(report);\nvoid runWorkflowPlan("workflow.json");\nvoid renderWorkflowStatusTerminal(statusReport, "workflow.json");\nvoid renderWorkflowStatusJson(statusReport);\nvoid runWorkflowStatus("workflow.json");\n`
@@ -61,6 +70,7 @@ try {
     { cwd: consumerDir, encoding: "utf8" }
   );
   for (const documentationPath of [
+    "docs/guides/free-discovery.md",
     "docs/architecture/workflow-command.md",
     "docs/architecture/workflow-preflight.md",
     "docs/architecture/workflow-plan.md",

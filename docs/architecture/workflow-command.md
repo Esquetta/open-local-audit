@@ -40,7 +40,7 @@ The configuration uses a strict JSON contract. Only version `1` is accepted. Rel
 
 `version`, `outDir`, `discovery`, and `shortlist` are required. `review` and `packageReports` are optional. Unknown fields and invalid values are rejected before output files are created. `manual-csv` discovery requires `input`; `google-places` discovery requires `query` and resolves `GOOGLE_MAPS_API_KEY` only for that provider.
 
-The discovery object accepts either the existing `manual-csv` input or the existing `google-places` provider and its query. Google Places workflows continue to require `GOOGLE_MAPS_API_KEY`, display the billing warning, and use the existing candidate and audit limits.
+The discovery object accepts `manual-csv` input, `google-places` with a query, or keyless `overture` with a category `query` and geographic `bbox` string (`west,south,east,north`). Overture optionally accepts a pinned `release`; see the [free discovery guide](../guides/free-discovery.md). Its preflight does not resolve Google credentials, and its plan declares open-data network access. Google Places workflows continue to require `GOOGLE_MAPS_API_KEY`, display the billing warning, and use the existing candidate and audit limits.
 
 ## Managed Outputs
 

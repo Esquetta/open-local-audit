@@ -32,7 +32,7 @@ export const auditProfileSchema = z.enum([
   "hotel",
   "auto-service"
 ]);
-export const discoveryProviderSchema = z.enum(["manual-csv", "google-places"]);
+export const discoveryProviderSchema = z.enum(["manual-csv", "google-places", "overture"]);
 
 export const cliOptionsSchema = z.object({
   format: outputFormatSchema.default("markdown"),
@@ -52,6 +52,11 @@ export const cliOptionsSchema = z.object({
   exportCsv: z.string().optional(),
   exportPreset: exportPresetSchema.default("standard"),
   provider: discoveryProviderSchema.default("manual-csv"),
+  city: z.string().trim().min(1).optional(),
+  country: z.string().trim().regex(/^[A-Za-z]{2}$/).optional(),
+  bbox: z.string().trim().min(1).optional(),
+  radiusKm: z.coerce.number().positive().max(50).default(10),
+  release: z.string().regex(/^\d{4}-\d{2}-\d{2}\.\d+$/).optional(),
   dryRun: z.boolean().default(false),
   limit: z.coerce.number().int().positive().default(10),
   maxAudits: z.coerce.number().int().min(0).optional(),

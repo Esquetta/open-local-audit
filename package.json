@@ -1,6 +1,6 @@
 {
   "name": "open-local-audit",
-  "version": "0.67.0",
+  "version": "0.68.0",
   "description": "Open-source website and local presence auditor for small businesses.",
   "license": "MIT",
   "type": "module",
@@ -15,6 +15,7 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
+    "docs/guides/free-discovery.md",
     "docs/architecture/workflow-command.md",
     "docs/architecture/workflow-preflight.md",
     "docs/architecture/workflow-plan.md",
@@ -22,6 +23,7 @@
     "docs/architecture/workflow-status.md"
   ],
   "scripts": {
+    "benchmark:discovery": "tsx scripts/benchmark-discovery.ts",
     "build": "tsc -p tsconfig.build.json",
     "fresh-install-check": "node scripts/fresh-install-check.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
@@ -48,14 +50,18 @@
   },
   "homepage": "https://github.com/Esquetta/open-local-audit#readme",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19"
   },
   "dependencies": {
+    "@duckdb/node-api": "^1.5.6-r.1",
     "cheerio": "^1.2.0",
     "chrome-launcher": "^1.2.1",
     "commander": "^12.1.0",
-    "lighthouse": "12.6.1",
+    "fflate": "^0.8.3",
+    "lighthouse": "13.5.0",
     "pdfkit": "^0.18.0",
+    "robots-parser": "^3.0.1",
+    "undici": "7.30.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -63,6 +69,6 @@
     "@types/pdfkit": "^0.17.6",
     "tsx": "^4.22.4",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   }
 }

@@ -2,11 +2,12 @@
 
 ## Position
 
-Open Local Audit must be useful without becoming a scraping or spam engine. The tool should audit public websites provided by the operator or user, not harvest Google Maps or build unauthorized business databases.
+Open Local Audit audits public websites supplied by the operator or found in an explicitly requested open-data search. It must not harvest Google Maps or send automated outreach.
 
 ## Allowed behavior
 
 - Scan a user-provided public URL.
+- Discover bounded business candidates from Overture open data, preserving source attribution, and enrich their public websites with bounded robots-aware requests.
 - Follow normal redirects.
 - Inspect public HTML, metadata, links, images, and structured data.
 - Extract contact channels that are visibly published in the audited website HTML.
@@ -35,7 +36,7 @@ The Google Places provider is explicit and opt-in. It uses official Google Place
 
 Discovery operators should use `--limit` and `--max-audits` to control Google API usage and downstream site-audit volume. The CLI warns that Google Maps Platform billing may apply when `google-places` is selected.
 
-Public contact enrichment is website-derived only. Google Places still supplies only identity and website-resolution fields; email, phone, WhatsApp, contact-page, and social-profile columns come from the audited public website HTML. Dry-run discovery does not invent or enrich contact data because no website audit has run.
+For manual CSV and Google Places discovery, contact enrichment remains website-derived. Overture discovery also preserves available open-data business contacts and their source provenance, including in dry-run mode. Website extraction can complete these fields; neither source data nor extraction proves ownership or deliverability. Google Places still supplies only identity and website-resolution fields. No provider invents missing contact information.
 
 Outreach handoff fields are advisory local triage metadata. They can suggest a preferred manual channel and next action, but the CLI does not send messages, verify inbox ownership, dial phones, or sync contacts to external systems.
 

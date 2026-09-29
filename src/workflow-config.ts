@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { auditProfileSchema } from "./schema.js";
 import type { ShortlistSort } from "./shortlist.js";
+import { parseDiscoveryBbox } from "./discovery-location.js";
 
 const nonblankStringSchema = z.string().trim().min(1);
 
@@ -29,6 +30,16 @@ const googleDiscoverySchema = z
     limit: z.number().int().positive().max(50).default(10)
   })
   .strict();
+
+const overtureDiscoverySchema = z.object({
+  provider: z.literal("overture"),
+  query: nonblankStringSchema.regex(/^[a-z][a-z0-9_]{0,80}$/i, "Expected an Overture category identifier"),
+  bbox: nonblankStringSchema.refine((value) => { try { parseDiscoveryBbox(value); return true; } catch { return false; } }, "Expected valid west,south,east,north bounds"),
+  release: z.string().regex(/^\d{4}-\d{2}-\d{2}\.\d+$/).optional(),
+  ...discoveryDefaults,
+  concurrency: z.number().int().min(1).max(8).default(1),
+  limit: z.number().int().positive().max(100).default(10)
+}).strict();
 
 const calendarDateSchema = z.string().refine((value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -92,7 +103,7 @@ const workflowConfigSchema = z
   .object({
     version: z.literal(1),
     outDir: nonblankStringSchema,
-    discovery: z.discriminatedUnion("provider", [manualDiscoverySchema, googleDiscoverySchema]),
+    discovery: z.discriminatedUnion("provider", [manualDiscoverySchema, googleDiscoverySchema, overtureDiscoverySchema]),
     shortlist: shortlistSchema,
     review: reviewSchema.optional(),
     packageReports: z.boolean().default(false)
@@ -118,7 +129,7 @@ export type ResolvedWorkflowConfig = Omit<ParsedWorkflowConfig, "outDir" | "disc
   outDir: string;
   discovery:
     | (Extract<ParsedWorkflowConfig["discovery"], { provider: "manual-csv" }> & { input: string })
-    | Extract<ParsedWorkflowConfig["discovery"], { provider: "google-places" }>;
+    | Extract<ParsedWorkflowConfig["discovery"], { provider: "google-places" | "overture" }>;
   review?: ParsedWorkflowConfig["review"] & { csv: string };
   paths: WorkflowManagedPaths;
 };

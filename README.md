@@ -2,6 +2,18 @@
 
 Open Local Audit is an open-source website and local presence auditor for small businesses. It turns public website signals into practical reports for outreach, customer education, and implementation work.
 
+Find prospective clients without a Google API key or billing account, from a source checkout:
+
+Requires Node.js 22.19 or newer.
+
+```bash
+npm install
+npm run build
+node dist/cli.js discover dental --city Istanbul --country TR --profile dental --limit 10 --max-audits 3 --out-dir reports/istanbul --export-csv reports/istanbul/leads.csv
+```
+
+Keyless discovery uses Overture Places open data and GeoNames city lookup, then reads public business websites for contact details and audit reports. Coverage varies by location; missing website data means **unknown**, not proof that a business has no website. See the [free discovery guide](./docs/guides/free-discovery.md) for source attribution, limits, and the four-country benchmark.
+
 ## Current stage
 
 Published CLI. The project can run a single URL audit, an opt-in Playwright-rendered audit with screenshot evidence, optional Lighthouse category scoring, branded customer-facing reports, public contact readiness extraction, a plain-text batch URL list, or a profile-aware CSV batch file, optionally check same-origin links, and produce JSON, Markdown, HTML, PDF, or all standard report formats. Batch runs can use controlled concurrency, write per-site reports, add aggregate insight sections and contact/outreach rollups to the top-level index, and optionally export prospect CSV data for triage. Discovery runs can control Google Places result counts, cap website audits, write summary JSON, merge local review CSVs, explain opportunity scores, enrich outreach and public-contact columns, select a preferred manual outreach channel, and report exact duplicate lead groups plus advisory fuzzy duplicate review candidates. CRM-ready CSV exports can be validated locally before import, lead CSVs can be ranked into local shortlist reports with optional local review-state suppression, local review CSV state can be updated by lead key or shortlist input, and single-site report folders can be packaged for local customer sharing.
@@ -13,7 +25,7 @@ Open Local Audit produces evidence-backed mini audits for local businesses. The 
 ## Product principles
 
 - Evidence first: every recommendation should point to a concrete finding.
-- Ethical scanning: only scan user-provided public URLs and avoid Google Maps scraping.
+- Ethical scanning: audit public URLs supplied by the user or found in an explicitly requested open-data search; avoid Google Maps scraping.
 - Small-business language: reports should be readable by non-technical owners.
 - Developer quality: deterministic checks, clear CLI output, tests, and release notes.
 - Commercial clarity: the open-source scanner is useful; paid work is execution and support.

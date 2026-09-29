@@ -913,6 +913,7 @@ export async function runResolvedWorkflow(
         provider: config.discovery.provider,
         ...(config.discovery.provider === "manual-csv" ? { input: config.discovery.input } : {}),
         ...(config.discovery.provider === "google-places" ? { query: config.discovery.query } : {}),
+        ...(config.discovery.provider === "overture" ? { query: config.discovery.query, bbox: config.discovery.bbox, release: config.discovery.release } : {}),
         profile: config.discovery.profile,
         outDir: config.paths.reportsDir,
         managedOutputRoot: config.paths.reportsDir,
@@ -922,7 +923,7 @@ export async function runResolvedWorkflow(
         dryRun: false,
         concurrency: config.discovery.concurrency,
         ...(config.discovery.maxAudits !== undefined ? { maxAudits: config.discovery.maxAudits } : {}),
-        ...(config.discovery.provider === "google-places" ? { limit: config.discovery.limit } : {}),
+        ...(config.discovery.provider !== "manual-csv" ? { limit: config.discovery.limit } : {}),
         ...(googleApiKey !== undefined ? { apiKey: googleApiKey } : {})
       });
       updateDiscoveryStage(summary, discoveryResult);

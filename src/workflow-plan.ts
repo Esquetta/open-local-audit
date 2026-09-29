@@ -9,7 +9,7 @@ import type { ResolvedWorkflowConfig } from "./workflow-config.js";
 export type WorkflowPlanStatus = WorkflowPreflightStatus;
 export type WorkflowPlanStepId = "discovery" | "shortlist" | "review" | "packaging" | "summary";
 export type WorkflowPlanStepState = "will-run" | "conditional" | "disabled";
-export type WorkflowPlanNetworkAccess = "google-places" | "website-audits";
+export type WorkflowPlanNetworkAccess = "google-places" | "website-audits" | "overture";
 export type WorkflowPlanArtifactId =
   | "manual-input-csv"
   | "review-csv"
@@ -134,6 +134,7 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
   const packagingEnabled = config.packageReports;
   const discoveryNetworkAccess: WorkflowPlanNetworkAccess[] = [
     ...(config.discovery.provider === "google-places" ? ["google-places" as const] : []),
+    ...(config.discovery.provider === "overture" ? ["overture" as const] : []),
     ...(config.discovery.maxAudits === 0 ? [] : ["website-audits" as const])
   ];
   const summaryDependency: WorkflowPlanStepId = packagingEnabled ? "packaging" : reviewEnabled ? "review" : "shortlist";
@@ -158,7 +159,7 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
         provider: config.discovery.provider,
         profile: config.discovery.profile,
         concurrency: config.discovery.concurrency,
-        maxCandidates: config.discovery.provider === "google-places" ? config.discovery.limit : null,
+        maxCandidates: config.discovery.provider !== "manual-csv" ? config.discovery.limit : null,
         maxAudits: config.discovery.maxAudits ?? null
       }
     },
@@ -256,6 +257,7 @@ function renderNetworkCapabilities(step: WorkflowPlanStep): string[] {
     if (access === "google-places") {
       return "Google Places";
     }
+    if (access === "overture") return "Overture open data (no API key)";
     return step.id !== "discovery" || step.settings.maxAudits === null
       ? "website audits (no configured cap)"
       : `website audits (up to ${step.settings.maxAudits})`;

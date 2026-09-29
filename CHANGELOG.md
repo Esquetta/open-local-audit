@@ -2,6 +2,15 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.68.0 - 2026-09-29
+
+- Added keyless worldwide business discovery using Overture Places, with GeoNames city/country lookup and bounded geographic queries.
+- Added source business details and provenance to standard prospect exports, preserving unknown website availability instead of assuming a website-build opportunity.
+- Added bounded, robots-aware website contact enrichment with public-address validation; social profiles and known short links are not audited as business websites.
+- Integrated Overture with workflow configuration, offline preflight, and plan output while preserving manual CSV and explicit Google Places discovery.
+- Added a reproducible benchmark for Türkiye, the USA, Germany, and the UK across eight cities and three categories.
+- Updated Lighthouse and affected dependencies to patched versions. **Compatibility: Node.js 22.19 or newer is now required** by Lighthouse 13; Node.js 20 is no longer supported.
+
 ## v0.67.0 - 2026-08-09
 
 - Added an atomic workflow-state lifecycle manifest with trusted stage visibility.
