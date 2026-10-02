@@ -4,6 +4,14 @@ The `overture` provider finds business candidates without an API key, payment ac
 
 ## Search by category and location
 
+For a guided first search from a built source checkout:
+
+```bash
+node dist/cli.js start
+```
+
+The terminal asks for a country code, city, category, candidate count, website-audit cap, and output directory. It previews the search before confirmation. Enter `n` at confirmation or press Ctrl+C to cancel. No discovery requests or output files are created before confirmation. Existing output directories are refused to protect earlier results. Piped/non-interactive use exits with an error and an explicit `discover` example; use that command in scripts.
+
 From a source checkout, install dependencies and build:
 
 Use Node.js 22.19 or newer.
@@ -25,6 +33,26 @@ node dist/cli.js discover beauty --bbox "28.85,40.95,29.10,41.10" --profile beau
 ```
 
 Friendly categories include `dental`, `restaurant`, `beauty`, `hotel`, and `gym`; official Overture taxonomy identifiers also work. Matching includes descendants. `--profile` selects existing audit rules separately from the discovery category. No matches do not prove no businesses exist in the area.
+
+## Repeated-search cache
+
+`discover` with Overture and `start` enable the local business-result cache by default. An entry is reusable only for the same normalized category, numeric bounding box, candidate limit, and Overture release, and for at most seven days. A different audit profile reuses source data with the newly selected profile. Website audits are never taken from this cache; they run again up to the requested audit cap.
+
+Without `--release`, the current Overture release is checked before looking in the cache. This still needs a small network request; an old cached release is not silently used if the release lookup fails. A pinned `--release` can reuse its valid cache without querying STAC or the remote Places files. Cached results keep their original retrieval time; neither that time nor the release date means the business details were independently verified.
+
+- `--refresh-cache` bypasses the saved result and replaces that search's entry after a successful lookup.
+- `--no-cache` disables business-result cache reads and writes.
+- `--cache-dir <path>` selects another directory; relative paths resolve from the current working directory. It cannot be combined with `--no-cache`.
+
+```bash
+node dist/cli.js discover dental --city Istanbul --country TR --profile dental --limit 10 --dry-run --cache-dir reports/search-cache --export-csv reports/leads.csv
+```
+
+The CLI reports `hit`, `miss`, `refresh`, `disabled`, or `unavailable`, alongside the source release and original fetch time when available. Invalid, expired, oversized, or unsafe entries do not become cache hits. Cache storage failures fall back to a fresh search with a diagnostic; an actual source-search failure remains an error.
+
+Default storage is `%LOCALAPPDATA%/open-local-audit/cache/discovery` on Windows, `~/Library/Caches/open-local-audit/discovery` on macOS, and `$XDG_CACHE_HOME/open-local-audit/discovery` (or `~/.cache/open-local-audit/discovery`) on Linux. It contains public source business details, not API keys or website audit reports. Each entry is limited to 2 MiB; expired entries are replaced when searched again, rather than removed by a background job.
+
+The existing GeoNames city-file cache remains separate under the output directory. Programmatic discovery opts into business caching with `cacheDir`; the version-1 `workflow` command keeps its existing uncached execution and output contract.
 
 ## Data and limits
 
@@ -77,6 +105,14 @@ npm run benchmark:discovery -- --out-dir reports/free-discovery-benchmark
 ```
 
 The default 24-search matrix uses Istanbul/Ankara (Türkiye), New York/Los Angeles (USA), Berlin/Munich (Germany), and London/Manchester (UK), each for dental, restaurant, and beauty. These are major-city samples, not an official popularity ranking. Every search uses a documented city-centre box, up to ten candidates, up to three website audits, and concurrency three. The first returned release is pinned for later searches.
+
+The benchmark leaves business caching disabled unless `--cache-dir` is explicitly supplied, preserving fresh-search measurements. To compare the same search before and after caching, use a new cache directory and inspect the recorded `miss`/`hit` states:
+
+```bash
+npm run benchmark:discovery -- --out-dir reports/cache-benchmark --cache-dir reports/cache-benchmark/first-cache --case-filter tr-istanbul-dental --repeats 2 --max-audits 0 --release 2026-09-23.1
+```
+
+`--max-audits 0` isolates discovery from website work. A previously populated cache may produce a hit on both runs; do not label the first run cold unless its recorded state is `miss`. Per-case JSON retains cache state and original fetch time; the CSV and Markdown identify cached runs. A single pair is an indicative measurement, not a speed guarantee or a load test.
 
 Case JSON and prospect/report outputs are saved as each case completes, followed by summary JSON, CSV, and Markdown. Failure times remain in the evidence. Discovery and enrichment/report times are separate. Contact completeness among returned rows is not market coverage, recall, or contact correctness. Percentiles across different scenarios are descriptive, not load-test results or an SLA. One pass does not establish stable latency. Use `--repeats 2` to intentionally measure another pass, or `--case-filter Istanbul` to limit the matrix.
 

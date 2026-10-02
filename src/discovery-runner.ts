@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { runBatchReports } from "./batch.js";
 import {
   buildDiscoverySummary,
@@ -24,6 +24,7 @@ import {
 } from "./discovery.js";
 import type { AuditProfile, ReportBrandConfig } from "./types.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
+import type { DiscoveryCacheInfo } from "./discovery-cache.js";
 
 export interface DiscoveryRunOptions {
   provider: DiscoveryProviderName;
@@ -48,6 +49,8 @@ export interface DiscoveryRunOptions {
   bbox?: string;
   radiusKm?: number;
   release?: string;
+  cacheDir?: string;
+  refreshCache?: boolean;
   managedOutputRoot?: string;
   brand?: ReportBrandConfig;
 }
@@ -59,6 +62,7 @@ export interface DiscoveryRunResult {
     discoveryMs: number;
     auditMs: number;
     totalMs: number;
+    cache?: DiscoveryCacheInfo;
     sourceCoverage?: { denominator: number; website: number; phone: number; email: number; address: number };
     websites: Array<{ url: string; status: string; durationMs: number; pagesFetched: number; sourceUrls: string[]; error?: string; warnings?: string[] }>;
   };
@@ -90,8 +94,15 @@ async function readOptionalReviewCsv(path: string | undefined): Promise<LeadRevi
 
 export async function runDiscovery(options: DiscoveryRunOptions): Promise<DiscoveryRunResult> {
   const started = performance.now();
+  let cache: DiscoveryCacheInfo | undefined;
   const websiteMetrics: NonNullable<DiscoveryRunResult["metrics"]>["websites"] = [];
   const hostQueues = new Map<string, Promise<void>>();
+  if ((options.cacheDir || options.refreshCache) && options.provider !== "overture") {
+    throw new Error("Discovery caching is only supported with --provider overture");
+  }
+  if (options.refreshCache && !options.cacheDir) {
+    throw new Error("Refreshing discovery cache requires a cache directory");
+  }
   if (options.provider === "overture" && (!Number.isInteger(options.concurrency) || options.concurrency < 1 || options.concurrency > 8)) {
     throw new Error("Overture website concurrency must be between 1 and 8");
   }
@@ -128,7 +139,11 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
     const bbox = options.bbox ? parseDiscoveryBbox(options.bbox) : cityBoundingBox(
       await resolveDiscoveryCity(options.city!, options.country!, join(options.outDir ?? "reports", ".cache")), options.radiusKm
     );
-    candidates = await fetchOvertureCandidates({ bbox, category: options.query, limit: options.limit, defaultProfile: options.profile, release: options.release });
+    candidates = await fetchOvertureCandidates({
+      bbox, category: options.query, limit: options.limit, defaultProfile: options.profile, release: options.release,
+      cacheDir: options.cacheDir ? resolve(options.cacheDir) : undefined, refreshCache: options.refreshCache,
+      onCacheStatus: (info) => { cache = info; }
+    });
   } else if (options.provider === "manual-csv") {
     candidates = await readManualDiscoveryCsv(options.input ?? "", {
           defaultProfile: options.profile
@@ -278,6 +293,6 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
   return {
     rows,
     summary,
-    ...(options.provider === "overture" ? { metrics: { discoveryMs, auditMs, totalMs: performance.now() - started, sourceCoverage, websites: websiteMetrics } } : {})
+    ...(options.provider === "overture" ? { metrics: { discoveryMs, auditMs, totalMs: performance.now() - started, cache, sourceCoverage, websites: websiteMetrics } } : {})
   };
 }

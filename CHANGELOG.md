@@ -2,6 +2,14 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.69.0 - 2026-10-02
+
+- Added a seven-day local cache for repeated Overture searches in `discover` and `start`, keyed by source release, category, bounds, and result limit while preserving the original retrieval time.
+- Added `--cache-dir`, `--refresh-cache`, and `--no-cache`; cache failures fall back to fresh discovery and website audits are always rerun.
+- Added interactive `start` prompts with input validation, a confirmation summary, cancellation, and protection against overwriting existing output directories.
+- Added explicit cache controls and cache-state reporting to the benchmark, including discovery-only measurements with `--max-audits 0`.
+- Added cache integrity, filesystem safety, guided-input, and packaged CLI coverage. Existing programmatic discovery remains uncached unless a cache directory is provided.
+
 ## v0.68.0 - 2026-09-29
 
 - Added keyless worldwide business discovery using Overture Places, with GeoNames city/country lookup and bounded geographic queries.

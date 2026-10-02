@@ -1,6 +1,6 @@
 {
   "name": "open-local-audit",
-  "version": "0.68.0",
+  "version": "0.69.0",
   "description": "Open-source website and local presence auditor for small businesses.",
   "license": "MIT",
   "type": "module",

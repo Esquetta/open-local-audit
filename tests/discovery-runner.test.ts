@@ -6,8 +6,39 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderProspectRowsCsv } from "../src/discovery.js";
 import { runDiscovery, type DiscoveryRunOptions } from "../src/discovery-runner.js";
 import * as overture from "../src/overture.js";
+import * as websiteEnrichment from "../src/website-enrichment.js";
 
 describe("runDiscovery", () => {
+  it("repeats website audits even when discovery candidates come from cache", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-cache-audits-"));
+    try {
+      vi.spyOn(overture, "fetchOvertureCandidates").mockImplementation(async (options) => {
+        options.onCacheStatus?.({ status: "hit", release: "2026-09-23.1", fetchedAt: "2026-09-29T00:00:00.000Z" });
+        return [{ source: "overture", sourceId: "cached-place", label: "Sample", websiteUri: "https://sample.test", sourceMetadata: { datasetRelease: "2026-09-23.1" } }];
+      });
+      const enrich = vi.spyOn(websiteEnrichment, "enrichWebsite").mockResolvedValue({ status: "success", snapshot: { url: "https://sample.test", finalUrl: "https://sample.test", statusCode: 200, headers: {}, html: "<html><title>Sample</title><body>Sample</body></html>" }, pagesFetched: 1, durationMs: 1, sourceUrls: ["https://sample.test"] });
+      for (let index = 0; index < 2; index++) {
+        const result = await runDiscovery({ provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", profile: "dental", exportCsv: join(dir, `leads-${index}.csv`), outDir: join(dir, `reports-${index}`), dryRun: false, maxAudits: 1, concurrency: 1, cacheDir: join(dir, "cache") });
+        expect(result.metrics?.cache?.status).toBe("hit");
+        expect(result.rows[0].auditStatus).toBe("success");
+      }
+      expect(enrich).toHaveBeenCalledTimes(2);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+  it("passes an explicit cache location and exposes original source retrieval time", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-cache-runner-"));
+    try {
+      const info = { status: "hit" as const, release: "2026-09-23.1", fetchedAt: "2026-09-29T00:00:00.000Z", cachedAt: "2026-09-29T00:00:01.000Z" };
+      const source = vi.spyOn(overture, "fetchOvertureCandidates").mockImplementation(async (options) => {
+        options.onCacheStatus?.(info);
+        return [];
+      });
+      const result = await runDiscovery({ provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", profile: "dental", exportCsv: join(dir, "leads.csv"), dryRun: true, concurrency: 1, cacheDir: join(dir, "cache") });
+      expect(source).toHaveBeenCalledWith(expect.objectContaining({ cacheDir: join(dir, "cache"), onCacheStatus: expect.any(Function) }));
+      expect(result.metrics?.cache).toEqual(info);
+      expect(result.metrics?.websites).toEqual([]);
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
   it("runs keyless discovery and preserves business detail without auditing in dry-run", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-free-discovery-"));
     try {

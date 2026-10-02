@@ -7,6 +7,8 @@ import { readBrandConfig } from "./brand.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
 import { type DiscoverySummary } from "./discovery.js";
 import { runDiscovery } from "./discovery-runner.js";
+import type { DiscoveryRunResult } from "./discovery-runner.js";
+import { defaultDiscoveryCacheDirectory } from "./discovery-cache.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
 import {
   renderExportValidationJson,
@@ -70,6 +72,9 @@ const discoveryProgram = program
   .option("--bbox <bounds>", "search bounds west,south,east,north instead of a city")
   .option("--radius-km <km>", "city search bounding-box half-width in km (maximum 50)", "10")
   .option("--release <release>", "pin an Overture release for repeatable searches")
+  .option("--cache-dir <path>", "store reusable Overture search results in this local directory")
+  .option("--no-cache", "do not read or write the Overture result cache")
+  .option("--refresh-cache", "fetch fresh Overture results and replace this search's cache entry", false)
   .option("--profile <profile>", "default industry profile for candidates", "generic")
   .option("--out-dir <path>", "write generated audit reports to a directory")
   .option("--brand-config <path>", "read report branding from a JSON file")
@@ -109,6 +114,26 @@ function renderDiscoverySummary(summary: DiscoverySummary): string {
   ].join("\n");
 }
 
+function discoveryCacheOptions(options: { cache: boolean; cacheDir?: string; refreshCache: boolean }, provider = "overture"): { cacheDir?: string; refreshCache?: boolean } {
+  if (!options.cache && options.refreshCache) throw new Error("--refresh-cache cannot be combined with --no-cache");
+  if (!options.cache && options.cacheDir) throw new Error("--cache-dir cannot be combined with --no-cache");
+  if (provider !== "overture") {
+    if (options.cacheDir || options.refreshCache) throw new Error("Discovery caching is only supported with --provider overture");
+    return {};
+  }
+  return options.cache ? { cacheDir: options.cacheDir ?? defaultDiscoveryCacheDirectory(), refreshCache: options.refreshCache } : {};
+}
+
+function printDiscoveryResult(result: DiscoveryRunResult): void {
+  process.stdout.write(`Discovered ${result.rows.length} lead${result.rows.length === 1 ? "" : "s"}\n`);
+  process.stdout.write(`${renderDiscoverySummary(result.summary)}\n`);
+  const cache = result.metrics?.cache;
+  if (cache) {
+    process.stdout.write(`Discovery cache: ${cache.status}; source ${cache.release}${cache.fetchedAt ? `; fetched ${cache.fetchedAt}` : ""}\n`);
+    if (cache.message) process.stderr.write(`open-local-audit: ${cache.message}\n`);
+  }
+}
+
 discoveryProgram.action(async (query?: string) => {
   try {
     const rawDiscoveryOptions = optsWithLocalCliPrecedence(discoveryProgram);
@@ -129,6 +154,9 @@ discoveryProgram.action(async (query?: string) => {
         bbox: true,
         radiusKm: true,
         release: true,
+        cache: true,
+        cacheDir: true,
+        refreshCache: true,
         limit: true,
         maxAudits: true,
         summaryJson: true,
@@ -138,13 +166,15 @@ discoveryProgram.action(async (query?: string) => {
         minOpportunityScore: true
       })
       .parse(rawDiscoveryOptions);
+    const cacheOptions = discoveryCacheOptions(options, options.provider);
     const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
 
     if (options.provider === "google-places") {
       process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
     }
 
-    const { rows, summary } = await runDiscovery({
+    const result = await runDiscovery({
+      ...cacheOptions,
       provider: options.provider,
       city: options.city,
       country: options.country,
@@ -169,11 +199,40 @@ discoveryProgram.action(async (query?: string) => {
       apiKey: options.provider === "google-places" ? resolveGoogleMapsApiKey() : undefined,
       brand
     });
-    process.stdout.write(`Discovered ${rows.length} lead${rows.length === 1 ? "" : "s"}\n`);
-    process.stdout.write(`${renderDiscoverySummary(summary)}\n`);
+    printDiscoveryResult(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     process.stderr.write(`open-local-audit: ${message}\n`);
+    process.exitCode = 1;
+  }
+});
+
+const startProgram = program
+  .command("start")
+  .description("Start a guided, keyless business search.")
+  .option("--cache-dir <path>", "store reusable Overture search results in this local directory")
+  .option("--no-cache", "do not read or write the Overture result cache")
+  .option("--refresh-cache", "fetch fresh Overture results for this search", false);
+
+startProgram.action(async () => {
+  try {
+    const cacheOptions = discoveryCacheOptions(cliOptionsSchema.pick({ cache: true, cacheDir: true, refreshCache: true }).parse(startProgram.opts()));
+    const { collectStartOptions } = await import("./start.js");
+    const options = await collectStartOptions();
+    if (!options) return;
+    await mkdir(dirname(options.outDir!), { recursive: true });
+    try {
+      await mkdir(options.outDir!);
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") throw new Error("Output directory already exists. Run start again and choose a new directory.");
+      throw error;
+    }
+    process.stdout.write("Searching businesses...\n");
+    const result = await runDiscovery({ ...options, ...cacheOptions });
+    printDiscoveryResult(result);
+    process.stdout.write(`Prospects: ${options.exportCsv}\nSummary: ${options.summaryJson}\n`);
+  } catch (error) {
+    process.stderr.write(`open-local-audit: ${error instanceof Error ? error.message : "Unknown error"}\n`);
     process.exitCode = 1;
   }
 });

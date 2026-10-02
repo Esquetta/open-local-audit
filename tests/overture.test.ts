@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { link, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { discoveryCacheKey } from "../src/discovery-cache.js";
 
 const duckdb = vi.hoisted(() => ({
   create: vi.fn(),
@@ -40,6 +44,186 @@ afterEach(() => {
 });
 
 describe("Overture Places discovery", () => {
+  it("returns a persistent exact-query cache hit with the caller profile rebound", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    try {
+      configureDuckDb([{ id: "cached", label: "Cached Dental", websites: ["https://cached.example"] }]);
+      const first = await fetchOvertureCandidates({
+        bbox: [28.9, 40.9, 29.1, 41.1],
+        category: "dental",
+        defaultProfile: "dental",
+        release: "2026-09-23.1",
+        cacheDir
+      });
+      const firstRetrievedAt = first[0]?.sourceMetadata?.retrievedAt;
+      vi.clearAllMocks();
+
+      const statuses: string[] = [];
+      const second = await fetchOvertureCandidates({
+        bbox: [28.9, 40.9, 29.1, 41.1],
+        category: "dental",
+        defaultProfile: "clinic",
+        release: "2026-09-23.1",
+        cacheDir,
+        onCacheStatus: (info) => statuses.push(info.status)
+      });
+
+      expect(duckdb.create).not.toHaveBeenCalled();
+      expect(second).toEqual([
+        expect.objectContaining({
+          source: "overture",
+          sourceId: "cached",
+          profile: "clinic",
+          sourceMetadata: expect.objectContaining({ retrievedAt: firstRetrievedAt })
+        })
+      ]);
+      expect(statuses).toEqual(["hit"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to a fresh query when a cache record is corrupt", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    try {
+      configureDuckDb([{ id: "first", websites: ["https://first.example"] }]);
+      await fetchOvertureCandidates({ ...request, cacheDir });
+      await writeFile(join(cacheDir, `${discoveryCacheKey(request)}.json`), "not json", "utf8");
+      vi.clearAllMocks();
+      configureDuckDb([{ id: "fresh", websites: ["https://fresh.example"] }]);
+      const statuses: string[] = [];
+
+      await expect(fetchOvertureCandidates({ ...request, cacheDir, onCacheStatus: (info) => statuses.push(info.status) })).resolves.toEqual([
+        expect.objectContaining({ sourceId: "fresh" })
+      ]);
+
+      expect(duckdb.create).toHaveBeenCalledOnce();
+      expect(statuses).toEqual(["unavailable", "miss"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not use an old cache record when the unpinned release lookup fails", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    try {
+      configureDuckDb([{ id: "cached", websites: ["https://cached.example"] }]);
+      await fetchOvertureCandidates({ ...request, cacheDir });
+      vi.clearAllMocks();
+      globalThis.fetch = vi.fn<typeof fetch>(async () => { throw new Error("STAC unavailable"); });
+
+      await expect(fetchOvertureCandidates({ bbox: request.bbox, category: request.category, limit: request.limit, cacheDir })).rejects.toThrow("Unable to retrieve the current Overture release");
+      expect(duckdb.create).not.toHaveBeenCalled();
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats an oversized cache entry as unavailable and fetches fresh candidates", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    try {
+      await writeFile(join(cacheDir, `${discoveryCacheKey(request)}.json`), "x".repeat(2 * 1024 * 1024 + 1), "utf8");
+      configureDuckDb([{ id: "fresh", websites: ["https://fresh.example"] }]);
+      const statuses: string[] = [];
+
+      await expect(fetchOvertureCandidates({ ...request, cacheDir, onCacheStatus: (info) => statuses.push(info.status) })).resolves.toEqual([
+        expect.objectContaining({ sourceId: "fresh" })
+      ]);
+
+      expect(duckdb.create).toHaveBeenCalledOnce();
+      expect(statuses).toEqual(["unavailable", "miss"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bypasses an existing cache record when refresh is requested", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    try {
+      configureDuckDb([{ id: "cached", websites: ["https://cached.example"] }]);
+      await fetchOvertureCandidates({ ...request, cacheDir });
+      vi.clearAllMocks();
+      configureDuckDb([{ id: "fresh", websites: ["https://fresh.example"] }]);
+      const statuses: string[] = [];
+
+      await expect(fetchOvertureCandidates({ ...request, cacheDir, refreshCache: true, onCacheStatus: (info) => statuses.push(info.status) })).resolves.toEqual([
+        expect.objectContaining({ sourceId: "fresh" })
+      ]);
+
+      expect(duckdb.create).toHaveBeenCalledOnce();
+      expect(statuses).toEqual(["refresh", "refresh"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("caches an empty successful Overture query", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    try {
+      configureDuckDb([]);
+      await expect(fetchOvertureCandidates({ ...request, cacheDir })).resolves.toEqual([]);
+      vi.clearAllMocks();
+      const statuses: string[] = [];
+
+      await expect(fetchOvertureCandidates({ ...request, cacheDir, onCacheStatus: (info) => statuses.push(info.status) })).resolves.toEqual([]);
+
+      expect(duckdb.create).not.toHaveBeenCalled();
+      expect(statuses).toEqual(["hit"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not overwrite an existing hard-linked cache entry when refreshing", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const outsideDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-outside-"));
+    const outsidePath = join(outsideDir, "sentinel.json");
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    try {
+      await writeFile(outsidePath, "sentinel", "utf8");
+      await link(outsidePath, join(cacheDir, `${discoveryCacheKey(request)}.json`));
+      configureDuckDb([{ id: "fresh", websites: ["https://fresh.example"] }]);
+      const statuses: string[] = [];
+
+      await fetchOvertureCandidates({ ...request, cacheDir, refreshCache: true, onCacheStatus: (info) => statuses.push(info.status) });
+
+      expect(await readFile(outsidePath, "utf8")).toBe("sentinel");
+      expect(statuses).toEqual(["refresh", "unavailable"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+      await rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not return a cache record with malformed source metadata", async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), "open-local-audit-overture-cache-"));
+    const request = { category: "dental", bbox: [28.9, 40.9, 29.1, 41.1] as [number, number, number, number], limit: 25, release: "2026-09-23.1" };
+    const cachePath = join(cacheDir, `${discoveryCacheKey(request)}.json`);
+    try {
+      configureDuckDb([{ id: "cached", websites: ["https://cached.example"] }]);
+      await fetchOvertureCandidates({ ...request, cacheDir });
+      const record = JSON.parse(await readFile(cachePath, "utf8")) as { candidates: Array<{ sourceMetadata: Record<string, unknown> }> };
+      record.candidates[0]!.sourceMetadata.address = { unexpected: "object" };
+      await writeFile(cachePath, JSON.stringify(record), "utf8");
+      vi.clearAllMocks();
+      configureDuckDb([{ id: "fresh", websites: ["https://fresh.example"] }]);
+      const statuses: string[] = [];
+
+      await expect(fetchOvertureCandidates({ ...request, cacheDir, onCacheStatus: (info) => statuses.push(info.status) })).resolves.toEqual([
+        expect.objectContaining({ sourceId: "fresh" })
+      ]);
+
+      expect(statuses).toEqual(["unavailable", "miss"]);
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps social profiles as contacts instead of treating them as business websites", async () => {
     configureDuckDb([
       { id: "social-only", websites: ["http://instagram.com/fashion_kuafor/"], socials: ["https://facebook.com/fashion"] },
