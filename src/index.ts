@@ -4,6 +4,8 @@ export { readBrandConfig } from "./brand.js";
 export { extractPublicContact } from "./contact.js";
 export { fetchOvertureCandidates } from "./overture.js";
 export type { BoundingBox, FetchOvertureCandidatesOptions } from "./overture.js";
+export { defaultDiscoveryCacheDirectory } from "./discovery-cache.js";
+export type { DiscoveryCacheInfo } from "./discovery-cache.js";
 export { enrichWebsite } from "./website-enrichment.js";
 export { cityBoundingBox, findDiscoveryCity, parseDiscoveryBbox, resolveDiscoveryCity } from "./discovery-location.js";
 export {

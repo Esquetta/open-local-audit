@@ -3,6 +3,7 @@ import { DuckDBInstance, type DuckDBConnection, type DuckDBResultReader } from "
 import type { PlaceCandidate } from "./discovery.js";
 import type { AuditProfile } from "./types.js";
 import { maximumDiscoveryBboxSpan } from "./discovery-location.js";
+import { readDiscoveryCache, writeDiscoveryCache, type DiscoveryCacheInfo } from "./discovery-cache.js";
 
 export type BoundingBox = [west: number, south: number, east: number, north: number];
 
@@ -13,6 +14,9 @@ export interface FetchOvertureCandidatesOptions {
   defaultProfile?: AuditProfile;
   timeoutMs?: number;
   release?: string;
+  cacheDir?: string;
+  refreshCache?: boolean;
+  onCacheStatus?: (info: DiscoveryCacheInfo) => void;
 }
 
 const overtureStacUrl = "https://stac.overturemaps.org/catalog.json";
@@ -361,6 +365,19 @@ export async function fetchOvertureCandidates(options: FetchOvertureCandidatesOp
   const timeoutMs = normalizeTimeout(options.timeoutMs);
   const deadline = Date.now() + timeoutMs;
   const release = options.release ? validateRelease(options.release) : await fetchLatestRelease(Math.max(1, deadline - Date.now()));
+  const category = options.category.trim().toLowerCase();
+  const cacheRequest = options.cacheDir ? { cacheDir: options.cacheDir, category, bbox: options.bbox, limit, release } : undefined;
+  if (!cacheRequest) {
+    options.onCacheStatus?.({ status: "disabled", release });
+  } else if (options.refreshCache) {
+    options.onCacheStatus?.({ status: "refresh", release });
+  } else {
+    const cached = await readDiscoveryCache(cacheRequest);
+    options.onCacheStatus?.(cached.info);
+    if (cached.candidates) {
+      return cached.candidates.map((candidate) => ({ ...candidate, profile: options.defaultProfile }));
+    }
+  }
   const [west, south, east, north] = options.bbox;
   const instance = await DuckDBInstance.create(":memory:", { threads: "2", memory_limit: "256MB" });
   let connection: DuckDBConnection | undefined;
@@ -381,7 +398,7 @@ export async function fetchOvertureCandidates(options: FetchOvertureCandidatesOp
     const retrievedAt = new Date().toISOString();
     const candidates = reader
       .getRowObjectsJS()
-      .map((row) => mapCandidate(row as OverturePlaceRow, options.category.trim().toLowerCase(), options.defaultProfile, release, retrievedAt))
+      .map((row) => mapCandidate(row as OverturePlaceRow, category, options.defaultProfile, release, retrievedAt))
       .filter((candidate): candidate is PlaceCandidate => candidate !== undefined)
       .filter((candidate) => {
         const metadata = candidate.sourceMetadata ?? {};
@@ -390,7 +407,12 @@ export async function fetchOvertureCandidates(options: FetchOvertureCandidatesOp
         return operatingStatus !== "closed_permanently" && (confidence === undefined || confidence >= minimumConfidence);
       })
       .sort((left, right) => left.sourceId!.localeCompare(right.sourceId!));
-    return candidates.filter((candidate, index) => index === 0 || candidate.sourceId !== candidates[index - 1]?.sourceId);
+    const completeCandidates = candidates.filter((candidate, index) => index === 0 || candidate.sourceId !== candidates[index - 1]?.sourceId);
+    if (cacheRequest) {
+      const cacheStatus = await writeDiscoveryCache(cacheRequest, completeCandidates, retrievedAt, options.refreshCache ? "refresh" : "miss");
+      options.onCacheStatus?.(cacheStatus);
+    }
+    return completeCandidates;
   } finally {
     connection?.closeSync();
     instance.closeSync();

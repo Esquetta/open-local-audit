@@ -9,10 +9,12 @@ Requires Node.js 22.19 or newer.
 ```bash
 npm install
 npm run build
-node dist/cli.js discover dental --city Istanbul --country TR --profile dental --limit 10 --max-audits 3 --out-dir reports/istanbul --export-csv reports/istanbul/leads.csv
+node dist/cli.js start
 ```
 
 Keyless discovery uses Overture Places open data and GeoNames city lookup, then reads public business websites for contact details and audit reports. Coverage varies by location; missing website data means **unknown**, not proof that a business has no website. See the [free discovery guide](./docs/guides/free-discovery.md) for source attribution, limits, and the four-country benchmark.
+
+`start` asks for a country, city, category, candidate count, website-audit cap, and a new output directory before running. Repeated `discover` and `start` searches can reuse a local business-result cache; the CLI shows its state, source release, and original retrieval time. Use `--refresh-cache` for a fresh lookup or `--no-cache` to bypass that cache.
 
 ## Current stage
 

@@ -78,6 +78,13 @@ try {
   ]) {
     readFileSync(join(consumerDir, "node_modules", pkg.name, documentationPath), "utf8");
   }
+  const installedCli = join(consumerDir, "node_modules", pkg.name, "dist", "cli.js");
+  const startHelp = execFileSync(process.execPath, [installedCli, "start", "--help"], { cwd: consumerDir, encoding: "utf8" });
+  const discoveryHelp = execFileSync(process.execPath, [installedCli, "discover", "--help"], { cwd: consumerDir, encoding: "utf8" });
+  if (!startHelp.includes("guided") || !startHelp.includes("--no-cache")) throw new Error("Packaged start command is missing");
+  for (const option of ["--cache-dir", "--refresh-cache", "--no-cache"]) {
+    if (!discoveryHelp.includes(option)) throw new Error(`Packaged discovery option is missing: ${option}`);
+  }
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });
 }

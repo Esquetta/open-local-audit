@@ -55,6 +55,7 @@ export interface BenchmarkCaseResult {
 
 export interface BenchmarkRunOptions {
   outDir: string;
+  cacheDir?: string;
   release?: string;
   limit: number;
   maxAudits: number;
@@ -141,7 +142,8 @@ export async function runBenchmarkCases(
           outDir: caseDir,
           exportCsv: join(caseDir, "prospects.csv"),
           summaryJson: join(caseDir, "discovery-summary.json"),
-          release: requestedRelease
+          release: requestedRelease,
+          cacheDir: options.cacheDir
         });
         const datasetReleases = releasesFrom(discovery.rows);
         if (!options.release && !pinnedRelease && datasetReleases[0]) {
@@ -303,6 +305,7 @@ function escapeCsv(value: unknown): string {
 
 function renderCasesCsv(results: BenchmarkCaseResult[]): string {
   const header = ["caseId", "repeat", "status", "country", "city", "region", "category", "bbox", "requestedLimit", "requestedRelease", "returnedCount", "datasetReleases", "elapsedMs", "discoveryMs", "enrichmentAndReportMs", "totalMs", "sourceWebsiteCount", "sourcePhoneCount", "sourceEmailCount", "sourceAddressCount", "sourceCoverageDenominator", "postWebsiteCount", "postPhoneCount", "postEmailCount", "postAddressCount", "postCoverageDenominator", "websiteAttempts", "websiteSuccess", "websiteBlocked", "websiteFailed", "error"];
+  header.push("cacheStatus", "cacheFetchedAt");
   const records = results.map((result) => [
     result.case.id,
     result.repeat ?? 1,
@@ -334,7 +337,9 @@ function renderCasesCsv(results: BenchmarkCaseResult[]): string {
     result.metrics?.websites.filter((website) => website.status === "success").length ?? "",
     result.metrics?.websites.filter((website) => website.status === "blocked").length ?? "",
     result.metrics?.websites.filter((website) => website.status === "failed").length ?? "",
-    result.error ?? ""
+    result.error ?? "",
+    result.metrics?.cache?.status ?? "not-recorded",
+    result.metrics?.cache?.fetchedAt ?? ""
   ]);
   return `${[header, ...records].map((row) => row.map(escapeCsv).join(",")).join("\n")}\n`;
 }
@@ -385,14 +390,17 @@ function renderSummaryMarkdown(summary: BenchmarkSummary, results: BenchmarkCase
     "",
     "## Per-case results",
     "",
-    "| Case | Country | City / region | Category | Status | Requested release | Returned | Dataset release | Discovery ms | Enrichment + report ms | Runner total ms | Wall ms | Crawls (ok/blocked/failed) | Error |",
-    "| --- | --- | --- | --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |",
+    "Cache-enabled runs can mix fresh and cached work. Compare per-case cache states when evaluating repeat-search speed; city-name lookup is excluded by this bounding-box matrix.",
+    "",
+    "| Case | Country | City / region | Category | Status | Cache | Requested release | Returned | Dataset release | Discovery ms | Enrichment + report ms | Runner total ms | Wall ms | Crawls (ok/blocked/failed) | Error |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |",
     ...results.map((result) => [
       result.case.id,
       result.case.country,
       `${result.case.city} / ${result.case.region}`,
       result.case.category,
       result.status,
+      result.metrics?.cache?.status ?? "not-recorded",
       result.requestedRelease ?? "latest at request time",
       result.returnedCount,
       result.datasetReleases.join(", ") || "none recorded",
@@ -414,6 +422,7 @@ function markdownCell(value: unknown): string {
 
 interface CommandLineOptions {
   outDir: string;
+  cacheDir?: string;
   release?: string;
   limit: number;
   maxAudits: number;
@@ -431,22 +440,23 @@ function parseArgs(argv: string[]): CommandLineOptions {
     values.set(option, value);
     index += 1;
   }
-  const allowed = new Set(["--out-dir", "--release", "--limit", "--max-audits", "--case-filter", "--repeats"]);
+  const allowed = new Set(["--out-dir", "--release", "--limit", "--max-audits", "--case-filter", "--repeats", "--cache-dir"]);
   for (const option of values.keys()) if (!allowed.has(option)) throw new Error(`Unknown argument: ${option}`);
-  const numeric = (option: string, fallback: number): number => {
+  const numeric = (option: string, fallback: number, minimum = 1): number => {
     const value = values.get(option);
     if (value === undefined) return fallback;
     const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed < 1) throw new Error(`${option} must be a positive integer`);
+    if (!Number.isInteger(parsed) || parsed < minimum) throw new Error(`${option} must be an integer of at least ${minimum}`);
     return parsed;
   };
   const outDir = values.get("--out-dir");
   if (!outDir) throw new Error("--out-dir is required");
   return {
     outDir,
+    cacheDir: values.get("--cache-dir"),
     release: values.get("--release"),
     limit: numeric("--limit", 10),
-    maxAudits: numeric("--max-audits", 3),
+    maxAudits: numeric("--max-audits", 3, 0),
     caseFilter: values.get("--case-filter"),
     repeats: numeric("--repeats", 1)
   };

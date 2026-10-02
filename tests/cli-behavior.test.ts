@@ -113,6 +113,28 @@ async function startLocalBusinessServer(): Promise<{ server: Server; url: string
 }
 
 describe("CLI behavior helpers", () => {
+  it("exposes guided start and discovery cache controls in help", () => {
+    const root = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], { encoding: "utf8" });
+    const discovery = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "discover", "--help"], { encoding: "utf8" });
+    expect(root.status).toBe(0);
+    expect(root.stdout).toContain("start [options]");
+    expect(discovery.stdout).toContain("--cache-dir");
+    expect(discovery.stdout).toContain("--no-cache");
+    expect(discovery.stdout).toContain("--refresh-cache");
+  });
+
+  it("rejects conflicting discovery cache controls before searching", () => {
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "discover", "dental", "--bbox", "28.8,40.9,29.1,41.1", "--no-cache", "--refresh-cache", "--dry-run", "--export-csv", "unused.csv"], { encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--refresh-cache cannot be combined with --no-cache");
+  });
+
+  it("rejects guided start without a terminal instead of waiting for input", () => {
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "start"], { encoding: "utf8", timeout: 10000 });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/requires.*terminal/);
+    expect(result.stderr).toContain("--export-csv");
+  });
   it("lists workflow preflight, plan, and status options in help", () => {
     const rootHelp = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "--help"], {
       cwd: process.cwd(),

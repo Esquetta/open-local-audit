@@ -7,6 +7,13 @@ import {
 } from "../scripts/benchmark-discovery.js";
 
 describe("free discovery benchmark harness", () => {
+  it("shares the explicit cache across repeats and permits discovery-only measurements", async () => {
+    const runner = vi.fn(async () => ({ rows: [], summary: { totalCandidates: 0 }, metrics: { discoveryMs: 5, auditMs: 0, totalMs: 5, websites: [] } }));
+    await runBenchmarkCases(buildBenchmarkCases().slice(0, 1), { outDir: "reports/test", cacheDir: "reports/cache", limit: 10, maxAudits: 0, repeats: 2 }, runner as never);
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner).toHaveBeenNthCalledWith(1, expect.objectContaining({ cacheDir: "reports/cache", maxAudits: 0 }));
+    expect(runner).toHaveBeenNthCalledWith(2, expect.objectContaining({ cacheDir: "reports/cache", maxAudits: 0 }));
+  });
   it("covers every requested country, city, and category and pins the first returned release", async () => {
     const cases = buildBenchmarkCases();
 
