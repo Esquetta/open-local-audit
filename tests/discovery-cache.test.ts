@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isAbsolute, join } from "node:path";
 import { discoveryCacheKey, defaultDiscoveryCacheDirectory } from "../src/discovery-cache.js";
 
 describe("Overture discovery cache identity", () => {
@@ -18,6 +19,11 @@ describe("Overture discovery cache identity", () => {
   });
 
   it("uses an absolute platform cache directory", () => {
-    expect(defaultDiscoveryCacheDirectory()).toMatch(/open-local-audit[\\/]cache[\\/]discovery$/);
+    const directory = defaultDiscoveryCacheDirectory();
+    const suffix = process.platform === "win32"
+      ? join("open-local-audit", "cache", "discovery")
+      : join("open-local-audit", "discovery");
+    expect(isAbsolute(directory)).toBe(true);
+    expect(directory.endsWith(suffix)).toBe(true);
   });
 });
