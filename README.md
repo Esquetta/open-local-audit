@@ -514,6 +514,7 @@ Example report artifacts are available under [`examples/reports`](./examples/rep
 - `discover --provider google-places` requires `GOOGLE_MAPS_API_KEY` and may incur Google Maps Platform billing.
 - `--limit` caps Google Places candidates at 50; it does not paginate beyond one Text Search request.
 - `--max-audits` limits website audits only; all discovered candidates still appear in `leads.csv`.
+- For Overture, `--audit-priority missing-contact` prioritizes missing source email, then phone; the default `source-order` preserves existing selection. Standard exports explain each selection and include business–website identity evidence. Conflicting sites contribute no website contacts or audit scores; uncertain matches require manual review. See the [free discovery guide](./docs/guides/free-discovery.md#website-enrichment).
 - `--suppression-list` uses exact lead identity matching; source IDs are preferred, then normalized website URLs, then normalized labels.
 - `--review-csv` is local operator state only; it does not send outreach or sync to a CRM.
 - `--duplicates-json` reports exact duplicate lead groups and advisory fuzzy duplicate candidates for manual review; it does not auto-suppress rows or update review decisions.

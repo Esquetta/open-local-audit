@@ -13,6 +13,7 @@ export interface BatchInputEntry {
   segment?: string;
   profile?: AuditProfile;
   source?: string;
+  sourceId?: string;
 }
 
 export interface BatchReportOptions {
@@ -36,6 +37,7 @@ export interface BatchAuditContext {
   slug: string;
   outDir: string;
   profile: AuditProfile;
+  sourceId?: string;
 }
 
 export type BatchIndexSort = "score-asc" | "severity-desc";
@@ -942,7 +944,8 @@ export async function runBatchReports(
       const report = await audit(prepared.entry.url, {
         slug: prepared.slug,
         outDir: prepared.siteOutDir,
-        profile: prepared.profile
+        profile: prepared.profile,
+        ...(prepared.entry.sourceId !== undefined ? { sourceId: prepared.entry.sourceId } : {})
       });
       const reportProfile = report.profile ?? "generic";
       const outputs = await writeReportOutputs(report, {

@@ -914,6 +914,7 @@ export async function runResolvedWorkflow(
         ...(config.discovery.provider === "manual-csv" ? { input: config.discovery.input } : {}),
         ...(config.discovery.provider === "google-places" ? { query: config.discovery.query } : {}),
         ...(config.discovery.provider === "overture" ? { query: config.discovery.query, bbox: config.discovery.bbox, release: config.discovery.release } : {}),
+        ...(config.discovery.provider === "overture" && config.discovery.auditPriority !== undefined ? { auditPriority: config.discovery.auditPriority } : {}),
         profile: config.discovery.profile,
         outDir: config.paths.reportsDir,
         managedOutputRoot: config.paths.reportsDir,

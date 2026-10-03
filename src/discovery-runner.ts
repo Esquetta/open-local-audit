@@ -15,6 +15,7 @@ import {
   renderDiscoveryReviewCsv,
   renderProspectRowsCsv,
   resolveCandidateWebsite,
+  stableLeadKey,
   type DiscoveryProviderName,
   type DiscoverySummary,
   type LeadReviewRow,
@@ -25,6 +26,8 @@ import {
 import type { AuditProfile, ReportBrandConfig } from "./types.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
 import type { DiscoveryCacheInfo } from "./discovery-cache.js";
+import { compareBusinessIdentity, type BusinessIdentityResult } from "./business-identity.js";
+import { selectAuditCandidates, type AuditPriority } from "./audit-selection.js";
 
 export interface DiscoveryRunOptions {
   provider: DiscoveryProviderName;
@@ -51,6 +54,7 @@ export interface DiscoveryRunOptions {
   release?: string;
   cacheDir?: string;
   refreshCache?: boolean;
+  auditPriority?: AuditPriority;
   managedOutputRoot?: string;
   brand?: ReportBrandConfig;
 }
@@ -63,8 +67,10 @@ export interface DiscoveryRunResult {
     auditMs: number;
     totalMs: number;
     cache?: DiscoveryCacheInfo;
+    selection?: { priority: AuditPriority; eligible: number; selected: number };
+    identity?: { matched: number; uncertain: number; conflict: number; notChecked: number };
     sourceCoverage?: { denominator: number; website: number; phone: number; email: number; address: number };
-    websites: Array<{ url: string; status: string; durationMs: number; pagesFetched: number; sourceUrls: string[]; error?: string; warnings?: string[] }>;
+    websites: Array<{ url: string; status: string; durationMs: number; pagesFetched: number; sourceUrls: string[]; error?: string; warnings?: string[]; sourceId?: string; identity?: BusinessIdentityResult }>;
   };
 }
 
@@ -97,6 +103,10 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
   let cache: DiscoveryCacheInfo | undefined;
   const websiteMetrics: NonNullable<DiscoveryRunResult["metrics"]>["websites"] = [];
   const hostQueues = new Map<string, Promise<void>>();
+  const identities = new Map<string, BusinessIdentityResult>();
+  const auditPriority = options.auditPriority ?? "source-order";
+  if (auditPriority !== "source-order" && auditPriority !== "missing-contact") throw new Error("Unsupported audit priority");
+  if (auditPriority !== "source-order" && options.provider !== "overture") throw new Error("Audit prioritization is only supported with --provider overture");
   if ((options.cacheDir || options.refreshCache) && options.provider !== "overture") {
     throw new Error("Discovery caching is only supported with --provider overture");
   }
@@ -171,6 +181,8 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
   ];
   const suppressionResult = filterSuppressedProspects(prospectInputs, suppressionEntries);
   prospectInputs = suppressionResult.included;
+  const selection = selectAuditCandidates(prospectInputs, { priority: auditPriority, maxAudits: options.maxAudits, dryRun: options.dryRun });
+  prospectInputs = prospectInputs.map((input, index) => ({ ...input, auditSelection: selection.decisions[index] }));
   const sourceRows = options.provider === "overture" ? buildProspectRows(prospectInputs) : [];
   const sourceCoverage = {
     denominator: sourceRows.length,
@@ -182,17 +194,16 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
 
   const auditStarted = performance.now();
   if (!options.dryRun) {
-    const auditable = prospectInputs
-      .map((input, index) => ({ ...input, index }))
-      .filter((input) => input.resolution.status === "resolved" && input.resolution.websiteUrl)
-      .slice(0, options.maxAudits);
+    const auditable = selection.selectedIndices.map((index) => ({ ...prospectInputs[index], index }));
+    const candidatesById = new Map(auditable.map((input) => [stableLeadKey(input), input.candidate]));
 
     const auditResults = await runBatchReports(
       auditable.map((input) => ({
         url: input.resolution.websiteUrl ?? "",
         label: input.candidate.label,
         segment: input.candidate.segment,
-        profile: input.candidate.profile
+        profile: input.candidate.profile,
+        ...(options.provider === "overture" ? { sourceId: stableLeadKey(input) } : {})
       })),
       {
         format: "all",
@@ -201,7 +212,10 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
         profile: options.profile,
         brand: options.brand,
         ...(options.provider === "overture" ? {
-          audit: async (url: string, context: { profile: AuditProfile }) => {
+          audit: async (url: string, context: { profile: AuditProfile; sourceId?: string }) => {
+            const sourceId = context.sourceId ?? "";
+            const candidate = candidatesById.get(sourceId);
+            if (!candidate) throw new Error("Missing discovery candidate identity");
             const host = new URL(url).hostname.replace(/^www\./, "");
             const previous = hostQueues.get(host) ?? Promise.resolve();
             let unlock!: () => void;
@@ -212,11 +226,15 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
             const { enrichWebsite } = await import("./website-enrichment.js");
             const { auditSnapshot } = await import("./audit.js");
             const enriched = await enrichWebsite(url);
-            websiteMetrics.push({ url, status: enriched.status, durationMs: enriched.durationMs, pagesFetched: enriched.pagesFetched, sourceUrls: enriched.sourceUrls, error: enriched.error, warnings: enriched.warnings });
+            const identity = compareBusinessIdentity(candidate, enriched.businessIdentities ?? []);
+            identities.set(sourceId, identity);
+            websiteMetrics.push({ url, status: enriched.status, durationMs: enriched.durationMs, pagesFetched: enriched.pagesFetched, sourceUrls: enriched.sourceUrls, error: enriched.error, warnings: enriched.warnings, sourceId, identity });
             if (enriched.status !== "success" || !enriched.snapshot) throw new Error(enriched.error ?? "Website enrichment did not return an auditable page");
+            if (identity.status === "conflict") throw new Error(`Website identity conflicts with the source: ${identity.reasons.join("; ")}`);
             const report = auditSnapshot(enriched.snapshot, undefined, { profile: context.profile });
             report.evidence.push(...(enriched.warnings ?? []).map((value) => ({ label: "Website enrichment warning", value })));
-            return { ...report, contact: enriched.contact };
+            report.businessIdentity = identity;
+            return { ...report, contact: enriched.contact ? { ...enriched.contact, ...(identity.status === "uncertain" && enriched.contact.contactConfidence !== "None" ? { contactConfidence: "Low" as const } : {}) } : undefined };
             } finally {
               unlock();
               if (hostQueues.get(host) === lock) hostQueues.delete(host);
@@ -239,7 +257,8 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
           ...input,
           audit: {
             status: "failed",
-            error: result.error
+            error: result.error,
+            ...(options.provider === "overture" ? { identity: identities.get(stableLeadKey(input)) ?? compareBusinessIdentity(input.candidate, []) } : {})
           }
         };
       }
@@ -254,7 +273,8 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
           score,
           topFinding: result.report.findings[0]?.title,
           reportPath: preferredReportPath(result.slug, result.outputs),
-          contact: result.report.contact
+          contact: result.report.contact,
+          ...(options.provider === "overture" ? { identity: identities.get(stableLeadKey(input)) ?? compareBusinessIdentity(input.candidate, []) } : {})
         }
       };
     });
@@ -293,6 +313,15 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
   return {
     rows,
     summary,
-    ...(options.provider === "overture" ? { metrics: { discoveryMs, auditMs, totalMs: performance.now() - started, cache, sourceCoverage, websites: websiteMetrics } } : {})
+    ...(options.provider === "overture" ? { metrics: {
+      discoveryMs, auditMs, totalMs: performance.now() - started, cache, sourceCoverage, websites: websiteMetrics,
+      selection: { priority: auditPriority, eligible: selection.decisions.filter((item) => item.rank !== undefined).length, selected: selection.selectedIndices.length },
+      identity: {
+        matched: rows.filter((row) => row.identityStatus === "matched").length,
+        uncertain: rows.filter((row) => row.identityStatus === "uncertain").length,
+        conflict: rows.filter((row) => row.identityStatus === "conflict").length,
+        notChecked: rows.filter((row) => row.identityStatus === "not-checked").length
+      }
+    } } : {})
   };
 }

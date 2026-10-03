@@ -28,6 +28,14 @@ describe("workflow configuration", () => {
     expect(config.discovery).toMatchObject({ provider: "overture", query: "dental", limit: 10 });
   });
 
+  it("accepts explicit audit priority while preserving the shape of existing configs", async () => {
+    const discovery = { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1" };
+    await writeConfig({ version: 1, outDir: "./output", discovery, shortlist: {} });
+    expect((await readWorkflowConfig(configPath)).discovery).not.toHaveProperty("auditPriority");
+    await writeConfig({ version: 1, outDir: "./output", discovery: { ...discovery, auditPriority: "missing-contact" }, shortlist: {} });
+    expect((await readWorkflowConfig(configPath)).discovery).toHaveProperty("auditPriority", "missing-contact");
+  });
+
   it("rejects unbounded Overture discovery before creating output", async () => {
     await writeConfig({ version: 1, outDir: "./output", discovery: { provider: "overture", query: "dental", bbox: "29,41,28,40" }, shortlist: {} });
     await expect(readWorkflowConfig(configPath)).rejects.toThrow();

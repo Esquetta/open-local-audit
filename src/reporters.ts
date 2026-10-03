@@ -13,6 +13,16 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function escapeMarkdown(value: string): string {
+  return value
+    .replace(/\r?\n/g, " ")
+    .replace(/\\/g, "\\\\")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/([`*_{}\[\]()#!|])/g, "\\$1");
+}
+
 function severityRank(finding: Finding): number {
   const ranks = {
     high: 0,
@@ -140,6 +150,34 @@ function renderMarkdownContactReadiness(report: AuditReport): string[] {
   ];
 }
 
+function identityStatusLabel(status: NonNullable<AuditReport["businessIdentity"]>["status"]): string {
+  return status === "matched" ? "Matched" : status === "conflict" ? "Conflict" : "Uncertain";
+}
+
+function renderMarkdownBusinessIdentity(report: AuditReport): string[] {
+  const identity = report.businessIdentity;
+  if (!identity) return [];
+
+  return [
+    "## Business Identity Check",
+    "",
+    `- Status: ${identityStatusLabel(identity.status)}`,
+    ...(identity.status === "uncertain" ? ["- Warning: Business identity could not be confirmed from available evidence."] : []),
+    ...identity.reasons.map((reason) => `- ${escapeMarkdown(reason)}`),
+    "",
+    ...(identity.evidence.length > 0
+      ? [
+          "| Field | Result | Source evidence | Website evidence | Page URL | Reason |",
+          "| --- | --- | --- | --- | --- | --- |",
+          ...identity.evidence.map((item) =>
+            `| ${item.field} | ${item.state} | ${escapeMarkdown(item.sourceValues.join("; "))} | ${escapeMarkdown(item.websiteValues.join("; "))} | ${escapeMarkdown(item.pageUrl ?? "")} | ${escapeMarkdown(item.reason)} |`
+          ),
+          ""
+        ]
+      : [])
+  ];
+}
+
 function renderHtmlVisualEvidence(report: AuditReport): string {
   if (!report.visualEvidence || report.visualEvidence.length === 0) {
     return "";
@@ -216,6 +254,31 @@ ${rows}
 `;
 }
 
+function renderHtmlBusinessIdentity(report: AuditReport): string {
+  const identity = report.businessIdentity;
+  if (!identity) return "";
+
+  const reasons = identity.reasons.length > 0
+    ? `<ul>\n${identity.reasons.map((reason) => `      <li>${escapeHtml(reason)}</li>`).join("\n")}\n    </ul>`
+    : "";
+  const evidence = identity.evidence.length > 0
+    ? `    <table>
+      <thead><tr><th>Field</th><th>Result</th><th>Source evidence</th><th>Website evidence</th><th>Page URL</th><th>Reason</th></tr></thead>
+      <tbody>
+${identity.evidence.map((item) => `<tr><td>${escapeHtml(item.field)}</td><td>${escapeHtml(item.state)}</td><td>${escapeHtml(item.sourceValues.join("; "))}</td><td>${escapeHtml(item.websiteValues.join("; "))}</td><td>${escapeHtml(item.pageUrl ?? "")}</td><td>${escapeHtml(item.reason)}</td></tr>`).join("\n")}
+      </tbody>
+    </table>`
+    : "";
+
+  return `    <section>
+    <h2>Business Identity Check</h2>
+    <p><strong>Status:</strong> ${identityStatusLabel(identity.status)}</p>
+${identity.status === "uncertain" ? "    <p><strong>Warning:</strong> Business identity could not be confirmed from available evidence.</p>\n" : ""}${reasons}
+${evidence}
+    </section>
+`;
+}
+
 function renderHtmlExecutiveSummary(report: AuditReport): string {
   const summary = executiveSummary(report);
   const findings =
@@ -260,6 +323,7 @@ export function renderMarkdownReport(report: AuditReport, options: ReportRenderO
     ""
   ];
 
+  lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownBusinessIdentity(report));
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownVisualEvidence(report));
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownLighthouse(report));
   lines.splice(lines.indexOf("## Findings"), 0, ...renderMarkdownContactReadiness(report));
@@ -315,6 +379,7 @@ export function renderHtmlReport(report: AuditReport, options: ReportRenderOptio
   const lighthouse = renderHtmlLighthouse(report);
   const contact = renderHtmlContactReadiness(report);
   const executive = renderHtmlExecutiveSummary(report);
+  const businessIdentity = renderHtmlBusinessIdentity(report);
   const footer =
     reportBrand?.footerText || reportBrand?.contact
       ? `<footer class="meta">${escapeHtml([reportBrand.footerText, reportBrand.contact].filter(Boolean).join(" | "))}</footer>`
@@ -365,7 +430,7 @@ ${scoreRows}
       </tbody>
     </table>
     </section>
-${executive}${contact}${lighthouse}${visualEvidence}    <section>
+${businessIdentity}${executive}${contact}${lighthouse}${visualEvidence}    <section>
     <h2>Findings</h2>
     <table>
       <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>

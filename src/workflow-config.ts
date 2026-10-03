@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
-import { auditProfileSchema } from "./schema.js";
+import { auditProfileSchema, auditPrioritySchema } from "./schema.js";
 import type { ShortlistSort } from "./shortlist.js";
 import { parseDiscoveryBbox } from "./discovery-location.js";
 
@@ -33,6 +33,7 @@ const googleDiscoverySchema = z
 
 const overtureDiscoverySchema = z.object({
   provider: z.literal("overture"),
+  auditPriority: auditPrioritySchema.optional(),
   query: nonblankStringSchema.regex(/^[a-z][a-z0-9_]{0,80}$/i, "Expected an Overture category identifier"),
   bbox: nonblankStringSchema.refine((value) => { try { parseDiscoveryBbox(value); return true; } catch { return false; } }, "Expected valid west,south,east,north bounds"),
   release: z.string().regex(/^\d{4}-\d{2}-\d{2}\.\d+$/).optional(),

@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditProfile, PublicContact } from "./types.js";
+import type { BusinessIdentityEvidence, BusinessIdentityResult } from "./business-identity.js";
+import type { AuditSelectionDecision } from "./audit-selection.js";
 
 export type DiscoveryProviderName = "manual-csv" | "google-places" | "overture";
 
@@ -30,12 +32,14 @@ export interface DiscoveryAuditResult {
   reportPath?: string;
   error?: string;
   contact?: PublicContact;
+  identity?: BusinessIdentityResult;
 }
 
 export interface ProspectRowInput {
   candidate: PlaceCandidate;
   resolution: WebsiteResolution;
   audit?: DiscoveryAuditResult;
+  auditSelection?: AuditSelectionDecision;
 }
 
 export interface ProspectExportRow {
@@ -85,6 +89,12 @@ export interface ProspectExportRow {
   confidence?: number;
   operatingStatus?: string;
   sourceProvenance?: Array<Record<string, string>>;
+  identityStatus?: BusinessIdentityResult["status"] | "not-checked";
+  identityReasons?: string[];
+  identityEvidence?: BusinessIdentityEvidence[];
+  auditSelected?: boolean;
+  auditSelectionReason?: string;
+  auditSelectionRank?: number;
 }
 
 export interface LeadSuppressionEntry {
@@ -741,6 +751,12 @@ export function findFuzzyDuplicateProspectGroups(rows: ProspectExportRow[]): Fuz
 }
 
 function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority" | "nextAction"> {
+  if (input.audit?.identity?.status === "conflict") {
+    return { priority: "medium", nextAction: "Verify the business website manually; its identity conflicts with the source." };
+  }
+  if (input.audit?.identity?.status === "uncertain") {
+    return { priority: "medium", nextAction: "Confirm that this website belongs to the business before using its audit for outreach." };
+  }
   if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
     return { priority: "medium", nextAction: "Verify the business and its website before proposing work." };
   }
@@ -796,6 +812,7 @@ function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority
 }
 
 function opportunityScoreFor(input: ProspectRowInput): number {
+  if (input.audit?.identity?.status === "conflict") return 0;
   if (input.candidate.source === "overture" && !input.resolution.hasWebsite) return 0;
   if (input.resolution.status === "missing") {
     return 95;
@@ -826,6 +843,7 @@ function opportunityScoreFor(input: ProspectRowInput): number {
 }
 
 function opportunityReasonsFor(input: ProspectRowInput): string[] {
+  if (input.audit?.identity?.status === "conflict") return ["Website identity conflicts with the source", ...input.audit.identity.reasons];
   if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
     return ["Website availability is unknown; missing source data is not evidence of a website-build opportunity"];
   }
@@ -867,6 +885,9 @@ function enrichmentFor(input: ProspectRowInput): Pick<
   "pitchAngle" | "recommendedOffer" | "estimatedNeed" | "outreachPriorityReason"
 > {
   const reasons = opportunityReasonsFor(input);
+  if (input.audit?.identity?.status === "conflict") {
+    return { pitchAngle: "Verify business information", recommendedOffer: "Manual qualification", estimatedNeed: "Unknown", outreachPriorityReason: reasons.join("; ") };
+  }
   if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
     return { pitchAngle: "Verify business information", recommendedOffer: "Manual qualification", estimatedNeed: "Unknown", outreachPriorityReason: reasons.join("; ") };
   }
@@ -929,6 +950,12 @@ function contactHandoffFor(input: ProspectRowInput): Pick<
   "preferredContactChannel" | "outreachAction" | "contactabilityReason"
 > {
   const contact = prospectContact(input);
+  if (input.audit?.identity?.status === "conflict") {
+    return { preferredContactChannel: "manual-review", outreachAction: "Resolve the website identity conflict before outreach.", contactabilityReason: "Only source contacts are retained; website identity conflicts with the business record." };
+  }
+  if (input.audit?.identity?.status === "uncertain") {
+    return { preferredContactChannel: "manual-review", outreachAction: "Verify the business and branch before using website contacts or audit findings.", contactabilityReason: "Website identity has insufficient or mixed evidence; contacts require manual verification." };
+  }
   if (input.candidate.source === "overture" && (contact?.publicEmail || contact?.publicPhone)) {
     return {
       preferredContactChannel: contact.publicEmail ? "email" : "phone",
@@ -1015,7 +1042,7 @@ function prospectContact(input: ProspectRowInput): PublicContact | undefined {
   if (input.candidate.source !== "overture") return input.audit?.contact;
   const metadata = input.candidate.sourceMetadata ?? {};
   const first = (key: string): string | undefined => Array.isArray(metadata[key]) ? metadata[key].find((value: unknown) => typeof value === "string" && value.trim()) : undefined;
-  const websiteContact = input.audit?.contact;
+  const websiteContact = input.audit?.identity?.status === "conflict" ? undefined : input.audit?.contact;
   const publicEmail = websiteContact?.publicEmail ?? first("emails");
   const publicPhone = websiteContact?.publicPhone ?? first("phones");
   return {
@@ -1023,13 +1050,16 @@ function prospectContact(input: ProspectRowInput): PublicContact | undefined {
     publicEmail,
     publicPhone,
     socialProfiles: Array.from(new Set([...(websiteContact?.socialProfiles ?? []), ...(Array.isArray(metadata.socials) ? metadata.socials.filter((value): value is string => typeof value === "string") : [])])),
-    contactConfidence: websiteContact?.contactConfidence !== undefined && websiteContact.contactConfidence !== "None" ? websiteContact.contactConfidence : publicEmail || publicPhone ? "Low" : "None",
+    contactConfidence: websiteContact?.contactConfidence !== undefined && websiteContact.contactConfidence !== "None" ? input.audit?.identity?.status === "uncertain" ? "Low" : websiteContact.contactConfidence : publicEmail || publicPhone ? "Low" : "None",
     contactSource: [websiteContact?.contactSource, "Overture Places (source data; not independently verified)"].filter(Boolean).join("; ")
   };
 }
 
 export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow[] {
   return inputs.map((input) => {
+    if (input.audit?.identity?.status === "conflict") {
+      input = { ...input, audit: { ...input.audit, status: "failed", contact: undefined, score: undefined, topFinding: undefined, reportPath: undefined, error: input.audit.error ?? "Website identity conflicts with the source; manual review is required." } };
+    }
     const audit = input.audit ?? { status: "not-audited" as const };
     const priority = priorityFor(input);
     const enrichment = enrichmentFor(input);
@@ -1047,7 +1077,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       label: input.candidate.label,
       segment: input.candidate.segment,
       profile: input.candidate.profile ?? "generic",
-      hasWebsite: hasWebsiteValue(input.resolution),
+      hasWebsite: input.audit?.identity?.status === "conflict" ? "unknown" : hasWebsiteValue(input.resolution),
       websiteUrl: input.resolution.websiteUrl,
       auditStatus: audit.status,
       score: audit.score,
@@ -1056,6 +1086,14 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       opportunityReasons: opportunityReasonsFor(input),
       ...enrichment,
       ...details,
+      ...(input.candidate.source === "overture" ? {
+        identityStatus: input.audit?.identity?.status ?? "not-checked",
+        identityReasons: input.audit?.identity?.reasons ?? [],
+        identityEvidence: input.audit?.identity?.evidence ?? [],
+        auditSelected: input.auditSelection?.selected,
+        auditSelectionReason: input.auditSelection?.reason,
+        auditSelectionRank: input.auditSelection?.rank
+      } : {}),
       publicEmail: contact?.publicEmail,
       publicPhone: contact?.publicPhone,
       whatsappUrl: contact?.whatsappUrl,
@@ -1163,7 +1201,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
   }
 
   const detailColumns = rows.some((row) => row.source === "overture")
-    ? ["address", "country", "locality", "region", "latitude", "longitude", "datasetRelease", "sourceUrl", "retrievedAt", "confidence", "operatingStatus", "sourceProvenance"] as const
+    ? ["address", "country", "locality", "region", "latitude", "longitude", "datasetRelease", "sourceUrl", "retrievedAt", "confidence", "operatingStatus", "sourceProvenance", "identityStatus", "identityReasons", "identityEvidence", "auditSelected", "auditSelectionReason", "auditSelectionRank"] as const
     : [];
   const header = [
     "leadKey",
@@ -1238,7 +1276,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
       row.lastReviewedAt ?? "",
       row.reportPath ?? "",
       row.error ?? "",
-      ...detailColumns.map((key) => key === "sourceProvenance" ? JSON.stringify(row[key] ?? []) : String(row[key] ?? ""))
+      ...detailColumns.map((key) => key === "sourceProvenance" || key === "identityReasons" || key === "identityEvidence" ? JSON.stringify(row[key] ?? []) : String(row[key] ?? ""))
     ]
       .map(escapeCsvCell)
       .join(",")

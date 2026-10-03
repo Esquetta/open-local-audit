@@ -148,4 +148,46 @@ describe("report renderers", () => {
     expect(html).toContain("<h2>Visual Evidence</h2>");
     expect(html).toContain("artifacts/example-home.png");
   });
+
+  it("renders uncertain business identity evidence before summaries and escapes untrusted values", () => {
+    const identity = {
+      status: "uncertain" as const,
+      reasons: ["<script>alert(1)</script>"],
+      evidence: [{
+        field: "name" as const,
+        state: "ambiguous" as const,
+        sourceValues: ["<img src=x onerror=alert(1)>"],
+        websiteValues: ["[Open](javascript:alert(1))"],
+        pageUrl: "https://example.test/<script>",
+        reason: "The name needs review."
+      }]
+    };
+    const reportWithIdentity = {
+      ...report,
+      contact: { socialProfiles: [], contactConfidence: "Low" as const },
+      businessIdentity: identity
+    };
+    const markdown = renderMarkdownReport(reportWithIdentity);
+    const html = renderHtmlReport(reportWithIdentity);
+
+    expect(markdown).toContain("## Business Identity Check");
+    expect(markdown).toContain("Warning: Business identity could not be confirmed");
+    expect(markdown).toContain("&lt;script&gt;alert\\(1\\)&lt;/script&gt;");
+    expect(markdown).toContain("\\[Open\\]\\(javascript:alert\\(1\\)\\)");
+    expect(markdown).toContain("The name needs review.");
+    expect(markdown.indexOf("## Business Identity Check")).toBeLessThan(markdown.indexOf("## Executive Summary"));
+    expect(markdown.indexOf("## Business Identity Check")).toBeLessThan(markdown.indexOf("## Contact Readiness"));
+    expect(html).toContain("<h2>Business Identity Check</h2>");
+    expect(html).toContain("Business identity could not be confirmed");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("The name needs review.");
+    expect(html.indexOf("<h2>Business Identity Check</h2>")).toBeLessThan(html.indexOf("<h2>Executive Summary</h2>"));
+    expect(html.indexOf("<h2>Business Identity Check</h2>")).toBeLessThan(html.indexOf("<h2>Contact Readiness</h2>"));
+  });
+
+  it("keeps reports without business identity unchanged", () => {
+    expect(renderMarkdownReport(report)).not.toContain("Business Identity Check");
+    expect(renderHtmlReport(report)).not.toContain("Business Identity Check");
+  });
 });

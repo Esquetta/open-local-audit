@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { isIP } from "node:net";
 import { load } from "cheerio";
 import { extractPublicContact } from "./contact.js";
+import { extractBusinessIdentities, type ObservedBusinessIdentity } from "./business-identity.js";
 import type { PageSnapshot, PublicContact } from "./types.js";
 
 const USER_AGENT = "open-local-audit/0.1 (+https://github.com/Esquetta/open-local-audit)";
@@ -20,6 +21,7 @@ export interface WebsiteEnrichmentResult {
   status: "success" | "blocked" | "failed";
   snapshot?: PageSnapshot;
   contact?: PublicContact;
+  businessIdentities?: ObservedBusinessIdentity[];
   sourceUrls: string[];
   pagesFetched: number;
   durationMs: number;
@@ -408,17 +410,19 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
     }
     const homepage = await fetchPage(initial.toString(), initial.hostname);
     const contactEntries = [{ contact: combinePageContact(homepage.html, homepage.finalUrl), pageUrl: homepage.finalUrl }];
+    const businessIdentities = extractBusinessIdentities(homepage.html, homepage.finalUrl);
     const followUps = contactLinks(homepage.html, homepage.finalUrl, new URL(homepage.finalUrl).origin, maxPages - 1);
     for (const followUp of followUps) {
       try {
         const page = await fetchPage(followUp, initial.hostname);
         contactEntries.push({ contact: combinePageContact(page.html, page.finalUrl), pageUrl: page.finalUrl });
+        businessIdentities.push(...extractBusinessIdentities(page.html, page.finalUrl));
       } catch (error) {
         warnings.push(`${followUp}: ${error instanceof Error ? error.message : "could not read page"}`);
         break;
       }
     }
-    return finish("success", { snapshot: homepage, contact: mergeContacts(contactEntries) });
+    return finish("success", { snapshot: homepage, contact: mergeContacts(contactEntries), ...(businessIdentities.length ? { businessIdentities } : {}) });
   } catch (error) {
     if (error instanceof BlockedError) return finish("blocked", { error: error.message });
     return finish("failed", { error: error instanceof Error ? error.message : "website enrichment failed" });

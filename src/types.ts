@@ -1,3 +1,5 @@
+import type { BusinessIdentityResult } from "./business-identity.js";
+
 export type Severity = "high" | "medium" | "low" | "info";
 
 export type AuditProfile =
@@ -61,6 +63,7 @@ export interface AuditReport {
   visualEvidence?: VisualEvidence[];
   lighthouse?: LighthouseSummary;
   contact?: PublicContact;
+  businessIdentity?: BusinessIdentityResult;
 }
 
 export interface PublicContact {

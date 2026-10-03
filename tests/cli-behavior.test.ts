@@ -121,12 +121,19 @@ describe("CLI behavior helpers", () => {
     expect(discovery.stdout).toContain("--cache-dir");
     expect(discovery.stdout).toContain("--no-cache");
     expect(discovery.stdout).toContain("--refresh-cache");
+    expect(discovery.stdout).toContain("--audit-priority");
   });
 
   it("rejects conflicting discovery cache controls before searching", () => {
     const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "discover", "dental", "--bbox", "28.8,40.9,29.1,41.1", "--no-cache", "--refresh-cache", "--dry-run", "--export-csv", "unused.csv"], { encoding: "utf8" });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("--refresh-cache cannot be combined with --no-cache");
+  });
+
+  it("rejects an unsupported audit priority before discovery", () => {
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "discover", "dental", "--audit-priority", "unknown", "--no-cache", "--dry-run", "--export-csv", "unused.csv"], { encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("auditPriority");
   });
 
   it("rejects guided start without a terminal instead of waiting for input", () => {
