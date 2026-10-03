@@ -126,4 +126,22 @@ describe("website enrichment", () => {
     });
     expect(result.contact?.contactSource).toContain("https://shop.example/contact");
   });
+
+  it("retains business identities from the homepage and contact page it actually fetched", async () => {
+    const result = await enrichWebsite("https://shop.example/", {
+      resolve: publicResolver,
+      fetch: async (input) => {
+        const url = input.toString();
+        if (url.endsWith("/robots.txt")) return response("", 404, { "content-type": "text/plain" });
+        if (url.endsWith("/contact")) return response('<script type="application/ld+json">{"@type":"LocalBusiness","name":"Shop Contact","telephone":"+1 212 555 0100"}</script>');
+        return response('<a href="/contact">Contact</a><script type="application/ld+json">{"@type":"LocalBusiness","name":"Shop Home","telephone":"+1 212 555 0100"}</script>');
+      }
+    });
+
+    expect(result.status).toBe("success");
+    expect(result.businessIdentities?.map((identity) => [identity.name, identity.pageUrl])).toEqual([
+      ["Shop Home", "https://shop.example/"],
+      ["Shop Contact", "https://shop.example/contact"]
+    ]);
+  });
 });

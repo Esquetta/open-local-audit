@@ -2,6 +2,14 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.70.0 - 2026-10-03
+
+- Added evidence-based Overture business-to-website identity checks using structured names, valid phone numbers, and addresses. Missing or mixed evidence remains uncertain; conflicting sites cannot supply business contacts or audit scores.
+- Added identity status, reasons, and field evidence to standard CSV and JSON/Markdown/HTML/PDF reports. Uncertain identity requires manual review and caps contact confidence at Low.
+- Added `--audit-priority missing-contact`, guided priority selection in `start`, and optional workflow `auditPriority`. Source order remains the default; selected candidates fill missing source email first, then phone, while exports retain their original order.
+- Preserved candidate identity when businesses share a website and added regression coverage for branch differences and conflicting identities across fetched pages.
+- Added a bounded comparison script using frozen candidate pools and shared website observations. Small live samples do not establish a contact-yield or identity-accuracy improvement.
+
 ## v0.69.0 - 2026-10-02
 
 - Added a seven-day local cache for repeated Overture searches in `discover` and `start`, keyed by source release, category, bounds, and result limit while preserving the original retrieval time.

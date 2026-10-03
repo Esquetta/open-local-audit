@@ -63,6 +63,25 @@ export async function renderPdfReport(report: AuditReport, options: ReportRender
     writeKeyValue(doc, score.label, `${score.score}/${score.max}`);
   }
 
+  if (report.businessIdentity) {
+    const identity = report.businessIdentity;
+    writeSectionTitle(doc, "Business Identity Check");
+    writeKeyValue(doc, "Status", identity.status === "matched" ? "Matched" : identity.status === "conflict" ? "Conflict" : "Uncertain");
+    if (identity.status === "uncertain") {
+      doc.text("Warning: Business identity could not be confirmed from available evidence.");
+    }
+    for (const reason of identity.reasons) {
+      writeKeyValue(doc, "Reason", reason);
+    }
+    for (const evidence of identity.evidence) {
+      writeKeyValue(doc, `${evidence.field} result`, evidence.state);
+      writeKeyValue(doc, `${evidence.field} source evidence`, evidence.sourceValues.join("; "));
+      writeKeyValue(doc, `${evidence.field} website evidence`, evidence.websiteValues.join("; "));
+      writeKeyValue(doc, `${evidence.field} page URL`, evidence.pageUrl ?? "");
+      writeKeyValue(doc, `${evidence.field} reason`, evidence.reason);
+    }
+  }
+
   writeSectionTitle(doc, "Executive Summary");
   const firstFinding = [...report.findings].sort((left, right) => {
     const ranks: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };

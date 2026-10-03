@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { DiscoveryRunOptions } from "./discovery-runner.js";
 import type { AuditProfile } from "./types.js";
+import type { AuditPriority } from "./audit-selection.js";
 
 export interface StartPromptIO {
   isTTY: boolean;
@@ -176,6 +177,17 @@ async function uniqueDefaultDirectory(io: StartPromptIO, country: string, city: 
   return candidate;
 }
 
+async function promptAuditPriority(io: StartPromptIO): Promise<AuditPriority | null> {
+  for (;;) {
+    const value = await answer(io, "Audit priority: 1) keep source order  2) fill missing contact fields [1]: ");
+    if (value === null) return null;
+    const choice = value.trim();
+    if (!choice || choice === "1") return "source-order";
+    if (choice === "2") return "missing-contact";
+    writeLine(io, "Choose audit priority 1 or 2.");
+  }
+}
+
 async function promptOutputDirectory(io: StartPromptIO, defaultDirectory: string): Promise<string | null> {
   for (;;) {
     const input = await answer(io, `Output directory [${defaultDirectory}]: `);
@@ -186,13 +198,14 @@ async function promptOutputDirectory(io: StartPromptIO, defaultDirectory: string
   }
 }
 
-function showSummary(io: StartPromptIO, options: Pick<DiscoveryRunOptions, "city" | "country" | "query" | "limit" | "maxAudits" | "outDir">): void {
+function showSummary(io: StartPromptIO, options: Pick<DiscoveryRunOptions, "city" | "country" | "query" | "limit" | "maxAudits" | "outDir" | "auditPriority">): void {
   writeLine(io, "");
   writeLine(io, "Discovery summary");
   writeLine(io, `  Location: ${options.city}, ${options.country}`);
   writeLine(io, `  Category: ${options.query}`);
   writeLine(io, `  Candidate limit: ${options.limit}`);
   writeLine(io, `  Website audit cap: ${options.maxAudits}`);
+  if ((options.maxAudits ?? 0) > 0) writeLine(io, `  Audit priority: ${options.auditPriority === "missing-contact" ? "Fill missing contact fields" : "Keep source order"}`);
   writeLine(io, `  Output: ${options.outDir}`);
   writeLine(io, "  Free API-keyless Overture discovery; results are stored in local files.");
 }
@@ -213,13 +226,15 @@ export async function collectStartOptions(io: StartPromptIO = defaultPromptIo())
     if (limit === null) return null;
     const maxAudits = await promptWholeNumber(io, "Website audit cap", Math.min(3, limit), 0, limit, `Website audit cap must be a whole number from 0 to ${limit}.`);
     if (maxAudits === null) return null;
+    const auditPriority = maxAudits > 0 ? await promptAuditPriority(io) : "source-order";
+    if (auditPriority === null) return null;
 
     const defaultDirectory = await uniqueDefaultDirectory(io, country, city, category.query);
     let outDir = await promptOutputDirectory(io, defaultDirectory);
     if (outDir === null) return null;
 
     for (;;) {
-      showSummary(io, { city, country, query: category.query, limit, maxAudits, outDir });
+      showSummary(io, { city, country, query: category.query, limit, maxAudits, outDir, auditPriority });
       const confirmation = await answer(io, "Start? [Y/n]: ");
       if (confirmation === null) return null;
       const normalized = confirmation.trim().toLowerCase();
@@ -233,6 +248,7 @@ export async function collectStartOptions(io: StartPromptIO = defaultPromptIo())
             profile: category.profile,
             limit,
             maxAudits,
+            ...(maxAudits > 0 ? { auditPriority } : {}),
             concurrency: 3,
             dryRun: maxAudits === 0,
             outDir,

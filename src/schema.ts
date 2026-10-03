@@ -33,6 +33,7 @@ export const auditProfileSchema = z.enum([
   "auto-service"
 ]);
 export const discoveryProviderSchema = z.enum(["manual-csv", "google-places", "overture"]);
+export const auditPrioritySchema = z.enum(["source-order", "missing-contact"]);
 
 export const cliOptionsSchema = z.object({
   format: outputFormatSchema.default("markdown"),
@@ -63,6 +64,7 @@ export const cliOptionsSchema = z.object({
   dryRun: z.boolean().default(false),
   limit: z.coerce.number().int().positive().default(10),
   maxAudits: z.coerce.number().int().min(0).optional(),
+  auditPriority: auditPrioritySchema.optional(),
   summaryJson: z.string().optional(),
   suppressionList: z.string().optional(),
   reviewCsv: z.string().optional(),

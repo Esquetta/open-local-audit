@@ -5,6 +5,7 @@ import type {
   WorkflowPreflightStatus
 } from "./workflow-preflight.js";
 import type { ResolvedWorkflowConfig } from "./workflow-config.js";
+import type { AuditPriority } from "./audit-selection.js";
 
 export type WorkflowPlanStatus = WorkflowPreflightStatus;
 export type WorkflowPlanStepId = "discovery" | "shortlist" | "review" | "packaging" | "summary";
@@ -47,6 +48,7 @@ export type WorkflowPlanStep =
         concurrency: number;
         maxCandidates: number | null;
         maxAudits: number | null;
+        auditPriority?: AuditPriority;
       }
     >
   | WorkflowPlanStepBase<
@@ -160,7 +162,8 @@ function buildPlan(evaluation: WorkflowPreflightEvaluation): WorkflowPlanReport 
         profile: config.discovery.profile,
         concurrency: config.discovery.concurrency,
         maxCandidates: config.discovery.provider !== "manual-csv" ? config.discovery.limit : null,
-        maxAudits: config.discovery.maxAudits ?? null
+        maxAudits: config.discovery.maxAudits ?? null,
+        ...(config.discovery.provider === "overture" && config.discovery.auditPriority !== undefined ? { auditPriority: config.discovery.auditPriority } : {})
       }
     },
     {
@@ -268,6 +271,7 @@ function renderWorkflowPlanStep(step: WorkflowPlanStep, index: number): string[]
   const networkCapabilities = renderNetworkCapabilities(step);
   return [
     `${index + 1}. ${step.id} [${step.state.toUpperCase().replace("-", " ")}]`,
+    ...(step.id === "discovery" && step.settings.auditPriority ? [`   Audit priority: ${step.settings.auditPriority}`] : []),
     ...(step.reason !== undefined ? [`   Reason: ${step.reason}`] : []),
     ...(networkCapabilities.length > 0 ? [`   Network: ${networkCapabilities.join(", ")}`] : []),
     ...(step.inputs.length > 0 ? [`   Inputs: ${step.inputs.join(", ")}`] : []),

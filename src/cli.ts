@@ -87,6 +87,7 @@ const discoveryProgram = program
   .option("--dry-run", "resolve candidates and write leads without auditing websites", false)
   .option("--limit <count>", "maximum discovered candidates to return", "10")
   .option("--max-audits <count>", "maximum website-present candidates to audit")
+  .option("--audit-priority <mode>", "Overture audit selection: source-order or missing-contact", "source-order")
   .option("--min-opportunity-score <score>", "export only leads at or above an opportunity score")
   .option("--concurrency <count>", "maximum concurrent audits when dry-run is not used", "1")
   .addHelpText(
@@ -127,6 +128,14 @@ function discoveryCacheOptions(options: { cache: boolean; cacheDir?: string; ref
 function printDiscoveryResult(result: DiscoveryRunResult): void {
   process.stdout.write(`Discovered ${result.rows.length} lead${result.rows.length === 1 ? "" : "s"}\n`);
   process.stdout.write(`${renderDiscoverySummary(result.summary)}\n`);
+  if (result.metrics?.selection) {
+    const selection = result.metrics.selection;
+    process.stdout.write(`Audit selection: ${selection.priority}; ${selection.selected} selected of ${selection.eligible} eligible\n`);
+  }
+  if (result.metrics?.identity) {
+    const identity = result.metrics.identity;
+    process.stdout.write(`Website identity: ${identity.matched} matched; ${identity.uncertain} uncertain; ${identity.conflict} conflict; ${identity.notChecked} not checked\n`);
+  }
   const cache = result.metrics?.cache;
   if (cache) {
     process.stdout.write(`Discovery cache: ${cache.status}; source ${cache.release}${cache.fetchedAt ? `; fetched ${cache.fetchedAt}` : ""}\n`);
@@ -159,6 +168,7 @@ discoveryProgram.action(async (query?: string) => {
         refreshCache: true,
         limit: true,
         maxAudits: true,
+        auditPriority: true,
         summaryJson: true,
         suppressionList: true,
         reviewCsv: true,
@@ -194,6 +204,7 @@ discoveryProgram.action(async (query?: string) => {
       dryRun: options.dryRun,
       limit: options.limit,
       maxAudits: options.maxAudits,
+      auditPriority: options.auditPriority,
       minOpportunityScore: options.minOpportunityScore,
       concurrency: options.concurrency,
       apiKey: options.provider === "google-places" ? resolveGoogleMapsApiKey() : undefined,

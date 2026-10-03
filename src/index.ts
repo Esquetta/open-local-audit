@@ -7,6 +7,10 @@ export type { BoundingBox, FetchOvertureCandidatesOptions } from "./overture.js"
 export { defaultDiscoveryCacheDirectory } from "./discovery-cache.js";
 export type { DiscoveryCacheInfo } from "./discovery-cache.js";
 export { enrichWebsite } from "./website-enrichment.js";
+export { compareBusinessIdentity, extractBusinessIdentities } from "./business-identity.js";
+export type { BusinessIdentityEvidence, BusinessIdentityResult, ObservedBusinessIdentity } from "./business-identity.js";
+export { selectAuditCandidates } from "./audit-selection.js";
+export type { AuditPriority } from "./audit-selection.js";
 export { cityBoundingBox, findDiscoveryCity, parseDiscoveryBbox, resolveDiscoveryCity } from "./discovery-location.js";
 export {
   buildDiscoverySummary,

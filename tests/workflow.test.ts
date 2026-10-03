@@ -956,6 +956,15 @@ describe("workflow orchestrator", () => {
     expect(summary.selectedLeads).toBe(1);
   });
 
+  it("forwards the explicit Overture audit priority without resolving Google credentials", async () => {
+    await writeWorkflowConfig(manualWorkflowConfig({ discovery: { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", maxAudits: 3, auditPriority: "missing-contact" } }));
+    const discovery = vi.fn(async () => makeDiscoveryResult(0));
+    const resolveGoogleMapsApiKey = vi.fn();
+    await runWorkflow(configPath, { runDiscovery: discovery, runShortlistReport: vi.fn(async () => makeShortlistResult([])), resolveGoogleMapsApiKey });
+    expect(discovery).toHaveBeenCalledWith(expect.objectContaining({ provider: "overture", maxAudits: 3, auditPriority: "missing-contact" }));
+    expect(resolveGoogleMapsApiKey).not.toHaveBeenCalled();
+  });
+
   it("calls the Google API key resolver only for Google discovery and passes the key to discovery", async () => {
     await writeWorkflowConfig(googleWorkflowConfig());
 

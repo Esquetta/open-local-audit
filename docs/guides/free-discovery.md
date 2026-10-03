@@ -10,7 +10,7 @@ For a guided first search from a built source checkout:
 node dist/cli.js start
 ```
 
-The terminal asks for a country code, city, category, candidate count, website-audit cap, and output directory. It previews the search before confirmation. Enter `n` at confirmation or press Ctrl+C to cancel. No discovery requests or output files are created before confirmation. Existing output directories are refused to protect earlier results. Piped/non-interactive use exits with an error and an explicit `discover` example; use that command in scripts.
+The terminal asks for a country code, city, category, candidate count, website-audit cap, audit priority (when the cap is above zero), and output directory. It previews the search before confirmation. Enter `n` at confirmation or press Ctrl+C to cancel. No discovery requests or output files are created before confirmation. Existing output directories are refused to protect earlier results. Piped/non-interactive use exits with an error and an explicit `discover` example; use that command in scripts.
 
 From a source checkout, install dependencies and build:
 
@@ -69,11 +69,26 @@ Known social profiles supplied in a source website field are preserved as social
 
 ## Website enrichment
 
+`--audit-priority source-order` is the default and keeps source ordering. For Overture, `--audit-priority missing-contact` spends the audit cap first on candidates missing source email, then on those missing source phone; ties retain source order. Only candidates with a resolved HTTP(S) website can be selected. Exported rows keep their original order and include `auditSelected`, `auditSelectionReason`, and `auditSelectionRank`. This prioritizes gaps; it does not guarantee additional valid contacts. Priority does not change the source-cache key.
+
+```bash
+node dist/cli.js discover dental --city Istanbul --country TR --profile dental --limit 20 --max-audits 3 --audit-priority missing-contact --export-csv reports/leads.csv
+```
+
 `--dry-run` writes source data without visiting business websites. Otherwise `--max-audits` bounds the sample. Overture audit concurrency is capped at eight; requests to the same business hostname are serialized.
 
 Each site receives a static scan of at most three HTML pages: its homepage and linked same-origin contact/about pages. The crawler checks robots rules, limits response size, has a total timeout, validates public destinations, and pins DNS for production HTTP requests. It does not log in, submit forms, bypass challenges, send messages, or open a browser. JavaScript-only contact data can remain unavailable.
 
-Blocked/failed sites are recorded. If an optional secondary page fails, usable homepage data is retained with a warning. Redirects beyond the equivalent `www` host are conservatively blocked and may require manual review. Source-to-website identity is not independently verified.
+Blocked/failed sites are recorded. If an optional secondary page fails, usable homepage data is retained with a warning. Redirects beyond the equivalent `www` host are conservatively blocked and may require manual review.
+
+Source names, phones, and addresses are compared with structured business data on fetched pages. The standard CSV records `identityStatus`, `identityReasons`, and `identityEvidence`, including source values, website values, and inspected page URLs. Reports include the identity result and evidence.
+
+- `matched`: at least two fields agree without a contradiction in one structured business entity, and no other observed entity conflicts. When the source has a street and locality, the address must also agree.
+- `uncertain`: evidence is missing, weak, mixed, or insufficient. Page titles alone cannot establish identity. A technical report may still be generated, but contact confidence is capped at `Low` and manual verification is required.
+- `conflict`: at least two fields contradict one structured entity, with no matching or unresolved structured entity. Website contacts and audit scores are withheld, source contacts are retained, and no business report is generated for that candidate.
+- `not-checked`: no website audit was selected or performed.
+
+Missing fields are not contradictions. Formatting normalization is conservative; changed numbers, branch pages, incomplete schemas, and stale source data can require manual review. These checks do not certify ownership, contact deliverability, or business legitimacy.
 
 ## Workflow configuration
 
@@ -90,6 +105,7 @@ Version 1 workflows accept explicit Overture bounding boxes:
     "profile": "dental",
     "limit": 10,
     "maxAudits": 3,
+    "auditPriority": "missing-contact",
     "concurrency": 3
   },
   "shortlist": { "top": 10 }
@@ -115,6 +131,16 @@ npm run benchmark:discovery -- --out-dir reports/cache-benchmark --cache-dir rep
 `--max-audits 0` isolates discovery from website work. A previously populated cache may produce a hit on both runs; do not label the first run cold unless its recorded state is `miss`. Per-case JSON retains cache state and original fetch time; the CSV and Markdown identify cached runs. A single pair is an indicative measurement, not a speed guarantee or a load test.
 
 Case JSON and prospect/report outputs are saved as each case completes, followed by summary JSON, CSV, and Markdown. Failure times remain in the evidence. Discovery and enrichment/report times are separate. Contact completeness among returned rows is not market coverage, recall, or contact correctness. Percentiles across different scenarios are descriptive, not load-test results or an SLA. One pass does not establish stable latency. Use `--repeats 2` to intentionally measure another pass, or `--case-filter Istanbul` to limit the matrix.
+
+## Compare audit priorities on a frozen pool
+
+Use a discovery cache JSON file containing 10 or 20 raw candidates:
+
+```bash
+npx tsx scripts/benchmark-audit-priority.ts --cache-file reports/search-cache/<cache-key>.json --pool-limit 10 --budget 3 --out-dir reports/priority-comparison
+```
+
+Both modes use the same frozen candidates and a budget of three. The script fetches the union of selected websites once (at most six unique URLs), then evaluates both selections against those shared observations. Its JSON records source and website contact coverage, newly filled fields, identity evidence, and blocked/failed requests. Uncertain contacts still require manual review; conflicting contacts are excluded. The result measures field completeness for that pool, not identity accuracy or per-mode runtime. Some pools select the same candidates and cannot demonstrate a difference.
 
 ## Sources and attribution
 

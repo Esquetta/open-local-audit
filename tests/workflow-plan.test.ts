@@ -67,6 +67,14 @@ describe("workflow plan", () => {
     expect(renderWorkflowPlanTerminal(report, configPath)).toContain("Overture open data");
   });
 
+  it("shows an explicitly configured audit priority in JSON and terminal plans", async () => {
+    await writeConfig(manualConfig({ discovery: { provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", maxAudits: 3, auditPriority: "missing-contact" } }));
+    const report = await runWorkflowPlan(configPath);
+    expect(findStep(report, "discovery").settings.auditPriority).toBe("missing-contact");
+    expect(renderWorkflowPlanJson(report)).toContain('"auditPriority": "missing-contact"');
+    expect(renderWorkflowPlanTerminal(report, configPath)).toContain("Audit priority: missing-contact");
+  });
+
   it("builds a deterministic manual workflow plan with only enabled artifacts", async () => {
     await writeConfig(manualConfig());
     await writeManualInput();
