@@ -686,6 +686,25 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(napPage(business, "<address>300 Main Street, Suite 12</address>"))).toBeUndefined();
   });
 
+  it("keeps compass abbreviations after a house number as directionals", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "123 North Main Street" } },
+      "<p>Address: 123 N Main St</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("matches addresses with numbered floor or room parts", () => {
+    const business = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Floor 2, Room 3" }
+    };
+
+    expect(napFinding(napPage(business, "<p>Address: 12 Main Street, Floor 2, Room 3</p>"))).toBeUndefined();
+    expect(napFinding(napPage(business, "<p>Address: 12 Main Street, Floor 5</p>"))).toBeDefined();
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 

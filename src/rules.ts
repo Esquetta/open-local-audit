@@ -306,8 +306,8 @@ function addressTokens(value: string): string[] {
     .replace(/ı/g, "i")
     .toLowerCase()
     .replace(/ß/g, "ss")
-    // Join house-number suffixes so "12-A", "12 A" and "12A" compare equal.
-    .replace(/(\p{N})[\s/-]?(\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
+    // Join house-number suffixes so "12-A", "12/A" and "12A" compare equal; "123 N" stays a directional.
+    .replace(/(\p{N})[/-](\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token && !fillerAddressTokens.has(token))
     .map((token) => canonicalAddressTokens[token] ?? token.replace(/(?<=\p{L})strasse$/u, "str"));
@@ -363,20 +363,32 @@ function isHouseNumber(token: string): boolean {
 
 function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
   const tokens = addressTokens(streetAddress);
-  const words = tokens.filter((token) => !isHouseNumber(token));
-  const numbers = tokens.filter(isHouseNumber);
-
-  if (words.length === 0) {
-    return numbers.length === 0 || regions.some((region) => numbers.every((token) => region.includes(token)));
+  if (tokens.length === 0) {
+    return true;
   }
 
-  // The street words must appear together and in order, with the house number directly before or after them.
-  const houseNumber = numbers[0];
+  // Split "12 Main Street, Floor 2" or "Main Street 12, Floor 2" into house number, street words and the rest.
+  const leadingNumber = isHouseNumber(tokens[0]);
+  const wordsStart = leadingNumber ? 1 : 0;
+  let wordsEnd = wordsStart;
+  while (wordsEnd < tokens.length && !isHouseNumber(tokens[wordsEnd])) {
+    wordsEnd += 1;
+  }
+
+  const words = tokens.slice(wordsStart, wordsEnd);
+  const houseNumber = leadingNumber ? tokens[0] : tokens[wordsEnd];
+  const rest = tokens.slice(leadingNumber ? wordsEnd : wordsEnd + 1);
+
   return regions.some((region) => {
-    if (!numbers.every((token) => region.includes(token))) {
+    if (!rest.every((token) => region.some((pageToken) => addressWordMatches(token, pageToken)))) {
       return false;
     }
 
+    if (words.length === 0) {
+      return houseNumber === undefined || region.includes(houseNumber);
+    }
+
+    // The street words must appear together and in order, with the house number directly before or after them.
     for (let start = 0; start + words.length <= region.length; start += 1) {
       if (!words.every((word, offset) => addressWordMatches(word, region[start + offset]))) {
         continue;
