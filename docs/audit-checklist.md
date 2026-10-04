@@ -37,6 +37,7 @@
 - Organization schema exists where relevant.
 - ContactPoint data is present where relevant.
 - Address data is consistent with visible page content.
+  - Rule `localbusiness-schema-nap-consistency` compares LocalBusiness `telephone` and `streetAddress` with the phone numbers and address shown on the page. It only flags a mismatch when the page shows a phone number or address to compare against; missing visible details are left to the presence rules.
 
 ## Content quality
 

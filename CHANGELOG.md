@@ -2,6 +2,10 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.71.0 - 2026-10-04
+
+- Added the `localbusiness-schema-nap-consistency` audit rule. It flags LocalBusiness structured data whose `telephone` or `streetAddress` does not match the phone numbers or address visible on the page, comparing phones as parsed international numbers and street addresses within the page element that shows them, while tolerating formatting differences, national trunk prefixes, common street abbreviations, and diacritics. Pages without a visible phone or address are left to the existing presence rules.
+
 ## v0.70.0 - 2026-10-03
 
 - Added evidence-based Overture business-to-website identity checks using structured names, valid phone numbers, and addresses. Missing or mixed evidence remains uncertain; conflicting sites cannot supply business contacts or audit scores.
