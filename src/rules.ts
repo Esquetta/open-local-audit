@@ -312,6 +312,9 @@ const fillerAddressTokens = new Set(["no", "nr", "the", "and", "jr"]);
 
 function addressTokens(value: string): string[] {
   return value
+    .replace(/\s*([½¼¾])/gu, (_, fraction: string) => ` ${{ "½": "1/2", "¼": "1/4", "¾": "3/4" }[fraction]}`)
+    // Keep fractional house numbers ("12 1/2") as one token so the fraction is not read as separate numbers.
+    .replace(/(\d+)\s+(\d+)\/(\d+)(?![\p{L}\p{N}])/gu, "$1x$2x$3")
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .replace(/ı/g, "i")
@@ -345,7 +348,8 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
   });
 }
 
-const contactLine = /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|t[eé]l[eé]phone|gsm)(?![\p{L}\p{N}])|@/iu;
+const contactLine =
+  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|telefono|teléfono|t[eé]l[eé]phone|tél|gsm|cep|ruf)(?![\p{L}\p{N}])|[@☎📞]/iu;
 
 function hasComparableAddress(text: string): boolean {
   const labelledAddress =
@@ -369,6 +373,14 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
   // so inline markup cannot split an address and unrelated blocks cannot supply street words.
   const lines = visibleLines(body).filter(hasComparableAddress);
+  // An address broken with <br> ("12 Main Street<br>Suite 100") continues within its innermost block, so add those blocks whole.
+  const addressBlocks = body
+    .find(blockElements)
+    .toArray()
+    .filter((element) => $(element).find(blockElements).length === 0)
+    .map((element) => visibleLines($(element)))
+    .filter((blockLines) => blockLines.length > 1 && blockLines.some(hasComparableAddress))
+    .map((blockLines) => blockLines.join(" "));
   const addressElements = body
     .find("address")
     .toArray()
@@ -400,7 +412,7 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
       })
   ].filter(hasComparableAddress);
 
-  return [...lines, ...addressElements, ...labelledPairs].map(addressTokens);
+  return [...lines, ...addressBlocks, ...addressElements, ...labelledPairs].map(addressTokens);
 }
 
 const unspacedScript = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;

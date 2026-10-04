@@ -896,4 +896,37 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(different)?.evidence[0]?.value).toContain('Schema streetAddress "12 Rue de Rivoli" not found');
     expect(napFinding(prose)).toBeUndefined();
   });
+
+  it("ignores address elements that only hold a localized phone number", () => {
+    const madridSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "Calle Mayor 5", addressCountry: "ES" }
+    };
+    const page = napPage(madridSchema, "<address>Teléfono: 91 123 45 67</address>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("keeps address lines split with a line break together", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite 100", addressCountry: "US" }
+    };
+    const page = napPage(suiteSchema, "<p>Address: 12 Main Street<br>Suite 100</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("compares fractional house numbers as one number", () => {
+    const fractionSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 1/2 Main Street", addressCountry: "US" }
+    };
+
+    const otherNumber = napPage(fractionSchema, "<p>Address: 14 1/2 Main Street, Suite 12</p>");
+    const sameNumber = napPage(fractionSchema, "<p>Address: 12½ Main St.</p>");
+
+    expect(napFinding(otherNumber)?.evidence[0]?.value).toContain('Schema streetAddress "12 1/2 Main Street" not found');
+    expect(napFinding(sameNumber)).toBeUndefined();
+  });
 });
