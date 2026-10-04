@@ -810,4 +810,24 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(otherHighway)?.evidence[0]?.value).toContain('Schema streetAddress "12 Highway 66" not found');
     expect(napFinding(sameHighway)).toBeUndefined();
   });
+
+  it("does not read a phone number after an empty address label as a visible address", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<p>Address: unavailable; Phone: (415) 555-0199</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("treats standalone Straße and Str. as the same street word", () => {
+    const germanSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "Muster Straße 5", addressCountry: "DE" }
+    };
+    const page = napPage(germanSchema, "<p>Adresse: Muster Str. 5, Berlin</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
 });

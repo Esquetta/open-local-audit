@@ -338,17 +338,19 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
   });
 }
 
+const contactLine = /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|t[eé]l[eé]phone|gsm)(?![\p{L}\p{N}])|@/iu;
+
 function hasComparableAddress(text: string): boolean {
   const labelledAddress =
-    /(?<!(?:e-?mail|web|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*[^.\n]{0,80}\d/iu;
+    /(?<!(?:e-?mail|web|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*([^.\n]{0,80})/iu;
+  // The number must belong to the address itself, not to a phone or email that follows on the same line.
+  const addressValue = labelledAddress.exec(text)?.[1].split(/[;|]/)[0].split(contactLine)[0];
   const streetNumber =
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
   const numberStreet = /\b\d+[a-z]?\s+(?:[\p{L}]+\s+){1,3}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive)\b/iu;
 
-  return labelledAddress.test(text) || streetNumber.test(text) || numberStreet.test(text);
+  return (addressValue !== undefined && /\d/.test(addressValue)) || streetNumber.test(text) || numberStreet.test(text);
 }
-
-const contactLine = /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|t[eé]l[eé]phone|gsm)(?![\p{L}\p{N}])|@/iu;
 
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
