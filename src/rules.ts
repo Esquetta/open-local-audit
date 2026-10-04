@@ -337,6 +337,10 @@ const canonicalAddressTokens: Record<string, string> = {
   ул: "улица"
 };
 
+const compassLetters = new Set(["n", "s", "e", "w", "ne", "nw", "se", "sw"]);
+
+const streetTypes = new Set(["street", "road", "avenue", "boulevard", "lane", "drive", "highway", "parkway", "place", "court", "square"]);
+
 const fillerAddressTokens = new Set(["no", "nr", "the", "and", "jr"]);
 
 function addressTokens(value: string): string[] {
@@ -363,6 +367,11 @@ function addressTokens(value: string): string[] {
     .flatMap((token) => (token.length > 1 && token.includes("#") ? token.split("#").filter(Boolean) : [token]))
     .filter((token) => token && !fillerAddressTokens.has(token))
     .map((token, index, tokens) => {
+      // A compass letter right before the street type is the street's name ("12 S Street"), not a direction.
+      if (compassLetters.has(token) && streetTypes.has(canonicalAddressTokens[tokens[index + 1]] ?? tokens[index + 1])) {
+        return token;
+      }
+
       // "St" opening a street name ("12 St John St") is Saint; elsewhere it is Street.
       if (token === "st" && /^\p{L}/u.test(tokens[index + 1] ?? "") && (index === 0 || /^\d/.test(tokens[index - 1]))) {
         return "saint";
@@ -391,6 +400,9 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
 const contactLine =
   /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|telefono|teléfono|t[eé]l[eé]phone|tél|gsm|cep|ruf)(?![\p{L}\p{N}])|[@☎📞]/iu;
 
+// Distances and durations after a number ("5 minutes", "2 km") mean directions, not an address.
+const distanceUnits = String.raw`(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|days?|weeks?|km|kms|kilomet(?:er|re)s?|miles?|mi|blocks?|ft|feet|yards?|m|meters?|metres?)\b`;
+
 // House numbers as addressTokens normalizes them: "12", "12A", "12-A", "12-14", "2/14", "12 1/2" and "12½".
 const houseNumberPattern = String.raw`\d+(?:\s*[-–/]\s*\d+|\s+\d+\/\d+|[-/]?[a-z]|[½¼¾])?`;
 
@@ -407,11 +419,15 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
     .split(contactLine)[0]
     // A labelled postal code ("ZIP 94105") is not a street.
     .replace(/(?<![\p{L}\p{N}])(?:zip(?:\s*code)?|post(?:al)?\s*code|postcode|plz|code\s*postal|c[oó]digo\s*postal|cap|cp|posta\s*kodu)\s*:?\s*[\p{L}\p{N}-]*\d[\p{L}\p{N}-]*/giu, "");
-  const streetNumber =
-    /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
+  // Name, street type, number ("Example Street 12"). The name is required and a distance unit may not follow the number,
+  // so directions such as "Drive 5 minutes" are not read as an address.
+  const streetNumber = new RegExp(
+    String.raw`\p{L}{2,}\.?\s+(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d+[a-z]?(?![\p{L}\p{N}]|\s*${distanceUnits})`,
+    "iu"
+  );
   // A year-like number ("2026 Main Street Festival") only counts when the street type ends the address (line end or comma).
   const numberStreet = new RegExp(
-    String.raw`\b(?:(?!(?:19|20)\d\d(?![\p{L}\p{N}]))${houseNumberPattern}|(?:19|20)\d\d(?=\s.*\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\.?\s*(?:[,;|]|$)))\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b`,
+    String.raw`\b(?!\d+\s+${distanceUnits})(?:(?!(?:19|20)\d\d(?![\p{L}\p{N}]))${houseNumberPattern}|(?:19|20)\d\d(?=\s.*\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\.?\s*(?:[,;|]|$)))\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b`,
     "iu"
   );
   // Street types written before the name, as in French, Spanish, Italian and Portuguese ("14 Rue de Rivoli", "5 Calle Mayor").
@@ -437,12 +453,14 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
   // ("14 Kungsgatan"), or with a name ending in a capitalized word and then the number ("Kungsgatan 14",
   // "улица Ленина 5"). Text such as "unavailable until 2027" or "unavailable, error 404" has neither.
   const labelledStructure = new RegExp(
-    String.raw`^\s*(?:${houseNumberPattern},?\s+\p{L}{2,}|(?:\p{L}[\p{L}'’-]*\.?,?\s+){0,3}\p{Lu}[\p{L}'’-]*\.?,?\s+(?:no\.?:?\s*)?${houseNumberPattern}(?![\p{L}\p{N}]))`,
+    String.raw`^\s*(?:${houseNumberPattern},?\s+\p{L}{2,}|(?:\p{L}[\p{L}'’-]*\.?,?\s+){0,3}\p{Lu}[\p{L}'’-]*\.?,?\s+(?:no\.?:?\s*)?(?!(?:19|20)\d\d(?![\p{L}\p{N}])|\d{5})${houseNumberPattern}(?![\p{L}\p{N}]))`,
     "u"
   );
   const streetPatterns = [streetNumber, numberStreet, numberPrefixStreet, compoundStreet, postBox, numberRoute];
 
   return (
+    // Inside <address> any house-number-and-name structure counts ("14 Main Crescent"), not only listed street types.
+    (inAddressElement && labelledStructure.test(text)) ||
     (addressValue !== undefined &&
       (labelledStructure.test(addressValue) || streetPatterns.some((pattern) => pattern.test(addressValue)))) ||
     // Inside <address> the text is already known to be an address, so lowercase "via Roma 14" counts too.

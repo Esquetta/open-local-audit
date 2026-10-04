@@ -1182,4 +1182,38 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone +1 415 555 0123 not found");
   });
+
+  it("does not read driving directions as an address", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(usSchema, "<p>Drive 5 minutes to our location.</p>"))).toBeUndefined();
+    expect(napFinding(napPage(usSchema, "<p>Only 5 minutes drive from the station.</p>"))).toBeUndefined();
+  });
+
+  it("accepts any house-number-and-name structure inside address elements", () => {
+    const crescentSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Crescent", addressCountry: "GB" }
+    };
+
+    expect(napFinding(napPage(crescentSchema, "<address>14 Main Crescent</address>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Crescent" not found'
+    );
+    expect(napFinding(napPage(crescentSchema, "<address>Copyright 2026</address>"))).toBeUndefined();
+  });
+
+  it("keeps a compass letter that names the street", () => {
+    const letterSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 S Street", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(letterSchema, "<p>Address: 12 South Street</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 S Street" not found'
+    );
+    expect(napFinding(napPage(letterSchema, "<p>Address: 12 S. Street</p>"))).toBeUndefined();
+  });
 });
