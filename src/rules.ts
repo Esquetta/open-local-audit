@@ -342,12 +342,17 @@ const contactLine = /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cel
 
 function hasComparableAddress(text: string): boolean {
   const labelledAddress =
-    /(?<!(?:e-?mail|web|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*([^.\n]{0,80})/iu;
-  // The number must belong to the address itself, not to a phone or email that follows on the same line.
-  const addressValue = labelledAddress.exec(text)?.[1].split(/[;|]/)[0].split(contactLine)[0];
+    /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*([^\n]{0,80})/iu;
+  // The number must belong to the address itself, not to a link, phone or email that follows on the same line.
+  const addressValue = labelledAddress
+    .exec(text)?.[1]
+    .replace(/(?:https?:\/\/|www\.)\S*/giu, "")
+    .split(/[.;|](?!\d)/)[0]
+    .split(contactLine)[0];
   const streetNumber =
-    /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
-  const numberStreet = /\b\d+[a-z]?\s+(?:[\p{L}]+\s+){1,3}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive)\b/iu;
+    /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
+  const numberStreet =
+    /\b\d+[a-z]?\s+(?:[\p{L}]+\s+){1,3}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
 
   return (addressValue !== undefined && /\d/.test(addressValue)) || streetNumber.test(text) || numberStreet.test(text);
 }
@@ -410,8 +415,8 @@ const subAddressLabels = new Set(["floor", "suite", "room", "unit", "apartment",
 function containsInOrder(tokens: string[], region: string[]): boolean {
   let position = 0;
   return tokens.every((token, index) => {
-    // A number after a label such as "Floor" must directly follow that label on the page too.
-    if (index > 0 && isHouseNumber(token) && subAddressLabels.has(tokens[index - 1])) {
+    // The value after a label such as "Floor" or "Suite" must directly follow that label on the page too.
+    if (index > 0 && subAddressLabels.has(tokens[index - 1]) && !subAddressLabels.has(token)) {
       if (region[position] !== token) {
         return false;
       }

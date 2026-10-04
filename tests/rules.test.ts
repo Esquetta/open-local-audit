@@ -830,4 +830,37 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)).toBeUndefined();
   });
+
+  it("binds lettered suite identifiers to their label", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite A", addressCountry: "US" }
+    };
+
+    const otherSuite = napPage(suiteSchema, "<p>Address: 12 Main Street, Suite B, Building A</p>");
+    const sameSuite = napPage(suiteSchema, "<p>Address: 12 Main St., Suite A, Springfield</p>");
+
+    expect(napFinding(otherSuite)?.evidence[0]?.value).toContain('Schema streetAddress "12 Main Street, Suite A" not found');
+    expect(napFinding(sameSuite)).toBeUndefined();
+  });
+
+  it("finds unlabelled addresses on court, place and parkway streets", () => {
+    const courtSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Court", addressCountry: "US" }
+    };
+    const page = napPage(courtSchema, "<p>14 Main Court</p>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "12 Main Court" not found');
+  });
+
+  it("does not read website addresses as postal addresses", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<p>Website address: https://shop2026.example</p><p>Address: see https://maps.example/2026</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
 });
