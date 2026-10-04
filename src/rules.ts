@@ -250,6 +250,10 @@ function parsedPhone(value: string, country: CountryCode | undefined): VisiblePh
 const phoneLabel =
   /(?<![\p{L}\p{N}])(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞)(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:(?!(?:id|ids|ref|reference|order|ticket|case|account|acct|customer|invoice|booking|reservation|confirmation|tracking|serial|pin|code|log|session)(?![\p{L}\p{N}]))\p{L}+[^\p{L}\p{N}]+){0,3}$/iu;
 
+// A block holding only a label ("Phone:", "Call us", "Telefon numarası") — not prose that merely mentions a phone.
+const standalonePhoneLabel =
+  /^[^\p{L}\p{N}]*(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ruf|☎|📞)(?:\s+(?:us|number|no|nr|numarası|numarasi|nummer|numéro|número|numero))?\.?[^\p{L}\p{N}]*$/iu;
+
 const phoneListSeparator = /^[\s,/|;–—-]*(?:(?:or|and|ve|veya|oder|und|ou|et|o|y)[\s,/|;–—-]*)?$/i;
 
 // Label/value markup (<dt>Phone</dt><dd>...</dd>, <th>Address</th><td>...</td>) puts the label on its own line, so join each pair.
@@ -282,7 +286,7 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
   // A label alone in its block ("<div>Phone:</div><div>(415) 555-0199</div>") labels the next block's number.
   const lines = visibleLines(body);
   const labelledNextLines = lines.flatMap((line, index) =>
-    index + 1 < lines.length && !/\d/.test(line) && phoneLabel.test(line) ? [`${line} ${lines[index + 1]}`] : []
+    index + 1 < lines.length && standalonePhoneLabel.test(line) ? [`${line} ${lines[index + 1]}`] : []
   );
   const textPhones = [...lines, ...labelledNextLines, ...labelValuePairs($, body)].flatMap((line) => {
     let labelledEnd: number | undefined;
@@ -552,11 +556,15 @@ const numberedRoadWords = new Set(["highway", "route", "interstate", "freeway", 
 // "County Road 12" and "State Street 5" style designators: a number after road or route here names the road.
 const numberedRoadQualifiers = new Set(["county", "state", "farm", "ranch", "forest", "township", "parish", "provincial"]);
 
+// Street types written before the name ("Calle 12", "Rue 5"): a number right after them can be the street's name.
+const prefixStreetWords = new Set(["rue", "avenue", "chemin", "impasse", "quai", "via", "viale", "piazza", "corso", "calle", "carrer", "carrera", "plaza", "paseo", "rua", "travessa"]);
+
 function isRoadNumber(tokens: string[], index: number, leadingNumber: boolean): boolean {
-  // After a leading house number ("100 Road 12"), a number after road or route can only name the road.
+  // After a leading house number ("100 Road 12", "100 Calle 12"), a number after road, route or a prefix street type can only name the street.
   return (
     numberedRoadWords.has(tokens[index - 1]) ||
-    (["road", "route"].includes(tokens[index - 1]) && (leadingNumber || numberedRoadQualifiers.has(tokens[index - 2])))
+    (["road", "route"].includes(tokens[index - 1]) && (leadingNumber || numberedRoadQualifiers.has(tokens[index - 2]))) ||
+    (leadingNumber && index === 2 && prefixStreetWords.has(tokens[1]))
   );
 }
 

@@ -1257,4 +1257,28 @@ describe("LocalBusiness NAP consistency rule", () => {
       'Schema streetAddress "12 Main Crescent" not found'
     );
   });
+
+  it("only lets a standalone phone label label the next block", () => {
+    const phoneSchema = { "@type": "LocalBusiness", telephone: "+1 415 555 0100", address: { "@type": "PostalAddress", addressCountry: "US" } };
+    expect(
+      napFinding(napPage(phoneSchema, "<p>Phone support unavailable.</p><p>4155550199 is your verification number.</p>"))
+    ).toBeUndefined();
+    expect(napFinding(napPage(phoneSchema, "<div>Phone:</div><div>(415) 555-0199</div>"))?.evidence[0]?.value).toContain(
+      "Schema telephone +1 415 555 0100"
+    );
+    expect(napFinding(napPage(phoneSchema, "<div>Call us</div><div>(415) 555-0199</div>"))?.evidence[0]?.value).toContain(
+      "Schema telephone +1 415 555 0100"
+    );
+  });
+
+  it("keeps a numeric street name after a prefix street type", () => {
+    const calleSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "100 Calle 12", addressCountry: "CO" }
+    };
+    expect(napFinding(napPage(calleSchema, "<p>Dirección: 100 Calle 15, Suite 12</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "100 Calle 12" not found'
+    );
+    expect(napFinding(napPage(calleSchema, "<p>Dirección: 100 Calle 12</p>"))).toBeUndefined();
+  });
 });
