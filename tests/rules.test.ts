@@ -771,4 +771,43 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)).toBeUndefined();
   });
+
+  it("compares addresses shown as definition list and table label/value pairs", () => {
+    const parisSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Rue de Rivoli", addressCountry: "FR" }
+    };
+
+    const definitionList = napPage(parisSchema, "<dl><dt>Adresse</dt><dd>14 Rue de Rivoli</dd></dl>");
+    const table = napPage(parisSchema, "<table><tr><th>Address</th><td>14 Rue de Rivoli</td></tr></table>");
+    const matching = napPage(parisSchema, "<dl><dt>Adresse</dt><dd>12 Rue de Rivoli, Paris</dd></dl>");
+
+    expect(napFinding(definitionList)?.evidence[0]?.value).toContain('Schema streetAddress "12 Rue de Rivoli" not found');
+    expect(napFinding(table)?.evidence[0]?.value).toContain('Schema streetAddress "12 Rue de Rivoli" not found');
+    expect(napFinding(matching)).toBeUndefined();
+  });
+
+  it("does not read numbers labelled as call identifiers as phone numbers", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      telephone: "+1 415 555 0123",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<p>Call ID: 4155550199</p><p>Address: 1 Market Street, San Francisco</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("keeps a numbered highway in the street name instead of treating it as a suite number", () => {
+    const highwaySchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Highway 66", addressCountry: "US" }
+    };
+
+    const otherHighway = napPage(highwaySchema, "<p>Address: 12 Highway 77, Suite 66</p>");
+    const sameHighway = napPage(highwaySchema, "<p>Address: 12 Hwy 66, Tulsa</p>");
+
+    expect(napFinding(otherHighway)?.evidence[0]?.value).toContain('Schema streetAddress "12 Highway 66" not found');
+    expect(napFinding(sameHighway)).toBeUndefined();
+  });
 });

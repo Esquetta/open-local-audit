@@ -240,8 +240,9 @@ function parsedPhone(value: string, country: CountryCode | undefined): VisiblePh
   return parsed?.isValid() ? { e164: parsed.number, display: parsed.formatInternational() } : undefined;
 }
 
+// Words between the label and the number may not name an identifier, so "Call ID: 4155550199" is not read as a phone.
 const phoneLabel =
-  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞)(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:\p{L}+[^\p{L}\p{N}]+){0,3}$/iu;
+  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞)(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:(?!(?:id|ids|ref|reference|order|ticket|case|account|acct|customer|invoice|booking|reservation|confirmation|tracking|serial|pin|code|log|session)(?![\p{L}\p{N}]))\p{L}+[^\p{L}\p{N}]+){0,3}$/iu;
 
 const phoneListSeparator = /^[\s,/|;–—-]*(?:(?:or|and|ve|veya|oder|und|ou|et|o|y)[\s,/|;–—-]*)?$/i;
 
@@ -277,6 +278,7 @@ const canonicalAddressTokens: Record<string, string> = {
   ln: "lane",
   dr: "drive",
   hwy: "highway",
+  rte: "route",
   pkwy: "parkway",
   pl: "place",
   ct: "court",
@@ -365,7 +367,25 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
     })
     .filter((text) => /\d/.test(text));
 
-  return [...lines, ...addressElements].map(addressTokens);
+  // Label/value markup (<dt>Adresse</dt><dd>...</dd>, <th>Address</th><td>...</td>) puts the label on its own line, so join each pair.
+  const labelledPairs = [
+    ...body
+      .find("dt")
+      .toArray()
+      .map((element) => {
+        const values = $(element).nextUntil("dt", "dd").toArray();
+        return `${collapsedText($(element))}: ${values.map((value) => collapsedText($(value))).join(" ")}`;
+      }),
+    ...body
+      .find("tr")
+      .toArray()
+      .map((element) => {
+        const [label, ...values] = $(element).children("th, td").toArray();
+        return label ? `${collapsedText($(label))}: ${values.map((value) => collapsedText($(value))).join(" ")}` : "";
+      })
+  ].filter(hasComparableAddress);
+
+  return [...lines, ...addressElements, ...labelledPairs].map(addressTokens);
 }
 
 const unspacedScript = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
@@ -379,6 +399,9 @@ function isHouseNumber(token: string): boolean {
   // Ordinals such as "5th" are part of a street name, not a house number.
   return /^\d/.test(token) && /^[\x00-\x7f]+$/.test(token) && !/^\d+(?:st|nd|rd|th)$/.test(token);
 }
+
+// A number after these words names the road ("Highway 66"), not the house.
+const numberedRoadWords = new Set(["highway", "route", "interstate", "freeway", "expressway", "motorway"]);
 
 const subAddressLabels = new Set(["floor", "suite", "room", "unit", "apartment", "building", "kat", "daire", "blok", "etage", "stock", "piso"]);
 
@@ -414,7 +437,11 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   const leadingNumber = isHouseNumber(tokens[0]);
   const wordsStart = leadingNumber ? 1 : 0;
   let wordsEnd = wordsStart;
-  while (wordsEnd < tokens.length && !isHouseNumber(tokens[wordsEnd]) && !subAddressLabels.has(tokens[wordsEnd])) {
+  while (
+    wordsEnd < tokens.length &&
+    !subAddressLabels.has(tokens[wordsEnd]) &&
+    (!isHouseNumber(tokens[wordsEnd]) || (wordsEnd > wordsStart && numberedRoadWords.has(tokens[wordsEnd - 1])))
+  ) {
     wordsEnd += 1;
   }
 
