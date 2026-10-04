@@ -418,6 +418,68 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "Example Street 12"');
   });
 
+  it("does not treat dates or copyright year ranges as visible phone numbers", () => {
+    const page = napPage(schema, `
+      <p>Address: Example Street 12, Istanbul</p>
+      <p>Updated 2026-10-04. Copyright 2019 - 2026 Example Dental.</p>
+    `);
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("flags numbers with different explicit country codes", () => {
+    const page = napPage(schema, `
+      <p>Address: Example Street 12, Istanbul</p>
+      <a href="tel:+492120000000">Call us</a>
+    `);
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone +90 212 000 00 00");
+  });
+
+  it("accepts 00-prefixed international numbers", () => {
+    const page = napPage(schema, `
+      <p>Address: Example Street 12, Istanbul</p>
+      <p>Call 0090 212 000 00 00</p>
+    `);
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("compares non-Latin street names", () => {
+    const cyrillic = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "улица Ленина 5" } };
+
+    expect(napFinding(napPage(cyrillic, "<p>Address: улица Ленина 5, Москва</p>"))).toBeUndefined();
+    expect(napFinding(napPage(cyrillic, "<p>Address: улица Пушкина 5, Москва</p>"))).toBeDefined();
+  });
+
+  it("matches CJK street addresses inside unspaced page text", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "銀座4丁目" } },
+      "<p>Address: 東京都中央区銀座4丁目</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("does not let unrelated page copy supply missing street words", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street" } },
+      `
+        <h1>Main Bakery</h1>
+        <p>Fresh bread every morning for the whole neighbourhood and visitors from across the city.</p>
+        <p>Address: 12 Oak Road, Springfield</p>
+      `
+    );
+
+    expect(napFinding(page)?.evidence[0]?.value).toBe('Schema streetAddress "12 Main Street" not found in visible page text');
+  });
+
+  it("does not compare addresses when the page only mentions an email address", () => {
+    const page = napPage(schema, "<p>Enter your email address to book.</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 

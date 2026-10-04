@@ -138,20 +138,50 @@ function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-function phoneDigitsMatch(left: string, right: string): boolean {
-  const length = Math.min(left.length, right.length, 10);
-  return length >= 7 && left.slice(-length) === right.slice(-length);
+type PhoneCandidate = {
+  display: string;
+  digits: string;
+  international: boolean;
+};
+
+function phoneCandidate(value: string): PhoneCandidate {
+  const display = value.trim();
+  const compact = display.replace(/[\s().-]/g, "");
+  return {
+    display,
+    digits: digitsOnly(compact.startsWith("00") ? compact.slice(2) : compact),
+    international: compact.startsWith("+") || compact.startsWith("00")
+  };
 }
 
-function visiblePhoneCandidates($: CheerioAPI, visibleText: string): string[] {
+function phonesMatch(left: PhoneCandidate, right: PhoneCandidate): boolean {
+  if (left.international && right.international) {
+    return left.digits === right.digits;
+  }
+
+  const length = Math.min(left.digits.length, right.digits.length, 10);
+  return length >= 7 && left.digits.slice(-length) === right.digits.slice(-length);
+}
+
+function isDateOrYearShaped(value: string): boolean {
+  const trimmed = value.trim();
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(trimmed) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(trimmed)) {
+    return true;
+  }
+
+  const groups = trimmed.match(/\d+/g) ?? [];
+  return groups.length > 0 && groups.every((group) => /^(?:19|20)\d{2}$/.test(group));
+}
+
+function visiblePhoneCandidates($: CheerioAPI, visibleText: string): PhoneCandidate[] {
   const linkPhones = $("a[href^='tel:' i]")
     .toArray()
     .map((element) => ($(element).attr("href") ?? "").replace(/^tel:/i, ""));
-  const textPhones = Array.from(visibleText.matchAll(/\+?\d[\d\s().-]{5,}\d/g), (match) => match[0]);
+  const textPhones = Array.from(visibleText.matchAll(/\+?\d[\d\s().-]{5,}\d/g), (match) => match[0]).filter(
+    (phone) => !isDateOrYearShaped(phone)
+  );
 
-  return [...linkPhones, ...textPhones]
-    .map((phone) => phone.trim())
-    .filter((phone) => digitsOnly(phone).length >= 7);
+  return [...linkPhones, ...textPhones].map(phoneCandidate).filter((phone) => phone.digits.length >= 7);
 }
 
 const genericAddressTokens = new Set([
@@ -185,6 +215,8 @@ const genericAddressTokens = new Set([
   "mah",
   "strasse",
   "str",
+  "улица",
+  "ул",
   "the",
   "and"
 ]);
@@ -192,10 +224,10 @@ const genericAddressTokens = new Set([
 function addressTokens(value: string): string[] {
   return value
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\u0131/g, "i")
+    .replace(/\p{M}/gu, "")
+    .replace(/ı/g, "i")
     .toLowerCase()
-    .split(/[^a-z0-9]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
 }
 
@@ -214,16 +246,46 @@ function streetAddresses(node: JsonLdNode): string[] {
   });
 }
 
-function streetAddressVisible(streetAddress: string, pageTokens: Set<string>): boolean {
+function addressWordMatches(word: string, pageToken: string): boolean {
+  // Scripts written without spaces (such as CJK) arrive as long runs, so match non-ASCII words inside them.
+  return pageToken === word || (/[^\x00-\x7f]/.test(word) && pageToken.includes(word));
+}
+
+function streetAddressVisible(streetAddress: string, pageTokens: string[]): boolean {
   const distinctive = addressTokens(streetAddress).filter((token) => !genericAddressTokens.has(token));
-  const numbers = distinctive.filter((token) => /\d/.test(token));
-  const words = distinctive.filter((token) => !/\d/.test(token) && token.length >= 3);
+  const isNonAscii = (token: string) => /[^\x00-\x7f]/.test(token);
+  const numbers = distinctive.filter((token) => /\d/.test(token) && !isNonAscii(token));
+  const words = distinctive.filter((token) => !numbers.includes(token) && (token.length >= 3 || isNonAscii(token)));
 
   if (numbers.length === 0 && words.length === 0) {
     return true;
   }
 
-  return numbers.every((token) => pageTokens.has(token)) && (words.length === 0 || words.some((token) => pageTokens.has(token)));
+  // Compare against one address-sized stretch of the page so unrelated copy cannot supply missing tokens.
+  const requiredWords = words.length <= 2 ? words.length : Math.ceil((words.length * 2) / 3);
+  const windowSize = distinctive.length + 4;
+  for (let start = 0; start < pageTokens.length; start += 1) {
+    const window = pageTokens.slice(start, start + windowSize);
+    if (!numbers.every((token) => window.includes(token))) {
+      continue;
+    }
+
+    const matchedWords = words.filter((word) => window.some((pageToken) => addressWordMatches(word, pageToken))).length;
+    if (matchedWords >= requiredWords) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasComparableAddress(text: string): boolean {
+  const labelledAddress = /\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*[^.\n]{0,80}\d/i;
+  const streetNumber =
+    /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
+  const numberStreet = /\b\d+[a-z]?\s+(?:[\p{L}]+\s+){1,3}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive)\b/iu;
+
+  return labelledAddress.test(text) || streetNumber.test(text) || numberStreet.test(text);
 }
 
 function localBusinessNapMismatches($: CheerioAPI): string[] {
@@ -234,18 +296,19 @@ function localBusinessNapMismatches($: CheerioAPI): string[] {
 
   const visibleText = visibleBodyText($);
   const visiblePhones = visiblePhoneCandidates($, visibleText);
-  const visiblePhoneDigits = visiblePhones.map(digitsOnly);
-  const pageTokens = new Set(addressTokens(visibleText));
-  const showsAddress = hasVisibleAddress(visibleText);
+  const pageTokens = addressTokens(visibleText);
+  const showsAddress = hasComparableAddress(visibleText);
   const mismatches: string[] = [];
 
   for (const node of nodes) {
-    if (visiblePhoneDigits.length > 0) {
+    if (visiblePhones.length > 0) {
       for (const telephone of stringValues(node.telephone)) {
-        const schemaDigits = digitsOnly(telephone);
-        if (schemaDigits.length >= 7 && !visiblePhoneDigits.some((digits) => phoneDigitsMatch(schemaDigits, digits))) {
+        const schemaPhone = phoneCandidate(telephone);
+        if (schemaPhone.digits.length >= 7 && !visiblePhones.some((phone) => phonesMatch(schemaPhone, phone))) {
           mismatches.push(
-            `Schema telephone ${telephone.trim()} not found among visible phone numbers: ${Array.from(new Set(visiblePhones)).join(", ")}`
+            `Schema telephone ${schemaPhone.display} not found among visible phone numbers: ${Array.from(
+              new Set(visiblePhones.map((phone) => phone.display))
+            ).join(", ")}`
           );
         }
       }
