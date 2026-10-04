@@ -657,6 +657,35 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(page)).toBeDefined();
   });
 
+  it("distinguishes different street types", () => {
+    const business = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street" } };
+
+    expect(napFinding(napPage(business, "<p>Address: 12 Main Road</p>"))).toBeDefined();
+    expect(napFinding(napPage(business, "<p>Address: 12 Main St.</p>"))).toBeUndefined();
+  });
+
+  it("keeps the whole address line when inline markup splits it", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street" } },
+      "<p><strong>Address: 12</strong> Main Street</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("does not read a MAC address label as a postal address", () => {
+    const page = napPage(schema, "<p>MAC address: 00:1A:2B:3C:4D:5E</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("matches the house number next to the street, not a suite number", () => {
+    const business = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "300 Main Street" } };
+
+    expect(napFinding(napPage(business, "<address>12 Main Street, Suite 300</address>"))).toBeDefined();
+    expect(napFinding(napPage(business, "<address>300 Main Street, Suite 12</address>"))).toBeUndefined();
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 

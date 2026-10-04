@@ -261,54 +261,43 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
   return Array.from(new Map(phones.map((phone) => [phone.e164, phone])).values());
 }
 
-const genericAddressTokens = new Set([
-  "street",
-  "st",
-  "road",
-  "rd",
-  "avenue",
-  "ave",
-  "boulevard",
-  "blvd",
-  "lane",
-  "ln",
-  "drive",
-  "dr",
-  "suite",
-  "ste",
-  "floor",
-  "unit",
-  "no",
-  "cadde",
-  "caddesi",
-  "cad",
-  "cd",
-  "sokak",
-  "sokagi",
-  "sok",
-  "sk",
-  "mahalle",
-  "mahallesi",
-  "mah",
-  "strasse",
-  "str",
-  "улица",
-  "ул",
-  "north",
-  "south",
-  "east",
-  "west",
-  "n",
-  "s",
-  "e",
-  "w",
-  "ne",
-  "nw",
-  "se",
-  "sw",
-  "the",
-  "and"
-]);
+// Abbreviations map to one canonical form so "St." and "Street" match while "Street" and "Road" stay different.
+const canonicalAddressTokens: Record<string, string> = {
+  st: "street",
+  rd: "road",
+  ave: "avenue",
+  av: "avenue",
+  blvd: "boulevard",
+  ln: "lane",
+  dr: "drive",
+  hwy: "highway",
+  pkwy: "parkway",
+  pl: "place",
+  ct: "court",
+  sq: "square",
+  ste: "suite",
+  fl: "floor",
+  n: "north",
+  s: "south",
+  e: "east",
+  w: "west",
+  ne: "northeast",
+  nw: "northwest",
+  se: "southeast",
+  sw: "southwest",
+  cadde: "caddesi",
+  cad: "caddesi",
+  cd: "caddesi",
+  sok: "sokak",
+  sk: "sokak",
+  sokagi: "sokak",
+  mah: "mahallesi",
+  mahalle: "mahallesi",
+  str: "strasse",
+  ул: "улица"
+};
+
+const fillerAddressTokens = new Set(["no", "nr", "the", "and", "jr"]);
 
 function addressTokens(value: string): string[] {
   return value
@@ -320,8 +309,8 @@ function addressTokens(value: string): string[] {
     // Join house-number suffixes so "12-A", "12 A" and "12A" compare equal.
     .replace(/(\p{N})[\s/-]?(\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
     .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean)
-    .map((token) => token.replace(/(?<=\p{L})strasse$/u, "str"));
+    .filter((token) => token && !fillerAddressTokens.has(token))
+    .map((token) => canonicalAddressTokens[token] ?? token.replace(/(?<=\p{L})strasse$/u, "str"));
 }
 
 function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
@@ -340,7 +329,7 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
 
 function hasComparableAddress(text: string): boolean {
   const labelledAddress =
-    /(?<!e-?mail\s)(?<!web\s)(?<!ip\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*[^.\n]{0,80}\d/iu;
+    /(?<!(?:e-?mail|web|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*[^.\n]{0,80}\d/iu;
   const streetNumber =
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
   const numberStreet = /\b\d+[a-z]?\s+(?:[\p{L}]+\s+){1,3}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive)\b/iu;
@@ -349,16 +338,16 @@ function hasComparableAddress(text: string): boolean {
 }
 
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
-  // Use the innermost elements that show an address so unrelated page copy cannot supply street words.
-  const matching = [...body.toArray(), ...body.find("*").toArray()].filter((element) => {
-    const text = collapsedText($(element));
-    return hasComparableAddress(text) || ($(element).is("address") && /\d/.test(text));
-  });
-  const matchingSet = new Set(matching);
+  // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
+  // so inline markup cannot split an address and unrelated blocks cannot supply street words.
+  const lines = visibleLines(body).filter(hasComparableAddress);
+  const addressElements = body
+    .find("address")
+    .toArray()
+    .map((element) => collapsedText($(element)))
+    .filter((text) => /\d/.test(text));
 
-  return matching
-    .filter((element) => !$(element).find("*").toArray().some((child) => matchingSet.has(child)))
-    .map((element) => addressTokens(collapsedText($(element))));
+  return [...lines, ...addressElements].map(addressTokens);
 }
 
 const unspacedScript = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
@@ -368,23 +357,38 @@ function addressWordMatches(word: string, pageToken: string): boolean {
   return pageToken === word || (unspacedScript.test(word) && pageToken.includes(word));
 }
 
-function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
-  const distinctive = addressTokens(streetAddress).filter((token) => !genericAddressTokens.has(token));
-  const isNonAscii = (token: string) => /[^\x00-\x7f]/.test(token);
-  const numbers = distinctive.filter((token) => /\d/.test(token) && !isNonAscii(token));
-  const words = distinctive.filter((token) => !numbers.includes(token) && (token.length >= 3 || isNonAscii(token)));
+function isHouseNumber(token: string): boolean {
+  return /^\d/.test(token) && /^[\x00-\x7f]+$/.test(token);
+}
 
-  if (numbers.length === 0 && words.length === 0) {
-    return true;
+function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
+  const tokens = addressTokens(streetAddress);
+  const words = tokens.filter((token) => !isHouseNumber(token));
+  const numbers = tokens.filter(isHouseNumber);
+
+  if (words.length === 0) {
+    return numbers.length === 0 || regions.some((region) => numbers.every((token) => region.includes(token)));
   }
 
+  // The street words must appear together and in order, with the house number directly before or after them.
+  const houseNumber = numbers[0];
   return regions.some((region) => {
     if (!numbers.every((token) => region.includes(token))) {
       return false;
     }
 
-    const matchedWords = words.filter((word) => region.some((pageToken) => addressWordMatches(word, pageToken))).length;
-    return matchedWords === words.length;
+    for (let start = 0; start + words.length <= region.length; start += 1) {
+      if (!words.every((word, offset) => addressWordMatches(word, region[start + offset]))) {
+        continue;
+      }
+
+      const end = start + words.length - 1;
+      if (houseNumber === undefined || region[start - 1] === houseNumber || region[end + 1] === houseNumber) {
+        return true;
+      }
+    }
+
+    return false;
   });
 }
 
