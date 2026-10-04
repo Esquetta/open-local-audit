@@ -1318,4 +1318,19 @@ describe("LocalBusiness NAP consistency rule", () => {
       "Schema telephone 0212 555 01 00 not found"
     );
   });
+
+  it("keeps a compass letter as the street name before any known suffix", () => {
+    const sCrescentSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 S Crescent", addressCountry: "US" }
+    };
+    expect(napFinding(napPage(sCrescentSchema, "<p>Address: 12 South Crescent</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 S Crescent" not found'
+    );
+    expect(napFinding(napPage(sCrescentSchema, "<p>Address: 12 S Cres.</p>"))).toBeUndefined();
+    const nWaySchema = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "40 N Way", addressCountry: "US" } };
+    expect(napFinding(napPage(nWaySchema, "<p>Address: 40 North Way</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "40 N Way" not found'
+    );
+  });
 });

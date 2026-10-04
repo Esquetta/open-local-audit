@@ -384,7 +384,12 @@ const canonicalAddressTokens: Record<string, string> = {
 
 const compassLetters = new Set(["n", "s", "e", "w", "ne", "nw", "se", "sw"]);
 
-const streetTypes = new Set(["street", "road", "avenue", "boulevard", "lane", "drive", "highway", "parkway", "place", "court", "square"]);
+// Every street suffix the canonical map knows, so "12 S Crescent" keeps "S" as the street's name.
+const streetTypes = new Set([
+  "street", "road", "avenue", "boulevard", "lane", "drive", "highway", "route", "parkway", "place", "court", "square",
+  "crescent", "terrace", "circle", "trail", "alley", "plaza", "heights", "crossing", "expressway", "freeway", "turnpike",
+  "gardens", "grove", "parade", "esplanade", "circuit", "way"
+]);
 
 const fillerAddressTokens = new Set(["no", "nr", "the", "and", "jr"]);
 
