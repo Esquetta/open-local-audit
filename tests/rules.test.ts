@@ -608,6 +608,55 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(page)?.evidence[0]?.value).toBe('Schema streetAddress "Example Street 12" not found in visible page text');
   });
 
+  it("follows @id references to Country nodes", () => {
+    const page = napPage(
+      {
+        "@graph": [
+          {
+            "@type": "LocalBusiness",
+            telephone: "(212) 555-0100",
+            address: { "@type": "PostalAddress", streetAddress: "350 Fifth Avenue", addressCountry: { "@id": "#us" } }
+          },
+          { "@type": "Country", "@id": "#us", name: "United States" }
+        ]
+      },
+      "<p>Call (212) 555-0199</p>"
+    );
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone (212) 555-0100 not found");
+  });
+
+  it("does not join a phone label from one element to a number in the next", () => {
+    const page = napPage(
+      {
+        "@type": "LocalBusiness",
+        telephone: "+1 212-555-0100",
+        address: { "@type": "PostalAddress", streetAddress: "350 Fifth Avenue", addressCountry: "US" }
+      },
+      "<p>Phone support unavailable.</p><p>Order 4155550199 has shipped.</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("treats house-number suffix formats as the same number", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12-A Oak Road" } },
+      "<p>Address: 12A Oak Road</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("requires every distinctive street word", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Martin Luther King Boulevard" } },
+      "<p>Address: 12 Martin Luther Road</p>"
+    );
+
+    expect(napFinding(page)).toBeDefined();
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 

@@ -134,10 +134,24 @@ const hiddenElements =
 
 type VisibleBody = ReturnType<CheerioAPI>;
 
+const blockElements =
+  "address, article, aside, blockquote, dd, div, dl, dt, figcaption, footer, form, h1, h2, h3, h4, h5, h6, header, label, li, main, nav, ol, p, section, table, td, th, tr, ul";
+
 function visibleBody($: CheerioAPI): VisibleBody {
   const body = $("body").clone();
   body.find(hiddenElements).remove();
+  // Mark block boundaries so text from neighbouring elements is not read as one line.
+  body.find("br").replaceWith("\n");
+  body.find(blockElements).append("\n");
   return body;
+}
+
+function visibleLines(element: VisibleBody): string[] {
+  return element
+    .text()
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 }
 
 function collapsedText(element: VisibleBody): string {
@@ -168,7 +182,13 @@ function schemaCountry(node: JsonLdNode, index: JsonLdIndex): CountryCode | unde
     .filter(hasObjectField)
     .flatMap((address) => {
       const value = (address as JsonLdNode).addressCountry;
-      return hasObjectField(value) ? stringValues((value as JsonLdNode).name) : stringValues(value);
+      if (!hasObjectField(value)) {
+        return stringValues(value);
+      }
+
+      const reference = (value as JsonLdNode)["@id"];
+      const country = typeof reference === "string" ? { ...index.get(reference), ...(value as JsonLdNode) } : (value as JsonLdNode);
+      return stringValues(country.name);
     })
     .map(countryCodeFromName)
     .find((code) => code !== undefined);
@@ -228,12 +248,13 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
     .find("a[href^='tel:' i]")
     .toArray()
     .map((element) => parsedPhone($(element).attr("href") ?? "", country));
-  const text = collapsedText(body);
-  // Only trust numbers in body text when a phone label precedes them, so IDs and codes are not read as phones.
-  const textPhones = findPhoneNumbersInText(text, country ? { defaultCountry: country } : {}).map(({ number, startsAt }) =>
-    number.isValid() && phoneLabel.test(text.slice(Math.max(0, startsAt - 30), startsAt))
-      ? { e164: number.number, display: number.formatInternational() }
-      : undefined
+  // Only trust numbers in body text when a phone label precedes them on the same line, so IDs and codes are not read as phones.
+  const textPhones = visibleLines(body).flatMap((line) =>
+    findPhoneNumbersInText(line, country ? { defaultCountry: country } : {}).map(({ number, startsAt }) =>
+      number.isValid() && phoneLabel.test(line.slice(Math.max(0, startsAt - 30), startsAt))
+        ? { e164: number.number, display: number.formatInternational() }
+        : undefined
+    )
   );
 
   const phones = [...linkPhones, ...textPhones].filter((phone): phone is VisiblePhone => phone !== undefined);
@@ -273,6 +294,18 @@ const genericAddressTokens = new Set([
   "str",
   "улица",
   "ул",
+  "north",
+  "south",
+  "east",
+  "west",
+  "n",
+  "s",
+  "e",
+  "w",
+  "ne",
+  "nw",
+  "se",
+  "sw",
   "the",
   "and"
 ]);
@@ -284,6 +317,8 @@ function addressTokens(value: string): string[] {
     .replace(/ı/g, "i")
     .toLowerCase()
     .replace(/ß/g, "ss")
+    // Join house-number suffixes so "12-A", "12 A" and "12A" compare equal.
+    .replace(/(\p{N})[\s/-]?(\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean)
     .map((token) => token.replace(/(?<=\p{L})strasse$/u, "str"));
@@ -343,14 +378,13 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
     return true;
   }
 
-  const requiredWords = words.length <= 2 ? words.length : Math.ceil((words.length * 2) / 3);
   return regions.some((region) => {
     if (!numbers.every((token) => region.includes(token))) {
       return false;
     }
 
     const matchedWords = words.filter((word) => region.some((pageToken) => addressWordMatches(word, pageToken))).length;
-    return matchedWords >= requiredWords;
+    return matchedWords === words.length;
   });
 }
 
