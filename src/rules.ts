@@ -129,7 +129,9 @@ function stringValues(value: unknown): string[] {
   return values.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-const hiddenElements = "script, style, noscript, template, [hidden], [aria-hidden='true']";
+// Closed <dialog> and the body of a closed <details> are hidden by the browser without any attribute or style.
+const hiddenElements =
+  "script, style, noscript, template, [hidden], [aria-hidden='true'], dialog:not([open]), details:not([open]) > :not(summary)";
 
 // Inline CSS allows whitespace and !important around values ("display : none !important"), so read the declarations.
 const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!\s*important\s*)?(?:;|$)/i;
@@ -137,7 +139,7 @@ const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*
 type VisibleBody = ReturnType<CheerioAPI>;
 
 const blockElements =
-  "address, article, aside, blockquote, dd, div, dl, dt, figcaption, footer, form, h1, h2, h3, h4, h5, h6, header, label, li, main, nav, ol, p, section, table, td, th, tr, ul";
+  "address, article, aside, blockquote, dd, details, dialog, div, dl, dt, figcaption, footer, form, h1, h2, h3, h4, h5, h6, header, label, li, main, nav, ol, p, section, summary, table, td, th, tr, ul";
 
 function visibleBody($: CheerioAPI): VisibleBody {
   const body = $("body").clone();
@@ -507,14 +509,17 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
     "u"
   );
   const streetPatterns = [streetNumber, numberStreet, numberPrefixStreet, compoundStreet, postBox, numberRoute];
+  // An address label or <address> already marks the text as an address, so lowercase "via roma 14" counts there.
+  const anyCasePrefixStreetNumber = new RegExp(prefixStreetNumber.source, "iu");
 
   return (
     // Inside <address> any house-number-and-name structure counts ("14 Main Crescent"), not only listed street types.
     (inAddressElement && labelledStructure.test(text)) ||
     (addressValue !== undefined &&
-      (labelledStructure.test(addressValue) || streetPatterns.some((pattern) => pattern.test(addressValue)))) ||
-    // Inside <address> the text is already known to be an address, so lowercase "via Roma 14" counts too.
-    (inAddressElement ? new RegExp(prefixStreetNumber.source, "iu") : prefixStreetNumber).test(text) ||
+      (labelledStructure.test(addressValue) ||
+        anyCasePrefixStreetNumber.test(addressValue) ||
+        streetPatterns.some((pattern) => pattern.test(addressValue)))) ||
+    (inAddressElement ? anyCasePrefixStreetNumber : prefixStreetNumber).test(text) ||
     streetPatterns.some((pattern) => pattern.test(text))
   );
 }

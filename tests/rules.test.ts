@@ -1333,4 +1333,26 @@ describe("LocalBusiness NAP consistency rule", () => {
       'Schema streetAddress "40 N Way" not found'
     );
   });
+
+  it("ignores contact details inside a closed dialog or details element", () => {
+    const phoneSchema = { "@type": "LocalBusiness", telephone: "+1 415 555 0100", address: { "@type": "PostalAddress", addressCountry: "US" } };
+    expect(
+      napFinding(napPage(phoneSchema, "<dialog><p>Phone: 415-555-0100</p></dialog><p>Phone: 415-555-0199</p>"))?.evidence[0]?.value
+    ).toContain("Schema telephone +1 415 555 0100");
+    expect(napFinding(napPage(phoneSchema, "<dialog open><p>Phone: 415-555-0100</p></dialog><p>Phone: 415-555-0199</p>"))).toBeUndefined();
+    expect(
+      napFinding(
+        napPage(phoneSchema, "<details><summary>Old number</summary><p>Phone: 415-555-0100</p></details><p>Phone: 415-555-0199</p>")
+      )?.evidence[0]?.value
+    ).toContain("Schema telephone +1 415 555 0100");
+  });
+
+  it("reads a lowercase prefix street after an address label", () => {
+    const viaSchema = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "Via Roma 12", addressCountry: "IT" } };
+    expect(napFinding(napPage(viaSchema, "<p>Address: via roma 14</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "Via Roma 12" not found'
+    );
+    expect(napFinding(napPage(viaSchema, "<p>Address: via roma 12</p>"))).toBeUndefined();
+    expect(napFinding(napPage(viaSchema, "<p>Send it via email 14 times</p><p>Via Roma 12</p>"))).toBeUndefined();
+  });
 });
