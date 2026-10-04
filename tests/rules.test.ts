@@ -988,4 +988,29 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(otherRoad)?.evidence[0]?.value).toContain('Schema streetAddress "100 County Road 12" not found');
     expect(napFinding(sameRoad)).toBeUndefined();
   });
+
+  it("finds unlabelled addresses with compound house numbers", () => {
+    const compoundSchema = (streetAddress: string) => ({
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress, addressCountry: "US" }
+    });
+
+    const range = napPage(compoundSchema("12-14 Main Street"), "<p>14-16 Main Street</p>");
+    const fraction = napPage(compoundSchema("12 1/2 Main Street"), "<p>14½ Main Street</p>");
+    const suffix = napPage(compoundSchema("12-A Main Street"), "<p>12-B Main Street</p>");
+
+    expect(napFinding(range)?.evidence[0]?.value).toContain('Schema streetAddress "12-14 Main Street" not found');
+    expect(napFinding(fraction)?.evidence[0]?.value).toContain('Schema streetAddress "12 1/2 Main Street" not found');
+    expect(napFinding(suffix)?.evidence[0]?.value).toContain('Schema streetAddress "12-A Main Street" not found');
+  });
+
+  it("does not read a labelled postal code as a visible street address", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<p>Address: unavailable, ZIP 94105</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
 });

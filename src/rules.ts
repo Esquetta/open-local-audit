@@ -353,6 +353,9 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
 const contactLine =
   /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|telefono|teléfono|t[eé]l[eé]phone|tél|gsm|cep|ruf)(?![\p{L}\p{N}])|[@☎📞]/iu;
 
+// House numbers as addressTokens normalizes them: "12", "12A", "12-A", "12-14", "12 1/2" and "12½".
+const houseNumberPattern = String.raw`\d+(?:\s*[-–]\s*\d+|\s+\d+\/\d+|[-/]?[a-z]|[½¼¾])?`;
+
 function hasComparableAddress(text: string): boolean {
   const labelledAddress =
     /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)(?:\s*:\s*([^\n]{0,80})|\s+(\d[^\n]{0,79}))/iu;
@@ -362,14 +365,20 @@ function hasComparableAddress(text: string): boolean {
   const addressValue = (labelledMatch?.[1] ?? labelledMatch?.[2])
     ?.replace(/(?:https?:\/\/|www\.)\S*/giu, "")
     .split(/[.;|](?!\d)/)[0]
-    .split(contactLine)[0];
+    .split(contactLine)[0]
+    // A labelled postal code ("ZIP 94105") is not a street.
+    .replace(/(?<![\p{L}\p{N}])(?:zip(?:\s*code)?|post(?:al)?\s*code|postcode|plz|code\s*postal|c[oó]digo\s*postal|cap|cp|posta\s*kodu)\s*:?\s*[\p{L}\p{N}-]*\d[\p{L}\p{N}-]*/giu, "");
   const streetNumber =
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
-  const numberStreet =
-    /\b\d+[a-z]?\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
+  const numberStreet = new RegExp(
+    String.raw`\b${houseNumberPattern}\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b`,
+    "iu"
+  );
   // Street types written before the name, as in French, Spanish, Italian and Portuguese ("14 Rue de Rivoli", "5 Calle Mayor").
-  const numberPrefixStreet =
-    /\b\d+[a-z]?,?\s+(?:rue|avenue|av|boulevard|bd|chemin|all[ée]e|impasse|quai|place|via|viale|piazza|corso|calle|carrer|avenida|plaza|paseo|rua|travessa)\.?\s+\p{L}/iu;
+  const numberPrefixStreet = new RegExp(
+    String.raw`\b${houseNumberPattern},?\s+(?:rue|avenue|av|boulevard|bd|chemin|all[ée]e|impasse|quai|place|via|viale|piazza|corso|calle|carrer|avenida|plaza|paseo|rua|travessa)\.?\s+\p{L}`,
+    "iu"
+  );
 
   return (
     (addressValue !== undefined && /\d/.test(addressValue)) ||
