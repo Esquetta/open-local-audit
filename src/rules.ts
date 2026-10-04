@@ -416,18 +416,26 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
   // Street type, then name, then number ("Via Roma 14", "Rue de Rivoli 14"); capitalized so prose such as "via email" is skipped.
   const prefixStreetNumber =
     /(?<![\p{L}\p{N}])(?:Rue|Avenue|Av|Boulevard|Bd|Chemin|All[ée]e|Impasse|Quai|Place|Via|Viale|Piazza|Corso|Calle|Carrer|Avenida|Plaza|Paseo|Rua|Travessa)\.?(?:\s+\p{L}+\.?){1,5},?\s+(?:n[°ºo]\.?\s*)?\d/u;
-  // A labelled value needs a number that can be a house number; a bare year ("unavailable until 2027") is not one.
-  const labelledNumber = /(?<![\p{L}\p{N}])(?!(?:19|20)\d\d(?![\p{L}\p{N}]))\d/u;
+  // A numbered road after the house number ("200 Route 66", "100 County Road 12").
+  const numberRoute = new RegExp(
+    String.raw`\b${houseNumberPattern}\s+(?:(?:county|state|farm|ranch|forest|township|parish|provincial)\s+)?(?:route|rte|highway|hwy|interstate|road|rd|us|sr|cr|fm)\.?\s+\d`,
+    "iu"
+  );
+  // A labelled value without a known street type still needs address structure: it opens with a house number and a name
+  // ("14 Kungsgatan"), or with a name ending in a capitalized word and then the number ("Kungsgatan 14",
+  // "улица Ленина 5"). Text such as "unavailable until 2027" or "unavailable, error 404" has neither.
+  const labelledStructure = new RegExp(
+    String.raw`^\s*(?:${houseNumberPattern},?\s+\p{L}{2,}|(?:\p{L}[\p{L}'’-]*\.?,?\s+){0,3}\p{Lu}[\p{L}'’-]*\.?,?\s+(?:no\.?:?\s*)?${houseNumberPattern}(?![\p{L}\p{N}]))`,
+    "u"
+  );
+  const streetPatterns = [streetNumber, numberStreet, numberPrefixStreet, compoundStreet, postBox, numberRoute];
 
   return (
-    (addressValue !== undefined && labelledNumber.test(addressValue)) ||
+    (addressValue !== undefined &&
+      (labelledStructure.test(addressValue) || streetPatterns.some((pattern) => pattern.test(addressValue)))) ||
     // Inside <address> the text is already known to be an address, so lowercase "via Roma 14" counts too.
     (inAddressElement ? new RegExp(prefixStreetNumber.source, "iu") : prefixStreetNumber).test(text) ||
-    compoundStreet.test(text) ||
-    postBox.test(text) ||
-    streetNumber.test(text) ||
-    numberStreet.test(text) ||
-    numberPrefixStreet.test(text)
+    streetPatterns.some((pattern) => pattern.test(text))
   );
 }
 

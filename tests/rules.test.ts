@@ -1103,4 +1103,26 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(napPage(hashSchema, "<p>Address: 12 Main St., Suite 100</p>"))).toBeUndefined();
     expect(napFinding(napPage(hashSchema, "<p>Address: 12 Main St. # 100</p>"))).toBeUndefined();
   });
+
+  it("requires address structure in labelled values", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(usSchema, "<p>Address: unavailable, error 404</p>"))).toBeUndefined();
+    expect(napFinding(napPage(usSchema, "<p>Address: Kungsgatan 14</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "1 Market Street" not found'
+    );
+  });
+
+  it("finds unlabelled addresses on numbered routes", () => {
+    const routeSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "100 Route 66", addressCountry: "US" }
+    };
+    const page = napPage(routeSchema, "<p>200 Route 66</p>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "100 Route 66" not found');
+  });
 });
