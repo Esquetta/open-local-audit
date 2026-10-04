@@ -407,7 +407,7 @@ describe("LocalBusiness NAP consistency rule", () => {
       <!doctype html>
       <html>
         <body>
-          <script type="application/ld+json">${JSON.stringify({ "@type": "LocalBusiness", ...schema })}</script>
+          <script type="application/ld+json">${JSON.stringify(schema)}</script>
           <p>Address: Harbour Road 48, Istanbul</p>
           <a href="tel:+902125550000">Call us</a>
         </body>
