@@ -349,11 +349,12 @@ const contactLine = /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cel
 
 function hasComparableAddress(text: string): boolean {
   const labelledAddress =
-    /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:\s*([^\n]{0,80})/iu;
+    /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)(?:\s*:\s*([^\n]{0,80})|\s+(\d[^\n]{0,79}))/iu;
+  // Without a colon the value must open with the house number, so prose such as "our address changed in 2020" is skipped.
   // The number must belong to the address itself, not to a link, phone or email that follows on the same line.
-  const addressValue = labelledAddress
-    .exec(text)?.[1]
-    .replace(/(?:https?:\/\/|www\.)\S*/giu, "")
+  const labelledMatch = labelledAddress.exec(text);
+  const addressValue = (labelledMatch?.[1] ?? labelledMatch?.[2])
+    ?.replace(/(?:https?:\/\/|www\.)\S*/giu, "")
     .split(/[.;|](?!\d)/)[0]
     .split(contactLine)[0];
   const streetNumber =

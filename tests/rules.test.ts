@@ -883,4 +883,17 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "123 North Martin Luther King Boulevard" not found');
   });
+
+  it("recognizes address labels without a colon when the value opens with the house number", () => {
+    const parisSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Rue de Rivoli", addressCountry: "FR" }
+    };
+
+    const different = napPage(parisSchema, "<p>Adresse 14 Rue de Rivoli</p>");
+    const prose = napPage(parisSchema, "<p>Our address changed in 2020.</p>");
+
+    expect(napFinding(different)?.evidence[0]?.value).toContain('Schema streetAddress "12 Rue de Rivoli" not found');
+    expect(napFinding(prose)).toBeUndefined();
+  });
 });
