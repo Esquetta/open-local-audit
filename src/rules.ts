@@ -257,7 +257,7 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
     let labelledEnd: number | undefined;
     return findPhoneNumbersInText(line, country ? { defaultCountry: country } : {}).map(({ number, startsAt, endsAt }) => {
       const labelled =
-        phoneLabel.test(line.slice(Math.max(0, startsAt - 30), startsAt)) ||
+        phoneLabel.test(line.slice(0, startsAt)) ||
         (labelledEnd !== undefined && phoneListSeparator.test(line.slice(labelledEnd, startsAt)));
       labelledEnd = labelled ? endsAt : undefined;
       return labelled && number.isValid() ? { e164: number.number, display: number.formatInternational() } : undefined;
@@ -322,6 +322,8 @@ function addressTokens(value: string): string[] {
     .replace(/ı/g, "i")
     .toLowerCase()
     .replace(/ß/g, "ss")
+    // "P.O. Box", "PO Box" and "Post Office Box" are one word.
+    .replace(/(?<![\p{L}\p{N}])(?:p\s*\.?\s*o\s*\.?|post\s+office)\s*box(?![\p{L}\p{N}])/gu, "pobox")
     // Join house-number suffixes so "12-A", "12/A" and "12A" compare equal; "123 N" stays a directional.
     .replace(/(\p{N})[/-](\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
     .split(/[^\p{L}\p{N}]+/u)
@@ -364,7 +366,8 @@ function hasComparableAddress(text: string): boolean {
   const labelledMatch = labelledAddress.exec(text);
   const addressValue = (labelledMatch?.[1] ?? labelledMatch?.[2])
     ?.replace(/(?:https?:\/\/|www\.)\S*/giu, "")
-    .split(/[.;|](?!\d)/)[0]
+    // A period ends the value unless it closes a short abbreviation ("St.", "P.O.") or sits inside a number.
+    .split(/[;|]|(?<!(?:^|[^\p{L}])\p{L}{1,3})\.(?!\d)/u)[0]
     .split(contactLine)[0]
     // A labelled postal code ("ZIP 94105") is not a street.
     .replace(/(?<![\p{L}\p{N}])(?:zip(?:\s*code)?|post(?:al)?\s*code|postcode|plz|code\s*postal|c[oó]digo\s*postal|cap|cp|posta\s*kodu)\s*:?\s*[\p{L}\p{N}-]*\d[\p{L}\p{N}-]*/giu, "");
@@ -380,8 +383,15 @@ function hasComparableAddress(text: string): boolean {
     "iu"
   );
 
+  // Compound street names with the type as a suffix ("Hauptstraße 5", "Kalverstraat 12", "Storgatan 3").
+  const compoundStreet =
+    /\p{L}{2,}(?:stra(?:ss|ß)e|str\.?|weg|gasse|platz|allee|damm|straat|laan|gracht|gade|gatan|vägen|vej|veien|gata)\s*\d/iu;
+  const postBox = /\b(?:p\.?\s*o\.?\s*box|post\s+office\s+box|postfach|apartado|bo[iî]te\s+postale)\s*\d/iu;
+
   return (
     (addressValue !== undefined && /\d/.test(addressValue)) ||
+    compoundStreet.test(text) ||
+    postBox.test(text) ||
     streetNumber.test(text) ||
     numberStreet.test(text) ||
     numberPrefixStreet.test(text)
@@ -411,7 +421,7 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
         .filter((line) => !contactLine.test(line))
         .join(" ");
     })
-    .filter((text) => /\d/.test(text));
+    .filter(hasComparableAddress);
 
   // Label/value markup (<dt>Adresse</dt><dd>...</dd>, <th>Address</th><td>...</td>) puts the label on its own line, so join each pair.
   const labelledPairs = [

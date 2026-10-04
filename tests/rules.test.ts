@@ -1013,4 +1013,37 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)).toBeUndefined();
   });
+
+  it("compares P.O. box addresses", () => {
+    const boxSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "P.O. Box 123", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(boxSchema, "<p>Address: P.O. Box 456</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "P.O. Box 123" not found'
+    );
+    expect(napFinding(napPage(boxSchema, "<p>Address: PO Box 123</p>"))).toBeUndefined();
+  });
+
+  it("reads a phone label that is several words before the number", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      telephone: "+1 415 555 0123",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<p>Telephone for general enquiries: (415) 555-0199</p>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone +1 415 555 0123 not found");
+  });
+
+  it("ignores address elements without postal content", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(usSchema, "<address>Company registration 123456</address>"))).toBeUndefined();
+    expect(napFinding(napPage(usSchema, "<address>Last updated 2026</address>"))).toBeUndefined();
+  });
 });
