@@ -1137,4 +1137,26 @@ describe("LocalBusiness NAP consistency rule", () => {
     );
     expect(napFinding(napPage(unitSchema, "<p>Address: 2 / 14 Main St.</p>"))).toBeUndefined();
   });
+
+  it("does not read a year before a street name in prose as a house number", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(usSchema, "<p>Join us at the 2026 Main Street Festival!</p>"))).toBeUndefined();
+    expect(napFinding(napPage(usSchema, "<p>2000 Main Street, Springfield</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Street" not found'
+    );
+  });
+
+  it("treats Av. and Avenida as the same street type", () => {
+    const spanishSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "Avenida Diagonal 12", addressCountry: "ES" }
+    };
+    const page = napPage(spanishSchema, "<p>Dirección: Av. Diagonal 12, Barcelona</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
 });

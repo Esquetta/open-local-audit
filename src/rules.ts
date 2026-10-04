@@ -294,6 +294,10 @@ const canonicalAddressTokens: Record<string, string> = {
   rd: "road",
   ave: "avenue",
   av: "avenue",
+  avenida: "avenue",
+  avda: "avenue",
+  bd: "boulevard",
+  pza: "plaza",
   blvd: "boulevard",
   ln: "lane",
   dr: "drive",
@@ -400,8 +404,9 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
     .replace(/(?<![\p{L}\p{N}])(?:zip(?:\s*code)?|post(?:al)?\s*code|postcode|plz|code\s*postal|c[oó]digo\s*postal|cap|cp|posta\s*kodu)\s*:?\s*[\p{L}\p{N}-]*\d[\p{L}\p{N}-]*/giu, "");
   const streetNumber =
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
+  // A year-like number ("2026 Main Street Festival") only counts when the street type ends the address (line end or comma).
   const numberStreet = new RegExp(
-    String.raw`\b${houseNumberPattern}\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b`,
+    String.raw`\b(?:(?!(?:19|20)\d\d(?![\p{L}\p{N}]))${houseNumberPattern}|(?:19|20)\d\d(?=\s.*\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\.?\s*(?:[,;|]|$)))\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b`,
     "iu"
   );
   // Street types written before the name, as in French, Spanish, Italian and Portuguese ("14 Rue de Rivoli", "5 Calle Mayor").
