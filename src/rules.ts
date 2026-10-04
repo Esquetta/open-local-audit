@@ -273,7 +273,12 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
     .map((element) => parsedPhone($(element).attr("href") ?? "", country));
   // Only trust numbers in body text when a phone label precedes them on the same line, so IDs and codes are not read as phones.
   // A label also covers the numbers listed right after it ("Phone: 0212 ... / 0216 ...").
-  const textPhones = [...visibleLines(body), ...labelValuePairs($, body)].flatMap((line) => {
+  // A label alone in its block ("<div>Phone:</div><div>(415) 555-0199</div>") labels the next block's number.
+  const lines = visibleLines(body);
+  const labelledNextLines = lines.flatMap((line, index) =>
+    index + 1 < lines.length && !/\d/.test(line) && phoneLabel.test(line) ? [`${line} ${lines[index + 1]}`] : []
+  );
+  const textPhones = [...lines, ...labelledNextLines, ...labelValuePairs($, body)].flatMap((line) => {
     let labelledEnd: number | undefined;
     return findPhoneNumbersInText(line, country ? { defaultCountry: country } : {}).map(({ number, startsAt, endsAt }) => {
       const labelled =
@@ -499,10 +504,11 @@ const numberedRoadWords = new Set(["highway", "route", "interstate", "freeway", 
 // "County Road 12" and "State Street 5" style designators: a number after road or route here names the road.
 const numberedRoadQualifiers = new Set(["county", "state", "farm", "ranch", "forest", "township", "parish", "provincial"]);
 
-function isRoadNumber(tokens: string[], index: number): boolean {
+function isRoadNumber(tokens: string[], index: number, leadingNumber: boolean): boolean {
+  // After a leading house number ("100 Road 12"), a number after road or route can only name the road.
   return (
     numberedRoadWords.has(tokens[index - 1]) ||
-    (["road", "route"].includes(tokens[index - 1]) && numberedRoadQualifiers.has(tokens[index - 2]))
+    (["road", "route"].includes(tokens[index - 1]) && (leadingNumber || numberedRoadQualifiers.has(tokens[index - 2])))
   );
 }
 
@@ -556,7 +562,7 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   while (
     wordsEnd < tokens.length &&
     !subAddressLabels.has(tokens[wordsEnd]) &&
-    (!isHouseNumber(tokens[wordsEnd]) || (wordsEnd > wordsStart && isRoadNumber(tokens, wordsEnd)))
+    (!isHouseNumber(tokens[wordsEnd]) || (wordsEnd > wordsStart && isRoadNumber(tokens, wordsEnd, leadingNumber)))
   ) {
     wordsEnd += 1;
   }

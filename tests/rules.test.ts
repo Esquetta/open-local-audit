@@ -1159,4 +1159,27 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)).toBeUndefined();
   });
+
+  it("keeps a bare road number after a house number in the street name", () => {
+    const roadSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "100 Road 12", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(roadSchema, "<p>Address: 100 Road 15, Suite 12</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "100 Road 12" not found'
+    );
+    expect(napFinding(napPage(roadSchema, "<p>Address: 100 Road 12</p>"))).toBeUndefined();
+  });
+
+  it("reads a phone number from the block after a label-only block", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      telephone: "+1 415 555 0123",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<div>Phone:</div><div>(415) 555-0199</div>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone +1 415 555 0123 not found");
+  });
 });
