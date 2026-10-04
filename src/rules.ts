@@ -282,6 +282,9 @@ const canonicalAddressTokens: Record<string, string> = {
   ct: "court",
   sq: "square",
   ste: "suite",
+  apt: "apartment",
+  bldg: "building",
+  rm: "room",
   fl: "floor",
   n: "north",
   s: "south",
@@ -343,6 +346,8 @@ function hasComparableAddress(text: string): boolean {
   return labelledAddress.test(text) || streetNumber.test(text) || numberStreet.test(text);
 }
 
+const contactLine = /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|t[eé]l[eé]phone|gsm)(?![\p{L}\p{N}])|@/iu;
+
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
   // so inline markup cannot split an address and unrelated blocks cannot supply street words.
@@ -350,7 +355,14 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   const addressElements = body
     .find("address")
     .toArray()
-    .map((element) => collapsedText($(element)))
+    .map((element) => {
+      // <address> often holds contact details too; keep only the postal lines.
+      const clone = $(element).clone();
+      clone.find("a[href^='tel:' i], a[href^='mailto:' i]").remove();
+      return visibleLines(clone)
+        .filter((line) => !contactLine.test(line))
+        .join(" ");
+    })
     .filter((text) => /\d/.test(text));
 
   return [...lines, ...addressElements].map(addressTokens);
@@ -368,9 +380,21 @@ function isHouseNumber(token: string): boolean {
   return /^\d/.test(token) && /^[\x00-\x7f]+$/.test(token) && !/^\d+(?:st|nd|rd|th)$/.test(token);
 }
 
+const subAddressLabels = new Set(["floor", "suite", "room", "unit", "apartment", "building", "kat", "daire", "blok", "etage", "stock", "piso"]);
+
 function containsInOrder(tokens: string[], region: string[]): boolean {
   let position = 0;
-  return tokens.every((token) => {
+  return tokens.every((token, index) => {
+    // A number after a label such as "Floor" must directly follow that label on the page too.
+    if (index > 0 && isHouseNumber(token) && subAddressLabels.has(tokens[index - 1])) {
+      if (region[position] !== token) {
+        return false;
+      }
+
+      position += 1;
+      return true;
+    }
+
     while (position < region.length && !addressWordMatches(token, region[position])) {
       position += 1;
     }
@@ -390,13 +414,14 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   const leadingNumber = isHouseNumber(tokens[0]);
   const wordsStart = leadingNumber ? 1 : 0;
   let wordsEnd = wordsStart;
-  while (wordsEnd < tokens.length && !isHouseNumber(tokens[wordsEnd])) {
+  while (wordsEnd < tokens.length && !isHouseNumber(tokens[wordsEnd]) && !subAddressLabels.has(tokens[wordsEnd])) {
     wordsEnd += 1;
   }
 
   const words = tokens.slice(wordsStart, wordsEnd);
-  const houseNumber = leadingNumber ? tokens[0] : tokens[wordsEnd];
-  const rest = tokens.slice(leadingNumber ? wordsEnd : wordsEnd + 1);
+  const trailingNumber = !leadingNumber && wordsEnd < tokens.length && isHouseNumber(tokens[wordsEnd]);
+  const houseNumber = leadingNumber ? tokens[0] : trailingNumber ? tokens[wordsEnd] : undefined;
+  const rest = tokens.slice(trailingNumber ? wordsEnd + 1 : wordsEnd);
 
   return regions.some((region) => {
     // Remaining parts (floor, suite, room) must appear in the same order so their numbers stay with their labels.

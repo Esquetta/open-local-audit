@@ -744,6 +744,19 @@ describe("LocalBusiness NAP consistency rule", () => {
     ).toBeUndefined();
   });
 
+  it("binds floor numbers to their label", () => {
+    const business = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Floor 2" } };
+
+    expect(napFinding(napPage(business, "<p>Address: 12 Main Street, Floor 3, Room 2</p>"))).toBeDefined();
+    expect(napFinding(napPage(business, "<p>Address: 12 Main Street, Fl. 2</p>"))).toBeUndefined();
+  });
+
+  it("ignores address elements that only hold contact details", () => {
+    const page = napPage(schema, '<address>Phone: <a href="tel:+902125550100">0212 555 01 00</a><br>Fax 0212 555 01 01</address>');
+
+    expect(napFinding(page)?.evidence[0]?.value ?? "").not.toContain("streetAddress");
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 
