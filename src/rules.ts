@@ -123,6 +123,146 @@ function hasLocalBusinessContactFields($: CheerioAPI): boolean {
   );
 }
 
+function stringValues(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [value];
+  return values.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function visibleBodyText($: CheerioAPI): string {
+  const body = $("body").clone();
+  body.find("script, style, noscript, template").remove();
+  return body.text().replace(/\s+/g, " ").trim();
+}
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function phoneDigitsMatch(left: string, right: string): boolean {
+  const length = Math.min(left.length, right.length, 10);
+  return length >= 7 && left.slice(-length) === right.slice(-length);
+}
+
+function visiblePhoneCandidates($: CheerioAPI, visibleText: string): string[] {
+  const linkPhones = $("a[href^='tel:' i]")
+    .toArray()
+    .map((element) => ($(element).attr("href") ?? "").replace(/^tel:/i, ""));
+  const textPhones = Array.from(visibleText.matchAll(/\+?\d[\d\s().-]{5,}\d/g), (match) => match[0]);
+
+  return [...linkPhones, ...textPhones]
+    .map((phone) => phone.trim())
+    .filter((phone) => digitsOnly(phone).length >= 7);
+}
+
+const genericAddressTokens = new Set([
+  "street",
+  "st",
+  "road",
+  "rd",
+  "avenue",
+  "ave",
+  "boulevard",
+  "blvd",
+  "lane",
+  "ln",
+  "drive",
+  "dr",
+  "suite",
+  "ste",
+  "floor",
+  "unit",
+  "no",
+  "cadde",
+  "caddesi",
+  "cad",
+  "cd",
+  "sokak",
+  "sokagi",
+  "sok",
+  "sk",
+  "mahalle",
+  "mahallesi",
+  "mah",
+  "strasse",
+  "str",
+  "the",
+  "and"
+]);
+
+function addressTokens(value: string): string[] {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0131/g, "i")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function streetAddresses(node: JsonLdNode): string[] {
+  const addresses = Array.isArray(node.address) ? node.address : [node.address];
+  return addresses.flatMap((address) => {
+    if (typeof address === "string") {
+      return stringValues(address);
+    }
+
+    if (hasObjectField(address)) {
+      return stringValues((address as JsonLdNode).streetAddress);
+    }
+
+    return [];
+  });
+}
+
+function streetAddressVisible(streetAddress: string, pageTokens: Set<string>): boolean {
+  const distinctive = addressTokens(streetAddress).filter((token) => !genericAddressTokens.has(token));
+  const numbers = distinctive.filter((token) => /\d/.test(token));
+  const words = distinctive.filter((token) => !/\d/.test(token) && token.length >= 3);
+
+  if (numbers.length === 0 && words.length === 0) {
+    return true;
+  }
+
+  return numbers.every((token) => pageTokens.has(token)) && (words.length === 0 || words.some((token) => pageTokens.has(token)));
+}
+
+function localBusinessNapMismatches($: CheerioAPI): string[] {
+  const nodes = localBusinessNodes($);
+  if (nodes.length === 0) {
+    return [];
+  }
+
+  const visibleText = visibleBodyText($);
+  const visiblePhones = visiblePhoneCandidates($, visibleText);
+  const visiblePhoneDigits = visiblePhones.map(digitsOnly);
+  const pageTokens = new Set(addressTokens(visibleText));
+  const showsAddress = hasVisibleAddress(visibleText);
+  const mismatches: string[] = [];
+
+  for (const node of nodes) {
+    if (visiblePhoneDigits.length > 0) {
+      for (const telephone of stringValues(node.telephone)) {
+        const schemaDigits = digitsOnly(telephone);
+        if (schemaDigits.length >= 7 && !visiblePhoneDigits.some((digits) => phoneDigitsMatch(schemaDigits, digits))) {
+          mismatches.push(
+            `Schema telephone ${telephone.trim()} not found among visible phone numbers: ${Array.from(new Set(visiblePhones)).join(", ")}`
+          );
+        }
+      }
+    }
+
+    if (showsAddress) {
+      for (const streetAddress of streetAddresses(node)) {
+        if (!streetAddressVisible(streetAddress, pageTokens)) {
+          mismatches.push(`Schema streetAddress "${streetAddress.trim()}" not found in visible page text`);
+        }
+      }
+    }
+  }
+
+  return Array.from(new Set(mismatches));
+}
+
 function hasOrganizationSchema($: CheerioAPI): boolean {
   return hasJsonLdType($, (type) => type === "Organization" || type.endsWith("Organization"));
 }
@@ -421,6 +561,17 @@ const rules: Rule[] = [
     recommendation: "Add telephone, address, and openingHours fields to LocalBusiness schema.",
     check: ({ $ }) => hasLocalBusinessContactFields($),
     evidence: () => "LocalBusiness schema is missing telephone, address, or openingHours"
+  },
+  {
+    id: "localbusiness-schema-nap-consistency",
+    title: "LocalBusiness structured data does not match the visible phone or address",
+    category: "search-basics",
+    severity: "medium",
+    source: "JSON-LD",
+    recommendation:
+      "Make the LocalBusiness schema telephone and streetAddress match the phone number and address shown on the page, so search engines and customers see one consistent listing.",
+    check: ({ $ }) => localBusinessNapMismatches($).length === 0,
+    evidence: ({ $ }) => localBusinessNapMismatches($).join("; ")
   },
   {
     id: "organization-schema-present",

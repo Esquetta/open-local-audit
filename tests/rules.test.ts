@@ -336,3 +336,100 @@ describe("audit rules", () => {
     );
   });
 });
+
+describe("LocalBusiness NAP consistency rule", () => {
+  function napPage(schema: Record<string, unknown>, body: string): PageSnapshot {
+    return snapshot(`
+      <!doctype html>
+      <html>
+        <head>
+          <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", ...schema })}</script>
+        </head>
+        <body>${body}</body>
+      </html>
+    `);
+  }
+
+  function napFinding(page: PageSnapshot) {
+    return auditSnapshot(page).findings.find((finding) => finding.id === "localbusiness-schema-nap-consistency");
+  }
+
+  const schema = {
+    "@type": "LocalBusiness",
+    telephone: "+90 212 000 00 00",
+    address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+  };
+
+  it("passes when the visible phone uses a different format and the street uses an abbreviation", () => {
+    const page = napPage(schema, `
+      <p>Address: Example St. 12, Kadikoy, Istanbul</p>
+      <p>Call 0212 000 00 00</p>
+    `);
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("flags a schema telephone that differs from every visible phone number", () => {
+    const page = napPage(schema, `
+      <p>Address: Example Street 12, Istanbul</p>
+      <a href="tel:+902125550000">Call us</a>
+    `);
+
+    const finding = napFinding(page);
+    expect(finding).toMatchObject({ severity: "medium", category: "search-basics" });
+    expect(finding?.evidence[0]?.value).toBe(
+      "Schema telephone +90 212 000 00 00 not found among visible phone numbers: +902125550000"
+    );
+  });
+
+  it("flags a schema street address that the visible address does not show", () => {
+    const page = napPage(schema, `
+      <p>Address: Harbour Road 48, Istanbul</p>
+      <a href="tel:+902120000000">Call us</a>
+    `);
+
+    expect(napFinding(page)?.evidence[0]?.value).toBe(
+      'Schema streetAddress "Example Street 12" not found in visible page text'
+    );
+  });
+
+  it("matches Turkish street names regardless of diacritics", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "Bağdat Caddesi No: 45" } },
+      "<p>Adres: Bagdat Cd. No 45, Kadıköy</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("ignores JSON-LD placed in the body when reading visible text", () => {
+    const page = snapshot(`
+      <!doctype html>
+      <html>
+        <body>
+          <script type="application/ld+json">${JSON.stringify({ "@type": "LocalBusiness", ...schema })}</script>
+          <p>Address: Harbour Road 48, Istanbul</p>
+          <a href="tel:+902125550000">Call us</a>
+        </body>
+      </html>
+    `);
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone +90 212 000 00 00");
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "Example Street 12"');
+  });
+
+  it("leaves missing visible phone or address to the existing presence rules", () => {
+    const page = napPage(schema, "<p>Welcome to our clinic.</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("does not run without LocalBusiness structured data", () => {
+    const page = napPage(
+      { "@type": "Organization", telephone: "+90 212 000 00 00" },
+      '<p>Address: Harbour Road 48</p><a href="tel:+902125550000">Call</a>'
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+});
