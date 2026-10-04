@@ -146,9 +146,25 @@ function collapsedText(element: VisibleBody): string {
 
 const supportedPhoneCountries = new Set<string>(getCountries());
 
-function schemaCountry(node: JsonLdNode): CountryCode | undefined {
+type JsonLdIndex = Map<string, JsonLdNode>;
+
+function jsonLdIndex($: CheerioAPI): JsonLdIndex {
+  return new Map(
+    jsonLdNodes($).flatMap((node) => (typeof node["@id"] === "string" ? [[node["@id"], node] as const] : []))
+  );
+}
+
+function schemaAddresses(node: JsonLdNode, index: JsonLdIndex): unknown[] {
   const addresses = Array.isArray(node.address) ? node.address : [node.address];
-  return addresses
+  return addresses.map((address) => {
+    // Follow {"@id": ...} references to PostalAddress nodes elsewhere in the graph.
+    const reference = hasObjectField(address) ? (address as JsonLdNode)["@id"] : undefined;
+    return typeof reference === "string" && index.has(reference) ? { ...index.get(reference), ...(address as JsonLdNode) } : address;
+  });
+}
+
+function schemaCountry(node: JsonLdNode, index: JsonLdIndex): CountryCode | undefined {
+  return schemaAddresses(node, index)
     .filter(hasObjectField)
     .flatMap((address) => {
       const value = (address as JsonLdNode).addressCountry;
@@ -204,13 +220,20 @@ function parsedPhone(value: string, country: CountryCode | undefined): VisiblePh
   return parsed?.isValid() ? { e164: parsed.number, display: parsed.formatInternational() } : undefined;
 }
 
+const phoneLabel =
+  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞)(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:\p{L}+[^\p{L}\p{N}]+){0,3}$/iu;
+
 function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | undefined): VisiblePhone[] {
   const linkPhones = body
     .find("a[href^='tel:' i]")
     .toArray()
     .map((element) => parsedPhone($(element).attr("href") ?? "", country));
-  const textPhones = findPhoneNumbersInText(collapsedText(body), country ? { defaultCountry: country } : {}).map(({ number }) =>
-    number.isValid() ? { e164: number.number, display: number.formatInternational() } : undefined
+  const text = collapsedText(body);
+  // Only trust numbers in body text when a phone label precedes them, so IDs and codes are not read as phones.
+  const textPhones = findPhoneNumbersInText(text, country ? { defaultCountry: country } : {}).map(({ number, startsAt }) =>
+    number.isValid() && phoneLabel.test(text.slice(Math.max(0, startsAt - 30), startsAt))
+      ? { e164: number.number, display: number.formatInternational() }
+      : undefined
   );
 
   const phones = [...linkPhones, ...textPhones].filter((phone): phone is VisiblePhone => phone !== undefined);
@@ -260,13 +283,14 @@ function addressTokens(value: string): string[] {
     .replace(/\p{M}/gu, "")
     .replace(/ı/g, "i")
     .toLowerCase()
+    .replace(/ß/g, "ss")
     .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((token) => token.replace(/(?<=\p{L})strasse$/u, "str"));
 }
 
-function streetAddresses(node: JsonLdNode): string[] {
-  const addresses = Array.isArray(node.address) ? node.address : [node.address];
-  return addresses.flatMap((address) => {
+function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
+  return schemaAddresses(node, index).flatMap((address) => {
     if (typeof address === "string") {
       return stringValues(address);
     }
@@ -291,9 +315,10 @@ function hasComparableAddress(text: string): boolean {
 
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Use the innermost elements that show an address so unrelated page copy cannot supply street words.
-  const matching = [...body.toArray(), ...body.find("*").toArray()].filter((element) =>
-    hasComparableAddress(collapsedText($(element)))
-  );
+  const matching = [...body.toArray(), ...body.find("*").toArray()].filter((element) => {
+    const text = collapsedText($(element));
+    return hasComparableAddress(text) || ($(element).is("address") && /\d/.test(text));
+  });
   const matchingSet = new Set(matching);
 
   return matching
@@ -335,13 +360,14 @@ function localBusinessNapMismatches($: CheerioAPI): string[] {
     return [];
   }
 
+  const index = jsonLdIndex($);
   const body = visibleBody($);
   const regions = visibleAddressRegions($, body);
   const mismatches: string[] = [];
 
   for (const node of nodes) {
     for (const telephone of stringValues(node.telephone)) {
-      const country = schemaCountry(node) ?? parsePhoneNumberFromString(telephone.trim())?.country;
+      const country = schemaCountry(node, index) ?? parsePhoneNumberFromString(telephone.trim())?.country;
       const phones = visiblePhones($, body, country);
       if (phones.length === 0) {
         continue;
@@ -360,7 +386,7 @@ function localBusinessNapMismatches($: CheerioAPI): string[] {
     }
 
     if (regions.length > 0) {
-      for (const streetAddress of streetAddresses(node)) {
+      for (const streetAddress of streetAddresses(node, index)) {
         if (!streetAddressVisible(streetAddress, regions)) {
           mismatches.push(`Schema streetAddress "${streetAddress.trim()}" not found in visible page text`);
         }

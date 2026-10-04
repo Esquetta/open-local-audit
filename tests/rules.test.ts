@@ -564,6 +564,50 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(page)).toBeDefined();
   });
 
+  it("only reads body-text phone numbers that follow a phone label", () => {
+    const us = {
+      "@type": "LocalBusiness",
+      telephone: "+1 212-555-0100",
+      address: { "@type": "PostalAddress", streetAddress: "350 Fifth Avenue", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(us, "<p>Order 4155550199 has shipped.</p>"))).toBeUndefined();
+    expect(napFinding(napPage(us, "<p>Phone: (415) 555-0199</p>"))?.evidence[0]?.value).toContain("+1 415 555 0199");
+    expect(napFinding(napPage(us, "<p>Kara 415 555 0199</p>"))).toBeUndefined();
+  });
+
+  it("treats German street abbreviations as the same street", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "Hauptstraße 5" } },
+      "<p>Adresse: Hauptstr. 5, Berlin</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("compares addresses shown in address elements", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Rue de Rivoli" } },
+      "<address>14 Rue de Rivoli, Paris</address>"
+    );
+
+    expect(napFinding(page)?.evidence[0]?.value).toBe('Schema streetAddress "12 Rue de Rivoli" not found in visible page text');
+  });
+
+  it("follows @id references to PostalAddress nodes", () => {
+    const page = napPage(
+      {
+        "@graph": [
+          { "@type": "LocalBusiness", "@id": "#business", address: { "@id": "#location-address" } },
+          { "@type": "PostalAddress", "@id": "#location-address", streetAddress: "Example Street 12" }
+        ]
+      },
+      "<p>Address: Harbour Road 48, Istanbul</p>"
+    );
+
+    expect(napFinding(page)?.evidence[0]?.value).toBe('Schema streetAddress "Example Street 12" not found in visible page text');
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 
