@@ -1355,4 +1355,30 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(napPage(viaSchema, "<p>Address: via roma 12</p>"))).toBeUndefined();
     expect(napFinding(napPage(viaSchema, "<p>Send it via email 14 times</p><p>Via Roma 12</p>"))).toBeUndefined();
   });
+
+  it("resolves UK as a country name for national phone numbers", () => {
+    const ukSchema = { "@type": "LocalBusiness", telephone: "020 7946 0000", address: { "@type": "PostalAddress", addressCountry: "UK" } };
+    expect(napFinding(napPage(ukSchema, "<p>Phone: 020 7946 0999</p>"))?.evidence[0]?.value).toContain(
+      "Schema telephone 020 7946 0000 not found"
+    );
+    expect(napFinding(napPage(ukSchema, "<p>Phone: 020 7946 0000</p>"))).toBeUndefined();
+  });
+
+  it("joins a standalone Turkish Ara label with the next block", () => {
+    const trSchema = { "@type": "LocalBusiness", telephone: "0212 555 01 00", address: { "@type": "PostalAddress", addressCountry: "TR" } };
+    expect(napFinding(napPage(trSchema, "<div>Ara:</div><div>0212 555 01 99</div>"))?.evidence[0]?.value).toContain(
+      "Schema telephone 0212 555 01 00 not found"
+    );
+  });
+
+  it("ignores text directly inside a closed details element", () => {
+    const phoneSchema = { "@type": "LocalBusiness", telephone: "+1 415 555 0100", address: { "@type": "PostalAddress", addressCountry: "US" } };
+    expect(
+      napFinding(napPage(phoneSchema, "<details><summary>Old</summary>Phone: 415-555-0100</details><p>Phone: 415-555-0199</p>"))
+        ?.evidence[0]?.value
+    ).toContain("Schema telephone +1 415 555 0100");
+    expect(
+      napFinding(napPage(phoneSchema, "<details open><summary>Old</summary>Phone: 415-555-0100</details><p>Phone: 415-555-0199</p>"))
+    ).toBeUndefined();
+  });
 });

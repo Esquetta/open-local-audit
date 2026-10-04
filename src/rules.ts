@@ -129,9 +129,8 @@ function stringValues(value: unknown): string[] {
   return values.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-// Closed <dialog> and the body of a closed <details> are hidden by the browser without any attribute or style.
-const hiddenElements =
-  "script, style, noscript, template, [hidden], [aria-hidden='true'], dialog:not([open]), details:not([open]) > :not(summary)";
+// A closed <dialog> is hidden by the browser without any attribute or style.
+const hiddenElements = "script, style, noscript, template, [hidden], [aria-hidden='true'], dialog:not([open])";
 
 // Inline CSS allows whitespace and !important around values ("display : none !important"), so read the declarations.
 const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!\s*important\s*)?(?:;|$)/i;
@@ -144,6 +143,13 @@ const blockElements =
 function visibleBody($: CheerioAPI): VisibleBody {
   const body = $("body").clone();
   body.find(hiddenElements).remove();
+  // A closed <details> shows only its summary; its other content, text nodes included, is hidden.
+  body.find("details:not([open])").each((_, element) => {
+    $(element)
+      .contents()
+      .filter((_, node) => !(node.type === "tag" && node.name.toLowerCase() === "summary"))
+      .remove();
+  });
   body
     .find("[style]")
     .filter((_, element) => hiddenStyle.test($(element).attr("style") ?? ""))
@@ -224,7 +230,10 @@ function countryCodeFromName(value: string): CountryCode | undefined {
   const trimmed = value.trim();
   if (/^[A-Za-z]{2}$/.test(trimmed)) {
     const code = trimmed.toUpperCase();
-    return supportedPhoneCountries.has(code) ? (code as CountryCode) : undefined;
+    // Unsupported two-letter values may still be common names ("UK"), so fall through to the aliases.
+    if (supportedPhoneCountries.has(code)) {
+      return code as CountryCode;
+    }
   }
 
   if (!localizedCountryNames) {
@@ -263,12 +272,18 @@ function samePhone(visible: VisiblePhone, schema: VisiblePhone): boolean {
 }
 
 // Words between the label and the number may not name an identifier, so "Call ID: 4155550199" is not read as a phone.
-const phoneLabel =
-  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞)(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:(?!(?:id|ids|ref|reference|order|ticket|case|account|acct|customer|invoice|booking|reservation|confirmation|tracking|serial|pin|code|log|session)(?![\p{L}\p{N}]))\p{L}+[^\p{L}\p{N}]+){0,3}$/iu;
+const phoneLabelWords = "phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞";
+
+const phoneLabel = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(?:${phoneLabelWords})(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:(?!(?:id|ids|ref|reference|order|ticket|case|account|acct|customer|invoice|booking|reservation|confirmation|tracking|serial|pin|code|log|session)(?![\p{L}\p{N}]))\p{L}+[^\p{L}\p{N}]+){0,3}$`,
+  "iu"
+);
 
 // A block holding only a label ("Phone:", "Call us", "Telefon numarası") — not prose that merely mentions a phone.
-const standalonePhoneLabel =
-  /^[^\p{L}\p{N}]*(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ruf|☎|📞)(?:\s+(?:us|number|no|nr|numarası|numarasi|nummer|numéro|número|numero))?\.?[^\p{L}\p{N}]*$/iu;
+const standalonePhoneLabel = new RegExp(
+  String.raw`^[^\p{L}\p{N}]*(?:${phoneLabelWords})(?:\s+(?:us|number|no|nr|numarası|numarasi|nummer|numéro|número|numero))?\.?[^\p{L}\p{N}]*$`,
+  "iu"
+);
 
 const phoneListSeparator = /^[\s,/|;–—-]*(?:(?:or|and|ve|veya|oder|und|ou|et|o|y)[\s,/|;–—-]*)?$/i;
 
