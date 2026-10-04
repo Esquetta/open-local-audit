@@ -1125,4 +1125,16 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "100 Route 66" not found');
   });
+
+  it("keeps slash-separated unit and street numbers together", () => {
+    const unitSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "2/14 Main Street", addressCountry: "AU" }
+    };
+
+    expect(napFinding(napPage(unitSchema, "<p>Address: 3/14 Main Street, Suite 2</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "2/14 Main Street" not found'
+    );
+    expect(napFinding(napPage(unitSchema, "<p>Address: 2 / 14 Main St.</p>"))).toBeUndefined();
+  });
 });

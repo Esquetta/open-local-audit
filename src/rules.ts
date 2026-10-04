@@ -337,6 +337,8 @@ function addressTokens(value: string): string[] {
     .replace(/(\d+)\s+(\d+)\/(\d+)(?![\p{L}\p{N}])/gu, "$1x$2x$3")
     // Likewise keep ranges ("12-14") as one token so "12-14" and "14-16" stay different house numbers.
     .replace(/(?<![\p{L}\p{N}])(\d+)\s*[-–]\s*(\d+)(?![\p{L}\p{N}])/gu, "$1to$2")
+    // And unit/street pairs ("2/14 Main Street", "No: 12/3") so the unit number stays bound to its street number.
+    .replace(/(?<![\p{L}\p{N}])(\d+)\s*\/\s*(\d+)(?![\p{L}\p{N}])/gu, "$1of$2")
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .replace(/ı/g, "i")
@@ -380,8 +382,8 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
 const contactLine =
   /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|telefono|teléfono|t[eé]l[eé]phone|tél|gsm|cep|ruf)(?![\p{L}\p{N}])|[@☎📞]/iu;
 
-// House numbers as addressTokens normalizes them: "12", "12A", "12-A", "12-14", "12 1/2" and "12½".
-const houseNumberPattern = String.raw`\d+(?:\s*[-–]\s*\d+|\s+\d+\/\d+|[-/]?[a-z]|[½¼¾])?`;
+// House numbers as addressTokens normalizes them: "12", "12A", "12-A", "12-14", "2/14", "12 1/2" and "12½".
+const houseNumberPattern = String.raw`\d+(?:\s*[-–/]\s*\d+|\s+\d+\/\d+|[-/]?[a-z]|[½¼¾])?`;
 
 function hasComparableAddress(text: string, inAddressElement = false): boolean {
   const labelledAddress =
