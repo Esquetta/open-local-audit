@@ -321,7 +321,14 @@ function addressTokens(value: string): string[] {
     .replace(/(\p{N})[/-](\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token && !fillerAddressTokens.has(token))
-    .map((token) => canonicalAddressTokens[token] ?? token.replace(/(?<=\p{L})strasse$/u, "str"));
+    .map((token, index, tokens) => {
+      // "St" opening a street name ("12 St John St") is Saint; elsewhere it is Street.
+      if (token === "st" && /^\p{L}/u.test(tokens[index + 1] ?? "") && (index === 0 || /^\d/.test(tokens[index - 1]))) {
+        return "saint";
+      }
+
+      return canonicalAddressTokens[token] ?? token.replace(/(?<=\p{L})strasse$/u, "str");
+    });
 }
 
 function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
@@ -352,7 +359,7 @@ function hasComparableAddress(text: string): boolean {
   const streetNumber =
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
   const numberStreet =
-    /\b\d+[a-z]?\s+(?:[\p{L}]+\s+){1,3}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
+    /\b\d+[a-z]?\s+(?:[\p{L}]+\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
 
   return (addressValue !== undefined && /\d/.test(addressValue)) || streetNumber.test(text) || numberStreet.test(text);
 }

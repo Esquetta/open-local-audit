@@ -863,4 +863,24 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)).toBeUndefined();
   });
+
+  it("reads St before a street name as Saint", () => {
+    const saintSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Saint John Street", addressCountry: "GB" }
+    };
+    const page = napPage(saintSchema, "<p>Address: 12 St John St., London</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("finds unlabelled addresses with long street names", () => {
+    const longSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "123 North Martin Luther King Boulevard", addressCountry: "US" }
+    };
+    const page = napPage(longSchema, "<p>125 North Martin Luther King Boulevard</p>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "123 North Martin Luther King Boulevard" not found');
+  });
 });
