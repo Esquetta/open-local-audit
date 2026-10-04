@@ -472,7 +472,14 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
   // so inline markup cannot split an address and unrelated blocks cannot supply street words.
-  const lines = visibleLines(body).filter((line) => hasComparableAddress(line));
+  const allLines = visibleLines(body);
+  // A label alone in its block ("<div>Address:</div><div>14 Main Crescent</div>") labels the next block.
+  const labelledNextLines = allLines.flatMap((line, index) =>
+    index + 1 < allLines.length && /^(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:?$/iu.test(line)
+      ? [`${line.replace(/\s*:?$/, "")}: ${allLines[index + 1]}`]
+      : []
+  );
+  const lines = [...allLines, ...labelledNextLines].filter((line) => hasComparableAddress(line));
   // An address broken with <br> ("12 Main Street<br>Suite 100") continues within its innermost block, so add those blocks whole.
   const addressBlocks = body
     .find(blockElements)

@@ -1216,4 +1216,16 @@ describe("LocalBusiness NAP consistency rule", () => {
     );
     expect(napFinding(napPage(letterSchema, "<p>Address: 12 S. Street</p>"))).toBeUndefined();
   });
+
+  it("reads an address from the block after a label-only block", () => {
+    const crescentSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Crescent", addressCountry: "GB" }
+    };
+
+    expect(napFinding(napPage(crescentSchema, "<div>Address:</div><div>14 Main Crescent</div>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Crescent" not found'
+    );
+    expect(napFinding(napPage(crescentSchema, "<div>Address</div><div>12 Main Crescent</div>"))).toBeUndefined();
+  });
 });
