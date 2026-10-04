@@ -243,19 +243,25 @@ function parsedPhone(value: string, country: CountryCode | undefined): VisiblePh
 const phoneLabel =
   /(?<![\p{L}\p{N}])(?:phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞)(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:\p{L}+[^\p{L}\p{N}]+){0,3}$/iu;
 
+const phoneListSeparator = /^[\s,/|;–—-]*(?:(?:or|and|ve|veya|oder|und|ou|et|o|y)[\s,/|;–—-]*)?$/i;
+
 function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | undefined): VisiblePhone[] {
   const linkPhones = body
     .find("a[href^='tel:' i]")
     .toArray()
     .map((element) => parsedPhone($(element).attr("href") ?? "", country));
   // Only trust numbers in body text when a phone label precedes them on the same line, so IDs and codes are not read as phones.
-  const textPhones = visibleLines(body).flatMap((line) =>
-    findPhoneNumbersInText(line, country ? { defaultCountry: country } : {}).map(({ number, startsAt }) =>
-      number.isValid() && phoneLabel.test(line.slice(Math.max(0, startsAt - 30), startsAt))
-        ? { e164: number.number, display: number.formatInternational() }
-        : undefined
-    )
-  );
+  // A label also covers the numbers listed right after it ("Phone: 0212 ... / 0216 ...").
+  const textPhones = visibleLines(body).flatMap((line) => {
+    let labelledEnd: number | undefined;
+    return findPhoneNumbersInText(line, country ? { defaultCountry: country } : {}).map(({ number, startsAt, endsAt }) => {
+      const labelled =
+        phoneLabel.test(line.slice(Math.max(0, startsAt - 30), startsAt)) ||
+        (labelledEnd !== undefined && phoneListSeparator.test(line.slice(labelledEnd, startsAt)));
+      labelledEnd = labelled ? endsAt : undefined;
+      return labelled && number.isValid() ? { e164: number.number, display: number.formatInternational() } : undefined;
+    });
+  });
 
   const phones = [...linkPhones, ...textPhones].filter((phone): phone is VisiblePhone => phone !== undefined);
   return Array.from(new Map(phones.map((phone) => [phone.e164, phone])).values());
@@ -358,7 +364,20 @@ function addressWordMatches(word: string, pageToken: string): boolean {
 }
 
 function isHouseNumber(token: string): boolean {
-  return /^\d/.test(token) && /^[\x00-\x7f]+$/.test(token);
+  // Ordinals such as "5th" are part of a street name, not a house number.
+  return /^\d/.test(token) && /^[\x00-\x7f]+$/.test(token) && !/^\d+(?:st|nd|rd|th)$/.test(token);
+}
+
+function containsInOrder(tokens: string[], region: string[]): boolean {
+  let position = 0;
+  return tokens.every((token) => {
+    while (position < region.length && !addressWordMatches(token, region[position])) {
+      position += 1;
+    }
+
+    position += 1;
+    return position <= region.length;
+  });
 }
 
 function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
@@ -380,7 +399,8 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   const rest = tokens.slice(leadingNumber ? wordsEnd : wordsEnd + 1);
 
   return regions.some((region) => {
-    if (!rest.every((token) => region.some((pageToken) => addressWordMatches(token, pageToken)))) {
+    // Remaining parts (floor, suite, room) must appear in the same order so their numbers stay with their labels.
+    if (!containsInOrder(rest, region)) {
       return false;
     }
 
