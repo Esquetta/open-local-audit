@@ -1430,4 +1430,49 @@ describe("LocalBusiness NAP consistency rule", () => {
     );
     expect(napFinding(napPage(brSchema, "<p>Telefone: (11) 5555-0100</p>"))).toBeUndefined();
   });
+
+  it("keeps unit lines rendered as their own blocks with the address above", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite 100", addressCountry: "US" }
+    };
+    expect(napFinding(napPage(suiteSchema, "<div>Address:</div><div>12 Main Street</div><div>Suite 100</div>"))).toBeUndefined();
+    expect(napFinding(napPage(suiteSchema, "<div>12 Main Street</div><div>Suite 100</div>"))).toBeUndefined();
+    expect(
+      napFinding(napPage(suiteSchema, "<div>Address:</div><div>12 Main Street</div><div>Suite 200</div>"))?.evidence[0]?.value
+    ).toContain('Schema streetAddress "12 Main Street, Suite 100" not found');
+  });
+
+  it("keeps unit details within each unlabelled address on a line", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite 100", addressCountry: "US" }
+    };
+    expect(
+      napFinding(napPage(suiteSchema, "<p>12 Main Street, Suite 200 | 99 Oak Road, Suite 100</p>"))?.evidence[0]?.value
+    ).toContain('Schema streetAddress "12 Main Street, Suite 100" not found');
+    expect(
+      napFinding(napPage(suiteSchema, "<p>99 Oak Road, Suite 100 | 12 Main Street, Suite 200</p>"))?.evidence[0]?.value
+    ).toContain('Schema streetAddress "12 Main Street, Suite 100" not found');
+    expect(napFinding(napPage(suiteSchema, "<p>99 Oak Road, Suite 200 | 12 Main Street, Suite 100</p>"))).toBeUndefined();
+    expect(napFinding(napPage(suiteSchema, "<p>Address: Suite 100, 12 Main Street</p>"))).toBeUndefined();
+  });
+
+  it("detects unlabelled addresses with crescent, terrace and similar suffixes", () => {
+    const crescentSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Crescent", addressCountry: "GB" }
+    };
+    expect(napFinding(napPage(crescentSchema, "<p>14 Main Crescent</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Crescent" not found'
+    );
+    expect(napFinding(napPage(crescentSchema, "<p>12 Main Cres.</p>"))).toBeUndefined();
+    const terraceSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "8 Ocean Terrace", addressCountry: "US" }
+    };
+    expect(napFinding(napPage(terraceSchema, "<p>10 Ocean Terrace</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "8 Ocean Terrace" not found'
+    );
+  });
 });

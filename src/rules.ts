@@ -477,6 +477,13 @@ const distanceUnits = String.raw`(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|da
 // House numbers as addressTokens normalizes them: "12", "12A", "12-A", "12-14", "2/14", "12 1/2" and "12½".
 const houseNumberPattern = String.raw`\d+(?:\s*[-–/]\s*\d+|\s+\d+\/\d+|[-/]?[a-z]|[½¼¾])?`;
 
+// Suffixes that may follow a house number and name in unlabelled text ("14 Main Crescent"). Words that are common in prose
+// on their own ("way", "ter", "esp") are left to labelled values and <address>.
+const numberStreetTypes =
+  "street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy|" +
+  "crescent|cres|terrace|terr|circle|cir|trail|trl|alley|aly|plaza|plz|heights|hts|crossing|xing|turnpike|tpke|gardens|gdns|" +
+  "grove|grv|parade|pde|esplanade|circuit|cct|expressway|expy|freeway|fwy";
+
 function hasComparableAddress(text: string, inAddressElement = false): boolean {
   const labelledAddress =
     /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)(?:\s*:\s*([^\n]{0,80})|\s+(\d[^\n]{0,79}))/iu;
@@ -498,7 +505,7 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
   );
   // A year-like number ("2026 Main Street Festival") only counts when the street type ends the address (line end or comma).
   const numberStreet = new RegExp(
-    String.raw`\b(?!\d+\s+${distanceUnits})(?:(?!(?:19|20)\d\d(?![\p{L}\p{N}]))${houseNumberPattern}|(?:19|20)\d\d(?=\s.*\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\.?\s*(?:[,;|]|$)))\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b`,
+    String.raw`\b(?!\d+\s+${distanceUnits})(?:(?!(?:19|20)\d\d(?![\p{L}\p{N}]))${houseNumberPattern}|(?:19|20)\d\d(?=\s.*\b(?:${numberStreetTypes})\.?\s*(?:[,;|]|$)))\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:${numberStreetTypes})\b`,
     "iu"
   );
   // Street types written before the name, as in French, Spanish, Italian and Portuguese ("14 Rue de Rivoli", "5 Calle Mayor").
@@ -563,17 +570,29 @@ function postalPart(line: string): string {
     .join(", ");
 }
 
+const subAddressLine =
+  /^\s*(?:(?:suite|ste|unit|apt|apartment|floor|fl|room|rm|building|bldg|kat|daire|blok|etage|stock|piso)(?!\p{L})\.?\s*[\p{L}\p{N}]|#\s*\p{N})/iu;
+
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
   // so inline markup cannot split an address and unrelated blocks cannot supply street words.
   const allLines = visibleLines(body);
   // A label alone in its block ("<div>Address:</div><div>14 Main Crescent</div>") labels the next block.
+  // Unit lines rendered as their own blocks ("<div>12 Main Street</div><div>Suite 100</div>") continue the address above.
+  const continuation = (index: number) => {
+    let end = index + 1;
+    while (end < allLines.length && subAddressLine.test(allLines[end])) {
+      end += 1;
+    }
+    return allLines.slice(index, end).join(" ");
+  };
   const labelledNextLines = allLines.flatMap((line, index) =>
     index + 1 < allLines.length && /^(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)\s*:?$/iu.test(line)
-      ? [`${line.replace(/\s*:?$/, "")}: ${allLines[index + 1]}`]
+      ? [`${line.replace(/\s*:?$/, "")}: ${continuation(index + 1)}`]
       : []
   );
-  const lines = [...allLines, ...labelledNextLines].filter((line) => hasComparableAddress(line));
+  const continuedLines = allLines.map((_, index) => continuation(index)).filter((line, index) => line !== allLines[index]);
+  const lines = [...allLines, ...labelledNextLines, ...continuedLines].filter((line) => hasComparableAddress(line));
   // An address broken with <br> ("12 Main Street<br>Suite 100") continues within its innermost block, so add those blocks whole.
   const addressBlocks = body
     .find(blockElements)
@@ -672,6 +691,24 @@ function containsInOrder(rest: AddressToken[], region: string[]): boolean {
 
 const addressLabelTokens = new Set(["address", "adres", "adresse", "anschrift", "direccion", "dirección", "indirizzo"]);
 
+// A house number (not a unit number) followed within a few words by a street type starts another street address.
+function isAddressStart(region: string[], index: number): boolean {
+  if (!isHouseNumber(region[index]) || subAddressLabels.has(region[index - 1])) {
+    return false;
+  }
+
+  for (let offset = index + 1; offset < Math.min(region.length, index + 7); offset += 1) {
+    if (streetTypes.has(region[offset])) {
+      return true;
+    }
+    if (isHouseNumber(region[offset])) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
   const parts: AddressToken[] = streetAddress
     .split(/[,;\n]/)
@@ -715,13 +752,19 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
         continue;
       }
 
-      // The rest must belong to this street's address, not to another labelled address on the same line.
-      let before = start - 1;
-      while (before >= 0 && !addressLabelTokens.has(region[before])) {
-        before -= 1;
+      // The rest must belong to this street's address, not to another address on the same line: stop at the next
+      // address label or street address, and only look before the street when no other address precedes it.
+      const ownStart = leadingNumber && region[start - 1] === houseNumber ? start - 1 : start;
+      let label = ownStart - 1;
+      while (label >= 0 && !addressLabelTokens.has(region[label])) {
+        label -= 1;
       }
-      const after = region.findIndex((token, index) => index > end && addressLabelTokens.has(token));
-      if (containsInOrder(rest, region.slice(before + 1, after === -1 ? region.length : after))) {
+      const precededByAddress = region.some((_, index) => index > label && index < ownStart && isAddressStart(region, index));
+      const from = precededByAddress ? ownStart : label + 1;
+      const next = region.findIndex(
+        (token, index) => index > end && (addressLabelTokens.has(token) || (index > end + 1 && isAddressStart(region, index)))
+      );
+      if (containsInOrder(rest, region.slice(from, next === -1 ? region.length : next))) {
         return true;
       }
     }
