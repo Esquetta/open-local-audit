@@ -1228,4 +1228,33 @@ describe("LocalBusiness NAP consistency rule", () => {
     );
     expect(napFinding(napPage(crescentSchema, "<div>Address</div><div>12 Main Crescent</div>"))).toBeUndefined();
   });
+
+  it("treats inline styles with whitespace around the colon as hidden", () => {
+    const phoneSchema = { "@type": "LocalBusiness", telephone: "+1 415 555 0100", address: { "@type": "PostalAddress", addressCountry: "US" } };
+    const page = napPage(
+      phoneSchema,
+      '<p style="display : none">Phone: 415-555-0100</p><p>Phone: 415-555-0199</p>'
+    );
+    expect(napFinding(page)?.evidence[0]?.value).toContain("Schema telephone +1 415 555 0100");
+
+    const hiddenAddress = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street", addressCountry: "US" } },
+      '<p style="color: red; visibility : hidden !important">12 Main Street</p><p>14 Main Street</p>'
+    );
+    expect(napFinding(hiddenAddress)?.evidence[0]?.value).toContain('Schema streetAddress "12 Main Street" not found');
+  });
+
+  it("keeps the postal text of an address line that also carries contact details", () => {
+    const crescentSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Crescent", addressCountry: "US" }
+    };
+    expect(napFinding(napPage(crescentSchema, "<address>14 Main Crescent, Phone: 415-555-0199</address>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Crescent" not found'
+    );
+    expect(napFinding(napPage(crescentSchema, "<address>12 Main Crescent, Phone: 415-555-0199</address>"))).toBeUndefined();
+    expect(napFinding(napPage(crescentSchema, "<address>14 Main Crescent Phone 415-555-0199</address>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Crescent" not found'
+    );
+  });
 });

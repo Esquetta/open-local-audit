@@ -129,8 +129,10 @@ function stringValues(value: unknown): string[] {
   return values.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-const hiddenElements =
-  "script, style, noscript, template, [hidden], [aria-hidden='true'], [style*='display:none' i], [style*='display: none' i], [style*='visibility:hidden' i], [style*='visibility: hidden' i]";
+const hiddenElements = "script, style, noscript, template, [hidden], [aria-hidden='true']";
+
+// Inline CSS allows whitespace and !important around values ("display : none !important"), so read the declarations.
+const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!\s*important\s*)?(?:;|$)/i;
 
 type VisibleBody = ReturnType<CheerioAPI>;
 
@@ -140,6 +142,10 @@ const blockElements =
 function visibleBody($: CheerioAPI): VisibleBody {
   const body = $("body").clone();
   body.find(hiddenElements).remove();
+  body
+    .find("[style]")
+    .filter((_, element) => hiddenStyle.test($(element).attr("style") ?? ""))
+    .remove();
   // Mark block boundaries so text from neighbouring elements is not read as one line.
   body.find("br").replaceWith("\n");
   body.find(blockElements).append("\n");
@@ -469,6 +475,22 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
   );
 }
 
+// Drop the contact details from a line ("14 Main Crescent, Phone: 415-555-0199") but keep its postal text.
+function postalPart(line: string): string {
+  return line
+    .split(/\s*[,;|·•]\s*/)
+    .map((part) => {
+      const contact = part.search(contactLine);
+      if (contact === -1) {
+        return part;
+      }
+      const before = part.slice(0, contact).trim();
+      return /\d/.test(before) ? before : "";
+    })
+    .filter((part) => part.length > 0)
+    .join(", ");
+}
+
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
   // so inline markup cannot split an address and unrelated blocks cannot supply street words.
@@ -496,7 +518,8 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
       const clone = $(element).clone();
       clone.find("a[href^='tel:' i], a[href^='mailto:' i]").remove();
       return visibleLines(clone)
-        .filter((line) => !contactLine.test(line))
+        .map(postalPart)
+        .filter((line) => line.length > 0)
         .join(" ");
     })
     .filter((text) => hasComparableAddress(text, true));
