@@ -1381,4 +1381,28 @@ describe("LocalBusiness NAP consistency rule", () => {
       napFinding(napPage(phoneSchema, "<details open><summary>Old</summary>Phone: 415-555-0100</details><p>Phone: 415-555-0199</p>"))
     ).toBeUndefined();
   });
+
+  it("keeps aria-hidden contact details, which are still displayed", () => {
+    const phoneSchema = { "@type": "LocalBusiness", telephone: "+1 415 555 0100", address: { "@type": "PostalAddress", addressCountry: "US" } };
+    expect(napFinding(napPage(phoneSchema, '<p aria-hidden="true">Phone: 415-555-0199</p>'))?.evidence[0]?.value).toContain(
+      "Schema telephone +1 415 555 0100"
+    );
+  });
+
+  it("keeps a compass letter as the street name before localized suffixes", () => {
+    const strasseSchema = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 S Straße", addressCountry: "DE" } };
+    expect(napFinding(napPage(strasseSchema, "<p>Address: 12 South Straße</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 S Straße" not found'
+    );
+    expect(napFinding(napPage(strasseSchema, "<p>Address: 12 S Straße</p>"))).toBeUndefined();
+  });
+
+  it("does not read status placeholders such as 404 Not Found as an address", () => {
+    const streetSchema = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street", addressCountry: "US" } };
+    expect(napFinding(napPage(streetSchema, "<p>Address: 404 Not Found</p>"))).toBeUndefined();
+    expect(napFinding(napPage(streetSchema, "<address>500 Internal Server Error</address>"))).toBeUndefined();
+    expect(napFinding(napPage(streetSchema, "<p>Address: 14 Kungsgatan</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Street" not found'
+    );
+  });
 });

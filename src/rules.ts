@@ -130,7 +130,8 @@ function stringValues(value: unknown): string[] {
 }
 
 // A closed <dialog> is hidden by the browser without any attribute or style.
-const hiddenElements = "script, style, noscript, template, [hidden], [aria-hidden='true'], dialog:not([open])";
+// aria-hidden only hides content from assistive technology, so it stays visible here.
+const hiddenElements = "script, style, noscript, template, [hidden], dialog:not([open])";
 
 // Inline CSS allows whitespace and !important around values ("display : none !important"), so read the declarations.
 const hiddenStyle = /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!\s*important\s*)?(?:;|$)/i;
@@ -405,7 +406,9 @@ const compassLetters = new Set(["n", "s", "e", "w", "ne", "nw", "se", "sw"]);
 const streetTypes = new Set([
   "street", "road", "avenue", "boulevard", "lane", "drive", "highway", "route", "parkway", "place", "court", "square",
   "crescent", "terrace", "circle", "trail", "alley", "plaza", "heights", "crossing", "expressway", "freeway", "turnpike",
-  "gardens", "grove", "parade", "esplanade", "circuit", "way"
+  "gardens", "grove", "parade", "esplanade", "circuit", "way",
+  // Localized suffixes written as separate words ("S Straße", "S Caddesi").
+  "strasse", "gasse", "weg", "platz", "allee", "straat", "laan", "gatan", "vej", "gata", "caddesi", "sokak", "улица"
 ]);
 
 const fillerAddressTokens = new Set(["no", "nr", "the", "and", "jr"]);
@@ -524,14 +527,18 @@ function hasComparableAddress(text: string, inAddressElement = false): boolean {
     "u"
   );
   const streetPatterns = [streetNumber, numberStreet, numberPrefixStreet, compoundStreet, postBox, numberRoute];
+  // Status and error placeholders ("404 Not Found", "500 Internal Server Error") have a number and a word but are not addresses.
+  const placeholderValue =
+    /(?<![\p{L}\p{N}])(?:not\s+found|error|forbidden|unauthori[sz]ed|bad\s+request|unavailable|internal\s+server|bad\s+gateway|gateway\s+timeout|timed\s+out|moved\s+permanently|too\s+many\s+requests)(?![\p{L}\p{N}])/iu;
+  const hasLabelledStructure = (value: string) => labelledStructure.test(value) && !placeholderValue.test(value);
   // An address label or <address> already marks the text as an address, so lowercase "via roma 14" counts there.
   const anyCasePrefixStreetNumber = new RegExp(prefixStreetNumber.source, "iu");
 
   return (
     // Inside <address> any house-number-and-name structure counts ("14 Main Crescent"), not only listed street types.
-    (inAddressElement && labelledStructure.test(text)) ||
+    (inAddressElement && hasLabelledStructure(text)) ||
     (addressValue !== undefined &&
-      (labelledStructure.test(addressValue) ||
+      (hasLabelledStructure(addressValue) ||
         anyCasePrefixStreetNumber.test(addressValue) ||
         streetPatterns.some((pattern) => pattern.test(addressValue)))) ||
     (inAddressElement ? anyCasePrefixStreetNumber : prefixStreetNumber).test(text) ||
