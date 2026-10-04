@@ -952,4 +952,40 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(otherRange)?.evidence[0]?.value).toContain('Schema streetAddress "12-14 Main Street" not found');
     expect(napFinding(sameRange)).toBeUndefined();
   });
+
+  it("binds a compound suite identifier to its label", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite A-1", addressCountry: "US" }
+    };
+
+    const otherSuite = napPage(suiteSchema, "<p>Address: 12 Main Street, Suite A-2, Room 1</p>");
+    const sameSuite = napPage(suiteSchema, "<p>Address: 12 Main St., Suite A-1, Springfield</p>");
+
+    expect(napFinding(otherSuite)?.evidence[0]?.value).toContain('Schema streetAddress "12 Main Street, Suite A-1" not found');
+    expect(napFinding(sameSuite)).toBeUndefined();
+  });
+
+  it("finds unlabelled addresses with the street type before the name", () => {
+    const parisSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Rue de Rivoli", addressCountry: "FR" }
+    };
+    const page = napPage(parisSchema, "<p>14 Rue de Rivoli</p>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "12 Rue de Rivoli" not found');
+  });
+
+  it("keeps a County Road number in the street name", () => {
+    const countySchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "100 County Road 12", addressCountry: "US" }
+    };
+
+    const otherRoad = napPage(countySchema, "<p>Address: 100 County Road 15, Suite 12</p>");
+    const sameRoad = napPage(countySchema, "<p>Address: 100 County Rd 12</p>");
+
+    expect(napFinding(otherRoad)?.evidence[0]?.value).toContain('Schema streetAddress "100 County Road 12" not found');
+    expect(napFinding(sameRoad)).toBeUndefined();
+  });
 });

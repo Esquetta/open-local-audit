@@ -367,8 +367,16 @@ function hasComparableAddress(text: string): boolean {
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
   const numberStreet =
     /\b\d+[a-z]?\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
+  // Street types written before the name, as in French, Spanish, Italian and Portuguese ("14 Rue de Rivoli", "5 Calle Mayor").
+  const numberPrefixStreet =
+    /\b\d+[a-z]?,?\s+(?:rue|avenue|av|boulevard|bd|chemin|all[ée]e|impasse|quai|place|via|viale|piazza|corso|calle|carrer|avenida|plaza|paseo|rua|travessa)\.?\s+\p{L}/iu;
 
-  return (addressValue !== undefined && /\d/.test(addressValue)) || streetNumber.test(text) || numberStreet.test(text);
+  return (
+    (addressValue !== undefined && /\d/.test(addressValue)) ||
+    streetNumber.test(text) ||
+    numberStreet.test(text) ||
+    numberPrefixStreet.test(text)
+  );
 }
 
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
@@ -430,34 +438,55 @@ function isHouseNumber(token: string): boolean {
 }
 
 // A number after these words names the road ("Highway 66"), not the house.
-const numberedRoadWords = new Set(["highway", "route", "interstate", "freeway", "expressway", "motorway"]);
+const numberedRoadWords = new Set(["highway", "route", "interstate", "freeway", "expressway", "motorway", "us", "sr", "cr", "fm", "rr"]);
+
+// "County Road 12" and "State Street 5" style designators: a number after road or route here names the road.
+const numberedRoadQualifiers = new Set(["county", "state", "farm", "ranch", "forest", "township", "parish", "provincial"]);
+
+function isRoadNumber(tokens: string[], index: number): boolean {
+  return (
+    numberedRoadWords.has(tokens[index - 1]) ||
+    (["road", "route"].includes(tokens[index - 1]) && numberedRoadQualifiers.has(tokens[index - 2]))
+  );
+}
 
 const subAddressLabels = new Set(["floor", "suite", "room", "unit", "apartment", "building", "kat", "daire", "blok", "etage", "stock", "piso"]);
 
-function containsInOrder(tokens: string[], region: string[]): boolean {
+type AddressToken = { token: string; segment: number };
+
+function matchesAt(group: string[], region: string[], start: number): boolean {
+  return group.every((token, offset) => addressWordMatches(token, region[start + offset] ?? ""));
+}
+
+function containsInOrder(rest: AddressToken[], region: string[]): boolean {
+  // A sub-address label and everything after it in the same comma-separated part ("Suite A-1") must appear together,
+  // so its identifier cannot be assembled from other numbers on the page. Other parts only need to appear in order.
+  const groups: string[][] = [];
+  rest.forEach(({ token, segment }, index) => {
+    const previous = rest[index - 1];
+    if (!subAddressLabels.has(token) && previous && previous.segment === segment && subAddressLabels.has(groups.at(-1)?.[0] ?? "")) {
+      groups.at(-1)?.push(token);
+    } else {
+      groups.push([token]);
+    }
+  });
+
   let position = 0;
-  return tokens.every((token, index) => {
-    // The value after a label such as "Floor" or "Suite" must directly follow that label on the page too.
-    if (index > 0 && subAddressLabels.has(tokens[index - 1]) && !subAddressLabels.has(token)) {
-      if (region[position] !== token) {
-        return false;
-      }
-
-      position += 1;
-      return true;
-    }
-
-    while (position < region.length && !addressWordMatches(token, region[position])) {
+  return groups.every((group) => {
+    while (position + group.length <= region.length && !matchesAt(group, region, position)) {
       position += 1;
     }
 
-    position += 1;
+    position += group.length;
     return position <= region.length;
   });
 }
 
 function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
-  const tokens = addressTokens(streetAddress);
+  const parts: AddressToken[] = streetAddress
+    .split(/[,;\n]/)
+    .flatMap((part, segment) => addressTokens(part).map((token) => ({ token, segment })));
+  const tokens = parts.map(({ token }) => token);
   if (tokens.length === 0) {
     return true;
   }
@@ -469,7 +498,7 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   while (
     wordsEnd < tokens.length &&
     !subAddressLabels.has(tokens[wordsEnd]) &&
-    (!isHouseNumber(tokens[wordsEnd]) || (wordsEnd > wordsStart && numberedRoadWords.has(tokens[wordsEnd - 1])))
+    (!isHouseNumber(tokens[wordsEnd]) || (wordsEnd > wordsStart && isRoadNumber(tokens, wordsEnd)))
   ) {
     wordsEnd += 1;
   }
@@ -477,10 +506,10 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   const words = tokens.slice(wordsStart, wordsEnd);
   const trailingNumber = !leadingNumber && wordsEnd < tokens.length && isHouseNumber(tokens[wordsEnd]);
   const houseNumber = leadingNumber ? tokens[0] : trailingNumber ? tokens[wordsEnd] : undefined;
-  const rest = tokens.slice(trailingNumber ? wordsEnd + 1 : wordsEnd);
+  const rest = parts.slice(trailingNumber ? wordsEnd + 1 : wordsEnd);
 
   return regions.some((region) => {
-    // Remaining parts (floor, suite, room) must appear in the same order so their numbers stay with their labels.
+    // Remaining parts (floor, suite, room) must appear in the same order so their identifiers stay with their labels.
     if (!containsInOrder(rest, region)) {
       return false;
     }
@@ -491,7 +520,7 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
 
     // The street words must appear together and in order, with the house number directly before or after them.
     for (let start = 0; start + words.length <= region.length; start += 1) {
-      if (!words.every((word, offset) => addressWordMatches(word, region[start + offset]))) {
+      if (!matchesAt(words, region, start)) {
         continue;
       }
 
