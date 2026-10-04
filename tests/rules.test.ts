@@ -1281,4 +1281,41 @@ describe("LocalBusiness NAP consistency rule", () => {
     );
     expect(napFinding(napPage(calleSchema, "<p>Dirección: 100 Calle 12</p>"))).toBeUndefined();
   });
+
+  it("matches common street suffix abbreviations such as Cres. and Terr.", () => {
+    const crescentSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Crescent", addressCountry: "GB" }
+    };
+    expect(napFinding(napPage(crescentSchema, "<p>Address: 12 Main Cres.</p>"))).toBeUndefined();
+    expect(napFinding(napPage(crescentSchema, "<p>Address: 14 Main Cres.</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Crescent" not found'
+    );
+    const terraceSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "8 Ocean Terrace", addressCountry: "US" }
+    };
+    expect(napFinding(napPage(terraceSchema, "<p>Address: 8 Ocean Terr.</p>"))).toBeUndefined();
+  });
+
+  it("compares phone extensions when both sides give one", () => {
+    const extSchema = { "@type": "LocalBusiness", telephone: "+1 415 555 0100 ext. 123", address: { "@type": "PostalAddress", addressCountry: "US" } };
+    expect(napFinding(napPage(extSchema, "<p>Phone: +1 415 555 0100 ext. 456</p>"))?.evidence[0]?.value).toContain(
+      "Schema telephone +1 415 555 0100 ext. 123 not found"
+    );
+    expect(napFinding(napPage(extSchema, "<p>Phone: +1 415 555 0100 ext. 123</p>"))).toBeUndefined();
+    expect(napFinding(napPage(extSchema, "<p>Phone: +1 415 555 0100</p>"))).toBeUndefined();
+  });
+
+  it("reads localized addressCountry names for national phone numbers", () => {
+    const spainSchema = { "@type": "LocalBusiness", telephone: "912 345 678", address: { "@type": "PostalAddress", addressCountry: "España" } };
+    expect(napFinding(napPage(spainSchema, "<p>Teléfono: 913 000 000</p>"))?.evidence[0]?.value).toContain(
+      "Schema telephone 912 345 678 not found"
+    );
+    expect(napFinding(napPage(spainSchema, "<p>Teléfono: 912 345 678</p>"))).toBeUndefined();
+    const turkeySchema = { "@type": "LocalBusiness", telephone: "0212 555 01 00", address: { "@type": "PostalAddress", addressCountry: "Türkiye" } };
+    expect(napFinding(napPage(turkeySchema, "<p>Telefon: 0212 555 01 99</p>"))?.evidence[0]?.value).toContain(
+      "Schema telephone 0212 555 01 00 not found"
+    );
+  });
 });

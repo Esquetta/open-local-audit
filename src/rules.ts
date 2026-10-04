@@ -209,7 +209,10 @@ const countryNameAliases: Record<string, string> = {
   "united states of america": "US"
 };
 
-let englishCountryNames: Map<string, CountryCode> | undefined;
+// addressCountry is often written in the site's own language ("España", "Türkiye"), so read names in common locales too.
+const countryNameLocales = ["en", "es", "fr", "de", "it", "pt", "nl", "tr", "sv", "da", "nb", "fi", "pl", "cs", "el", "ru", "uk", "ja", "zh", "ko", "ar", "he", "id"];
+
+let localizedCountryNames: Map<string, CountryCode> | undefined;
 
 function normalizedCountryName(value: string): string {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\u0131/g, "i").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -222,28 +225,39 @@ function countryCodeFromName(value: string): CountryCode | undefined {
     return supportedPhoneCountries.has(code) ? (code as CountryCode) : undefined;
   }
 
-  if (!englishCountryNames) {
-    const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
-    englishCountryNames = new Map(
-      getCountries().flatMap((code) => {
+  if (!localizedCountryNames) {
+    const names = new Map<string, CountryCode>();
+    for (const locale of countryNameLocales) {
+      const displayNames = new Intl.DisplayNames([locale], { type: "region" });
+      for (const code of getCountries()) {
         const name = displayNames.of(code);
-        return name ? [[normalizedCountryName(name), code] as const] : [];
-      })
-    );
+        // Earlier locales win, so an English name is never reassigned by a translation.
+        if (name && name !== code && !names.has(normalizedCountryName(name))) {
+          names.set(normalizedCountryName(name), code);
+        }
+      }
+    }
+    localizedCountryNames = names;
   }
 
   const name = normalizedCountryName(trimmed);
-  return englishCountryNames.get(name) ?? (countryNameAliases[name] as CountryCode | undefined);
+  return localizedCountryNames.get(name) ?? (countryNameAliases[name] as CountryCode | undefined);
 }
 
 type VisiblePhone = {
   e164: string;
+  ext?: string;
   display: string;
 };
 
 function parsedPhone(value: string, country: CountryCode | undefined): VisiblePhone | undefined {
   const parsed = parsePhoneNumberFromString(value.replace(/^tel:/i, "").trim(), country ? { defaultCountry: country } : {});
-  return parsed?.isValid() ? { e164: parsed.number, display: parsed.formatInternational() } : undefined;
+  return parsed?.isValid() ? { e164: parsed.number, ext: parsed.ext, display: parsed.formatInternational() } : undefined;
+}
+
+// Extensions must agree when both sides give one; a number shown without its extension still matches.
+function samePhone(visible: VisiblePhone, schema: VisiblePhone): boolean {
+  return visible.e164 === schema.e164 && (!visible.ext || !schema.ext || visible.ext === schema.ext);
 }
 
 // Words between the label and the number may not name an identifier, so "Call ID: 4155550199" is not read as a phone.
@@ -295,12 +309,12 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
         phoneLabel.test(line.slice(0, startsAt)) ||
         (labelledEnd !== undefined && phoneListSeparator.test(line.slice(labelledEnd, startsAt)));
       labelledEnd = labelled ? endsAt : undefined;
-      return labelled && number.isValid() ? { e164: number.number, display: number.formatInternational() } : undefined;
+      return labelled && number.isValid() ? { e164: number.number, ext: number.ext, display: number.formatInternational() } : undefined;
     });
   });
 
   const phones = [...linkPhones, ...textPhones].filter((phone): phone is VisiblePhone => phone !== undefined);
-  return Array.from(new Map(phones.map((phone) => [phone.e164, phone])).values());
+  return Array.from(new Map(phones.map((phone) => [`${phone.e164};${phone.ext ?? ""}`, phone])).values());
 }
 
 // Abbreviations map to one canonical form so "St." and "Street" match while "Street" and "Road" stay different.
@@ -319,6 +333,27 @@ const canonicalAddressTokens: Record<string, string> = {
   hwy: "highway",
   rte: "route",
   pkwy: "parkway",
+  cres: "crescent",
+  cresc: "crescent",
+  ter: "terrace",
+  terr: "terrace",
+  cir: "circle",
+  crcl: "circle",
+  trl: "trail",
+  aly: "alley",
+  plz: "plaza",
+  hts: "heights",
+  xing: "crossing",
+  expy: "expressway",
+  fwy: "freeway",
+  tpke: "turnpike",
+  crt: "court",
+  gdns: "gardens",
+  grv: "grove",
+  pde: "parade",
+  esp: "esplanade",
+  cct: "circuit",
+  wy: "way",
   pl: "place",
   ct: "court",
   sq: "square",
@@ -680,7 +715,7 @@ function localBusinessNapMismatches($: CheerioAPI): string[] {
         if (country || telephone.trim().startsWith("+")) {
           mismatches.push(`Schema telephone ${telephone.trim()} is not a valid phone number; visible phone numbers: ${visibleList}`);
         }
-      } else if (!phones.some((phone) => phone.e164 === schemaPhone.e164)) {
+      } else if (!phones.some((phone) => samePhone(phone, schemaPhone))) {
         mismatches.push(`Schema telephone ${telephone.trim()} not found among visible phone numbers: ${visibleList}`);
       }
     }
