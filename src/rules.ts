@@ -315,6 +315,8 @@ function addressTokens(value: string): string[] {
     .replace(/\s*([½¼¾])/gu, (_, fraction: string) => ` ${{ "½": "1/2", "¼": "1/4", "¾": "3/4" }[fraction]}`)
     // Keep fractional house numbers ("12 1/2") as one token so the fraction is not read as separate numbers.
     .replace(/(\d+)\s+(\d+)\/(\d+)(?![\p{L}\p{N}])/gu, "$1x$2x$3")
+    // Likewise keep ranges ("12-14") as one token so "12-14" and "14-16" stay different house numbers.
+    .replace(/(?<![\p{L}\p{N}])(\d+)\s*[-–]\s*(\d+)(?![\p{L}\p{N}])/gu, "$1to$2")
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .replace(/ı/g, "i")
@@ -364,7 +366,7 @@ function hasComparableAddress(text: string): boolean {
   const streetNumber =
     /\b(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|drive|court|place|parkway|square|highway|cadde|caddesi|cad|cd|sokak|sok|sk|stra(?:ss|ß)e|str)\b\.?\s*(?:no:?\s*)?\d/i;
   const numberStreet =
-    /\b\d+[a-z]?\s+(?:[\p{L}]+\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
+    /\b\d+[a-z]?\s+(?:(?:\p{L}+|\d+(?:st|nd|rd|th))\.?\s+){1,6}(?:street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|court|ct|place|pl|parkway|pkwy|square|sq|highway|hwy)\b/iu;
 
   return (addressValue !== undefined && /\d/.test(addressValue)) || streetNumber.test(text) || numberStreet.test(text);
 }

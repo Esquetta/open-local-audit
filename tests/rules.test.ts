@@ -929,4 +929,27 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(otherNumber)?.evidence[0]?.value).toContain('Schema streetAddress "12 1/2 Main Street" not found');
     expect(napFinding(sameNumber)).toBeUndefined();
   });
+
+  it("finds unlabelled addresses on ordinal streets", () => {
+    const ordinalSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 5th Avenue", addressCountry: "US" }
+    };
+    const page = napPage(ordinalSchema, "<p>14 5th Avenue</p>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "12 5th Avenue" not found');
+  });
+
+  it("compares ranged house numbers as one number", () => {
+    const rangeSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12-14 Main Street", addressCountry: "US" }
+    };
+
+    const otherRange = napPage(rangeSchema, "<p>Address: 14-16 Main Street, Suite 12</p>");
+    const sameRange = napPage(rangeSchema, "<p>Address: 12 – 14 Main St.</p>");
+
+    expect(napFinding(otherRange)?.evidence[0]?.value).toContain('Schema streetAddress "12-14 Main Street" not found');
+    expect(napFinding(sameRange)).toBeUndefined();
+  });
 });
