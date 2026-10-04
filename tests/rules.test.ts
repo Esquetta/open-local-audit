@@ -378,7 +378,7 @@ describe("LocalBusiness NAP consistency rule", () => {
     const finding = napFinding(page);
     expect(finding).toMatchObject({ severity: "medium", category: "search-basics" });
     expect(finding?.evidence[0]?.value).toBe(
-      "Schema telephone +90 212 000 00 00 not found among visible phone numbers: +902125550000"
+      "Schema telephone +90 212 000 00 00 not found among visible phone numbers: +90 212 555 00 00"
     );
   });
 
@@ -478,6 +478,50 @@ describe("LocalBusiness NAP consistency rule", () => {
     const page = napPage(schema, "<p>Enter your email address to book.</p>");
 
     expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("matches national numbers whose trunk prefix replaces the country code", () => {
+    const french = {
+      "@type": "LocalBusiness",
+      telephone: "+33 1 23 45 67 89",
+      address: { "@type": "PostalAddress", streetAddress: "12 Rue de Rivoli", addressCountry: "FR" }
+    };
+    const german = { "@type": "LocalBusiness", telephone: "+49 30 123456" };
+
+    expect(napFinding(napPage(french, "<p>Adresse: 12 Rue de Rivoli, Paris</p><p>Tel 01 23 45 67 89</p>"))).toBeUndefined();
+    expect(napFinding(napPage(german, "<p>Telefon 030 123456</p>"))).toBeUndefined();
+    expect(napFinding(napPage(german, "<p>Telefon 030 654321</p>"))).toBeDefined();
+  });
+
+  it("does not treat ZIP+4 codes as visible phone numbers", () => {
+    const page = napPage(
+      {
+        "@type": "LocalBusiness",
+        telephone: "+1 212 555 0100",
+        address: { "@type": "PostalAddress", streetAddress: "350 Fifth Avenue", addressCountry: "US" }
+      },
+      "<p>Address: 350 Fifth Avenue, New York, NY 10118-0110</p>"
+    );
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("does not read an email address label as a postal address", () => {
+    const page = napPage(schema, `
+      <form><label>Email address:</label><input type="email"></form>
+      <footer>Copyright 2026</footer>
+    `);
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("compares the street only against the element that shows the address", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "12 Main Street" } },
+      "<h1>Main Bakery</h1><p>Address: 12 Oak Road</p>"
+    );
+
+    expect(napFinding(page)?.evidence[0]?.value).toBe('Schema streetAddress "12 Main Street" not found in visible page text');
   });
 
   it("leaves missing visible phone or address to the existing presence rules", () => {
