@@ -524,6 +524,46 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(page)?.evidence[0]?.value).toBe('Schema streetAddress "12 Main Street" not found in visible page text');
   });
 
+  it("uses full country names to read national phone numbers", () => {
+    const business = (country: string) => ({
+      "@type": "LocalBusiness",
+      telephone: "(212) 555-0100",
+      address: { "@type": "PostalAddress", streetAddress: "350 Fifth Avenue", addressCountry: { "@type": "Country", name: country } }
+    });
+
+    expect(napFinding(napPage(business("United States"), "<p>Call (212) 555-0199</p>"))?.evidence[0]?.value).toContain(
+      "Schema telephone (212) 555-0100 not found"
+    );
+    expect(napFinding(napPage(business("USA"), "<p>Call (212) 555-0100</p>"))).toBeUndefined();
+  });
+
+  it("reports a schema telephone that is not a valid number", () => {
+    const page = napPage({ ...schema, telephone: "+90 212-555-01XX" }, '<a href="tel:+902125550100">Call</a>');
+
+    expect(napFinding(page)?.evidence[0]?.value).toBe(
+      "Schema telephone +90 212-555-01XX is not a valid phone number; visible phone numbers: +90 212 555 01 00"
+    );
+  });
+
+  it("ignores hidden telephone links and hidden address blocks", () => {
+    const page = napPage(schema, `
+      <a href="tel:+902125550100" hidden>Call</a>
+      <div style="display: none"><a href="tel:+902125550100">Call</a><p>Address: Harbour Road 48</p></div>
+      <template><a href="tel:+902125550100">Call</a></template>
+    `);
+
+    expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("requires exact words for space-delimited non-Latin scripts", () => {
+    const page = napPage(
+      { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "улица Ленина 5" } },
+      "<p>Address: улица Каленина 5, Москва</p>"
+    );
+
+    expect(napFinding(page)).toBeDefined();
+  });
+
   it("leaves missing visible phone or address to the existing presence rules", () => {
     const page = napPage(schema, "<p>Welcome to our clinic.</p>");
 

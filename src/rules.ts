@@ -129,28 +129,69 @@ function stringValues(value: unknown): string[] {
   return values.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-const hiddenElements = "script, style, noscript, template";
+const hiddenElements =
+  "script, style, noscript, template, [hidden], [aria-hidden='true'], [style*='display:none' i], [style*='display: none' i], [style*='visibility:hidden' i], [style*='visibility: hidden' i]";
 
-function visibleBodyText($: CheerioAPI): string {
+type VisibleBody = ReturnType<CheerioAPI>;
+
+function visibleBody($: CheerioAPI): VisibleBody {
   const body = $("body").clone();
   body.find(hiddenElements).remove();
-  return body.text().replace(/\s+/g, " ").trim();
+  return body;
+}
+
+function collapsedText(element: VisibleBody): string {
+  return element.text().replace(/\s+/g, " ").trim();
 }
 
 const supportedPhoneCountries = new Set<string>(getCountries());
 
 function schemaCountry(node: JsonLdNode): CountryCode | undefined {
   const addresses = Array.isArray(node.address) ? node.address : [node.address];
-  const country = addresses
+  return addresses
     .filter(hasObjectField)
     .flatMap((address) => {
       const value = (address as JsonLdNode).addressCountry;
       return hasObjectField(value) ? stringValues((value as JsonLdNode).name) : stringValues(value);
     })
-    .map((value) => value.trim().toUpperCase())
-    .find((value) => /^[A-Z]{2}$/.test(value));
+    .map(countryCodeFromName)
+    .find((code) => code !== undefined);
+}
 
-  return supportedPhoneCountries.has(country as CountryCode) ? (country as CountryCode) : undefined;
+const countryNameAliases: Record<string, string> = {
+  deutschland: "DE",
+  "great britain": "GB",
+  turkey: "TR",
+  uk: "GB",
+  usa: "US",
+  "united states of america": "US"
+};
+
+let englishCountryNames: Map<string, CountryCode> | undefined;
+
+function normalizedCountryName(value: string): string {
+  return value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\u0131/g, "i").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+function countryCodeFromName(value: string): CountryCode | undefined {
+  const trimmed = value.trim();
+  if (/^[A-Za-z]{2}$/.test(trimmed)) {
+    const code = trimmed.toUpperCase();
+    return supportedPhoneCountries.has(code) ? (code as CountryCode) : undefined;
+  }
+
+  if (!englishCountryNames) {
+    const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+    englishCountryNames = new Map(
+      getCountries().flatMap((code) => {
+        const name = displayNames.of(code);
+        return name ? [[normalizedCountryName(name), code] as const] : [];
+      })
+    );
+  }
+
+  const name = normalizedCountryName(trimmed);
+  return englishCountryNames.get(name) ?? (countryNameAliases[name] as CountryCode | undefined);
 }
 
 type VisiblePhone = {
@@ -163,11 +204,12 @@ function parsedPhone(value: string, country: CountryCode | undefined): VisiblePh
   return parsed?.isValid() ? { e164: parsed.number, display: parsed.formatInternational() } : undefined;
 }
 
-function visiblePhones($: CheerioAPI, visibleText: string, country: CountryCode | undefined): VisiblePhone[] {
-  const linkPhones = $("a[href^='tel:' i]")
+function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | undefined): VisiblePhone[] {
+  const linkPhones = body
+    .find("a[href^='tel:' i]")
     .toArray()
     .map((element) => parsedPhone($(element).attr("href") ?? "", country));
-  const textPhones = findPhoneNumbersInText(visibleText, country ? { defaultCountry: country } : {}).map(({ number }) =>
+  const textPhones = findPhoneNumbersInText(collapsedText(body), country ? { defaultCountry: country } : {}).map(({ number }) =>
     number.isValid() ? { e164: number.number, display: number.formatInternational() } : undefined
   );
 
@@ -247,28 +289,23 @@ function hasComparableAddress(text: string): boolean {
   return labelledAddress.test(text) || streetNumber.test(text) || numberStreet.test(text);
 }
 
-function elementText($: CheerioAPI, element: Parameters<CheerioAPI>[0]): string {
-  const clone = $(element).clone();
-  clone.find(hiddenElements).remove();
-  return clone.text().replace(/\s+/g, " ").trim();
-}
-
-function visibleAddressRegions($: CheerioAPI): string[][] {
+function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Use the innermost elements that show an address so unrelated page copy cannot supply street words.
-  const matching = $("body, body *")
-    .not(hiddenElements)
-    .toArray()
-    .filter((element) => hasComparableAddress(elementText($, element)));
+  const matching = [...body.toArray(), ...body.find("*").toArray()].filter((element) =>
+    hasComparableAddress(collapsedText($(element)))
+  );
   const matchingSet = new Set(matching);
 
   return matching
     .filter((element) => !$(element).find("*").toArray().some((child) => matchingSet.has(child)))
-    .map((element) => addressTokens(elementText($, element)));
+    .map((element) => addressTokens(collapsedText($(element))));
 }
 
+const unspacedScript = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
 function addressWordMatches(word: string, pageToken: string): boolean {
-  // Scripts written without spaces (such as CJK) arrive as long runs, so match non-ASCII words inside them.
-  return pageToken === word || (/[^\x00-\x7f]/.test(word) && pageToken.includes(word));
+  // Scripts written without spaces (such as CJK) arrive as long runs, so match their words inside page tokens.
+  return pageToken === word || (unspacedScript.test(word) && pageToken.includes(word));
 }
 
 function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
@@ -298,19 +335,27 @@ function localBusinessNapMismatches($: CheerioAPI): string[] {
     return [];
   }
 
-  const visibleText = visibleBodyText($);
-  const regions = visibleAddressRegions($);
+  const body = visibleBody($);
+  const regions = visibleAddressRegions($, body);
   const mismatches: string[] = [];
 
   for (const node of nodes) {
     for (const telephone of stringValues(node.telephone)) {
       const country = schemaCountry(node) ?? parsePhoneNumberFromString(telephone.trim())?.country;
+      const phones = visiblePhones($, body, country);
+      if (phones.length === 0) {
+        continue;
+      }
+
+      const visibleList = phones.map((phone) => phone.display).join(", ");
       const schemaPhone = parsedPhone(telephone, country);
-      const phones = visiblePhones($, visibleText, country);
-      if (schemaPhone && phones.length > 0 && !phones.some((phone) => phone.e164 === schemaPhone.e164)) {
-        mismatches.push(
-          `Schema telephone ${telephone.trim()} not found among visible phone numbers: ${phones.map((phone) => phone.display).join(", ")}`
-        );
+      if (!schemaPhone) {
+        // Without a country, a national-format schema number cannot be judged invalid.
+        if (country || telephone.trim().startsWith("+")) {
+          mismatches.push(`Schema telephone ${telephone.trim()} is not a valid phone number; visible phone numbers: ${visibleList}`);
+        }
+      } else if (!phones.some((phone) => phone.e164 === schemaPhone.e164)) {
+        mismatches.push(`Schema telephone ${telephone.trim()} not found among visible phone numbers: ${visibleList}`);
       }
     }
 
