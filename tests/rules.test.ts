@@ -1046,4 +1046,24 @@ describe("LocalBusiness NAP consistency rule", () => {
     expect(napFinding(napPage(usSchema, "<address>Company registration 123456</address>"))).toBeUndefined();
     expect(napFinding(napPage(usSchema, "<address>Last updated 2026</address>"))).toBeUndefined();
   });
+
+  it("finds unlabelled prefix-style streets with the number after the name", () => {
+    const romaSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "Via Roma 12", addressCountry: "IT" }
+    };
+
+    expect(napFinding(napPage(romaSchema, "<p>Via Roma 14</p>"))?.evidence[0]?.value).toContain('Schema streetAddress "Via Roma 12" not found');
+    expect(napFinding(napPage(romaSchema, "<p>We reply via email 2 days later.</p>"))).toBeUndefined();
+  });
+
+  it("does not read a year after an address label as a house number", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+    const page = napPage(usSchema, "<p>Address: temporarily unavailable until 2027</p>");
+
+    expect(napFinding(page)).toBeUndefined();
+  });
 });

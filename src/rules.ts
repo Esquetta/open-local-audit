@@ -388,8 +388,15 @@ function hasComparableAddress(text: string): boolean {
     /\p{L}{2,}(?:stra(?:ss|ß)e|str\.?|weg|gasse|platz|allee|damm|straat|laan|gracht|gade|gatan|vägen|vej|veien|gata)\s*\d/iu;
   const postBox = /\b(?:p\.?\s*o\.?\s*box|post\s+office\s+box|postfach|apartado|bo[iî]te\s+postale)\s*\d/iu;
 
+  // Street type, then name, then number ("Via Roma 14", "Rue de Rivoli 14"); capitalized so prose such as "via email" is skipped.
+  const prefixStreetNumber =
+    /(?<![\p{L}\p{N}])(?:Rue|Avenue|Av|Boulevard|Bd|Chemin|All[ée]e|Impasse|Quai|Place|Via|Viale|Piazza|Corso|Calle|Carrer|Avenida|Plaza|Paseo|Rua|Travessa)\.?(?:\s+\p{L}+\.?){1,5},?\s+(?:n[°ºo]\.?\s*)?\d/u;
+  // A labelled value needs a number that can be a house number; a bare year ("unavailable until 2027") is not one.
+  const labelledNumber = /(?<![\p{L}\p{N}])(?!(?:19|20)\d\d(?![\p{L}\p{N}]))\d/u;
+
   return (
-    (addressValue !== undefined && /\d/.test(addressValue)) ||
+    (addressValue !== undefined && labelledNumber.test(addressValue)) ||
+    prefixStreetNumber.test(text) ||
     compoundStreet.test(text) ||
     postBox.test(text) ||
     streetNumber.test(text) ||
