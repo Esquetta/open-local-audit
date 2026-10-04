@@ -1405,4 +1405,29 @@ describe("LocalBusiness NAP consistency rule", () => {
       'Schema streetAddress "12 Main Street" not found'
     );
   });
+
+  it("binds sub-address details to the labelled address that holds the street", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite 100", addressCountry: "US" }
+    };
+    expect(
+      napFinding(napPage(suiteSchema, "<p>Address: 12 Main Street, Suite 200 | Address: 99 Oak Road, Suite 100</p>"))?.evidence[0]?.value
+    ).toContain('Schema streetAddress "12 Main Street, Suite 100" not found');
+    expect(
+      napFinding(napPage(suiteSchema, "<p>Address: 99 Oak Road, Suite 200 | Address: 12 Main Street, Suite 100</p>"))
+    ).toBeUndefined();
+    expect(napFinding(napPage(suiteSchema, "<p>Address: 12 Main Street | Suite 100</p>"))).toBeUndefined();
+  });
+
+  it("reads Portuguese telefone labels", () => {
+    const brSchema = { "@type": "LocalBusiness", telephone: "(11) 5555-0100", address: { "@type": "PostalAddress", addressCountry: "BR" } };
+    expect(napFinding(napPage(brSchema, "<p>Telefone: (11) 5555-0199</p>"))?.evidence[0]?.value).toContain(
+      "Schema telephone (11) 5555-0100 not found"
+    );
+    expect(napFinding(napPage(brSchema, "<div>Telefone:</div><div>(11) 5555-0199</div>"))?.evidence[0]?.value).toContain(
+      "Schema telephone (11) 5555-0100 not found"
+    );
+    expect(napFinding(napPage(brSchema, "<p>Telefone: (11) 5555-0100</p>"))).toBeUndefined();
+  });
 });

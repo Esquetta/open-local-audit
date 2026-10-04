@@ -273,7 +273,8 @@ function samePhone(visible: VisiblePhone, schema: VisiblePhone): boolean {
 }
 
 // Words between the label and the number may not name an identifier, so "Call ID: 4155550199" is not read as a phone.
-const phoneLabelWords = "phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefono|teléfono|téléphone|tél|gsm|cep|ara|ruf|☎|📞";
+const phoneLabelWords =
+  "phone|tel|telephone|call|mobile|cell|whatsapp|telefon|telefone|telefono|teléfono|téléphone|tél|telemóvel|telemovel|celular|gsm|cep|ara|ruf|☎|📞";
 
 const phoneLabel = new RegExp(
   String.raw`(?<![\p{L}\p{N}])(?:${phoneLabelWords})(?![\p{L}\p{N}])\.?[^\p{L}\p{N}]*(?:(?!(?:id|ids|ref|reference|order|ticket|case|account|acct|customer|invoice|booking|reservation|confirmation|tracking|serial|pin|code|log|session)(?![\p{L}\p{N}]))\p{L}+[^\p{L}\p{N}]+){0,3}$`,
@@ -468,7 +469,7 @@ function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
 }
 
 const contactLine =
-  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|telefono|teléfono|t[eé]l[eé]phone|tél|gsm|cep|ruf)(?![\p{L}\p{N}])|[@☎📞]/iu;
+  /(?<![\p{L}\p{N}])(?:phone|tel|telephone|fax|call|mobile|cell|whatsapp|e-?mail|telefon|telefone|telefono|teléfono|t[eé]l[eé]phone|tél|telem[oó]vel|celular|gsm|cep|ruf)(?![\p{L}\p{N}])|[@☎📞]/iu;
 
 // Distances and durations after a number ("5 minutes", "2 km") mean directions, not an address.
 const distanceUnits = String.raw`(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|days?|weeks?|km|kms|kilomet(?:er|re)s?|miles?|mi|blocks?|ft|feet|yards?|m|meters?|metres?)\b`;
@@ -669,6 +670,8 @@ function containsInOrder(rest: AddressToken[], region: string[]): boolean {
   });
 }
 
+const addressLabelTokens = new Set(["address", "adres", "adresse", "anschrift", "direccion", "dirección", "indirizzo"]);
+
 function streetAddressVisible(streetAddress: string, regions: string[][]): boolean {
   const parts: AddressToken[] = streetAddress
     .split(/[,;\n]/)
@@ -697,12 +700,8 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
 
   return regions.some((region) => {
     // Remaining parts (floor, suite, room) must appear in the same order so their identifiers stay with their labels.
-    if (!containsInOrder(rest, region)) {
-      return false;
-    }
-
     if (words.length === 0) {
-      return houseNumber === undefined || region.includes(houseNumber);
+      return containsInOrder(rest, region) && (houseNumber === undefined || region.includes(houseNumber));
     }
 
     // The street words must appear together and in order, with the house number directly before or after them.
@@ -712,7 +711,17 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
       }
 
       const end = start + words.length - 1;
-      if (houseNumber === undefined || region[start - 1] === houseNumber || region[end + 1] === houseNumber) {
+      if (houseNumber !== undefined && region[start - 1] !== houseNumber && region[end + 1] !== houseNumber) {
+        continue;
+      }
+
+      // The rest must belong to this street's address, not to another labelled address on the same line.
+      let before = start - 1;
+      while (before >= 0 && !addressLabelTokens.has(region[before])) {
+        before -= 1;
+      }
+      const after = region.findIndex((token, index) => index > end && addressLabelTokens.has(token));
+      if (containsInOrder(rest, region.slice(before + 1, after === -1 ? region.length : after))) {
         return true;
       }
     }
