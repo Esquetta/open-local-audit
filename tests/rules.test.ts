@@ -1066,4 +1066,41 @@ describe("LocalBusiness NAP consistency rule", () => {
 
     expect(napFinding(page)).toBeUndefined();
   });
+
+  it("compares lowercase prefix-style streets inside address elements", () => {
+    const romaSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "Via Roma 12", addressCountry: "IT" }
+    };
+    const page = napPage(romaSchema, "<address>via Roma 14</address>");
+
+    expect(napFinding(page)?.evidence[0]?.value).toContain('Schema streetAddress "Via Roma 12" not found');
+  });
+
+  it("reads phone numbers from definition list and table label/value pairs", () => {
+    const usSchema = {
+      "@type": "LocalBusiness",
+      telephone: "+1 415 555 0123",
+      address: { "@type": "PostalAddress", streetAddress: "1 Market Street", addressCountry: "US" }
+    };
+
+    const definitionList = napPage(usSchema, "<dl><dt>Phone</dt><dd>(415) 555-0199</dd></dl>");
+    const table = napPage(usSchema, "<table><tr><th>Phone</th><td>(415) 555-0199</td></tr></table>");
+
+    expect(napFinding(definitionList)?.evidence[0]?.value).toContain("Schema telephone +1 415 555 0123 not found");
+    expect(napFinding(table)?.evidence[0]?.value).toContain("Schema telephone +1 415 555 0123 not found");
+  });
+
+  it("binds hash unit identifiers", () => {
+    const hashSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street #100", addressCountry: "US" }
+    };
+
+    expect(napFinding(napPage(hashSchema, "<p>Address: 12 Main Street #200, Room 100</p>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "12 Main Street #100" not found'
+    );
+    expect(napFinding(napPage(hashSchema, "<p>Address: 12 Main St., Suite 100</p>"))).toBeUndefined();
+    expect(napFinding(napPage(hashSchema, "<p>Address: 12 Main St. # 100</p>"))).toBeUndefined();
+  });
 });

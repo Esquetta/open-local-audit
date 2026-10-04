@@ -246,6 +246,26 @@ const phoneLabel =
 
 const phoneListSeparator = /^[\s,/|;–—-]*(?:(?:or|and|ve|veya|oder|und|ou|et|o|y)[\s,/|;–—-]*)?$/i;
 
+// Label/value markup (<dt>Phone</dt><dd>...</dd>, <th>Address</th><td>...</td>) puts the label on its own line, so join each pair.
+function labelValuePairs($: CheerioAPI, body: VisibleBody): string[] {
+  return [
+    ...body
+      .find("dt")
+      .toArray()
+      .map((element) => {
+        const values = $(element).nextUntil("dt", "dd").toArray();
+        return `${collapsedText($(element))}: ${values.map((value) => collapsedText($(value))).join(" ")}`;
+      }),
+    ...body
+      .find("tr")
+      .toArray()
+      .map((element) => {
+        const [label, ...values] = $(element).children("th, td").toArray();
+        return label ? `${collapsedText($(label))}: ${values.map((value) => collapsedText($(value))).join(" ")}` : "";
+      })
+  ].filter(Boolean);
+}
+
 function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | undefined): VisiblePhone[] {
   const linkPhones = body
     .find("a[href^='tel:' i]")
@@ -253,7 +273,7 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
     .map((element) => parsedPhone($(element).attr("href") ?? "", country));
   // Only trust numbers in body text when a phone label precedes them on the same line, so IDs and codes are not read as phones.
   // A label also covers the numbers listed right after it ("Phone: 0212 ... / 0216 ...").
-  const textPhones = visibleLines(body).flatMap((line) => {
+  const textPhones = [...visibleLines(body), ...labelValuePairs($, body)].flatMap((line) => {
     let labelledEnd: number | undefined;
     return findPhoneNumbersInText(line, country ? { defaultCountry: country } : {}).map(({ number, startsAt, endsAt }) => {
       const labelled =
@@ -326,7 +346,10 @@ function addressTokens(value: string): string[] {
     .replace(/(?<![\p{L}\p{N}])(?:p\s*\.?\s*o\s*\.?|post\s+office)\s*box(?![\p{L}\p{N}])/gu, "pobox")
     // Join house-number suffixes so "12-A", "12/A" and "12A" compare equal; "123 N" stays a directional.
     .replace(/(\p{N})[/-](\p{L})(?![\p{L}\p{N}])/gu, "$1$2")
-    .split(/[^\p{L}\p{N}]+/u)
+    // Keep "#" before a unit identifier ("#100") as its own token so the identifier stays bound to it.
+    .replace(/#\s*(?=[\p{L}\p{N}])/gu, " # ")
+    .split(/[^\p{L}\p{N}#]+/u)
+    .flatMap((token) => (token.length > 1 && token.includes("#") ? token.split("#").filter(Boolean) : [token]))
     .filter((token) => token && !fillerAddressTokens.has(token))
     .map((token, index, tokens) => {
       // "St" opening a street name ("12 St John St") is Saint; elsewhere it is Street.
@@ -335,7 +358,9 @@ function addressTokens(value: string): string[] {
       }
 
       return canonicalAddressTokens[token] ?? token.replace(/(?<=\p{L})strasse$/u, "str");
-    });
+    })
+    // "#" after a label ("Suite #100") adds nothing, and without a following identifier it is just punctuation.
+    .filter((token, index, tokens) => token !== "#" || (index + 1 < tokens.length && !subAddressLabels.has(tokens[index - 1] ?? "")));
 }
 
 function streetAddresses(node: JsonLdNode, index: JsonLdIndex): string[] {
@@ -358,7 +383,7 @@ const contactLine =
 // House numbers as addressTokens normalizes them: "12", "12A", "12-A", "12-14", "12 1/2" and "12½".
 const houseNumberPattern = String.raw`\d+(?:\s*[-–]\s*\d+|\s+\d+\/\d+|[-/]?[a-z]|[½¼¾])?`;
 
-function hasComparableAddress(text: string): boolean {
+function hasComparableAddress(text: string, inAddressElement = false): boolean {
   const labelledAddress =
     /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)(?:\s*:\s*([^\n]{0,80})|\s+(\d[^\n]{0,79}))/iu;
   // Without a colon the value must open with the house number, so prose such as "our address changed in 2020" is skipped.
@@ -396,7 +421,8 @@ function hasComparableAddress(text: string): boolean {
 
   return (
     (addressValue !== undefined && labelledNumber.test(addressValue)) ||
-    prefixStreetNumber.test(text) ||
+    // Inside <address> the text is already known to be an address, so lowercase "via Roma 14" counts too.
+    (inAddressElement ? new RegExp(prefixStreetNumber.source, "iu") : prefixStreetNumber).test(text) ||
     compoundStreet.test(text) ||
     postBox.test(text) ||
     streetNumber.test(text) ||
@@ -408,14 +434,14 @@ function hasComparableAddress(text: string): boolean {
 function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
   // Compare against whole visible lines (block elements) that show an address, plus numbered <address> elements,
   // so inline markup cannot split an address and unrelated blocks cannot supply street words.
-  const lines = visibleLines(body).filter(hasComparableAddress);
+  const lines = visibleLines(body).filter((line) => hasComparableAddress(line));
   // An address broken with <br> ("12 Main Street<br>Suite 100") continues within its innermost block, so add those blocks whole.
   const addressBlocks = body
     .find(blockElements)
     .toArray()
     .filter((element) => $(element).find(blockElements).length === 0)
     .map((element) => visibleLines($(element)))
-    .filter((blockLines) => blockLines.length > 1 && blockLines.some(hasComparableAddress))
+    .filter((blockLines) => blockLines.length > 1 && blockLines.some((line) => hasComparableAddress(line)))
     .map((blockLines) => blockLines.join(" "));
   const addressElements = body
     .find("address")
@@ -428,25 +454,9 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
         .filter((line) => !contactLine.test(line))
         .join(" ");
     })
-    .filter(hasComparableAddress);
+    .filter((text) => hasComparableAddress(text, true));
 
-  // Label/value markup (<dt>Adresse</dt><dd>...</dd>, <th>Address</th><td>...</td>) puts the label on its own line, so join each pair.
-  const labelledPairs = [
-    ...body
-      .find("dt")
-      .toArray()
-      .map((element) => {
-        const values = $(element).nextUntil("dt", "dd").toArray();
-        return `${collapsedText($(element))}: ${values.map((value) => collapsedText($(value))).join(" ")}`;
-      }),
-    ...body
-      .find("tr")
-      .toArray()
-      .map((element) => {
-        const [label, ...values] = $(element).children("th, td").toArray();
-        return label ? `${collapsedText($(label))}: ${values.map((value) => collapsedText($(value))).join(" ")}` : "";
-      })
-  ].filter(hasComparableAddress);
+  const labelledPairs = labelValuePairs($, body).filter((text) => hasComparableAddress(text));
 
   return [...lines, ...addressBlocks, ...addressElements, ...labelledPairs].map(addressTokens);
 }
@@ -454,6 +464,11 @@ function visibleAddressRegions($: CheerioAPI, body: VisibleBody): string[][] {
 const unspacedScript = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
 
 function addressWordMatches(word: string, pageToken: string): boolean {
+  // "#100" is the same unit as "Suite 100", "Unit 100" or "Apt 100", but not as "Room 100" or "Floor 100".
+  if ((word === "#" || pageToken === "#") && hashUnitLabels.has(word) && hashUnitLabels.has(pageToken)) {
+    return true;
+  }
+
   // Scripts written without spaces (such as CJK) arrive as long runs, so match their words inside page tokens.
   return pageToken === word || (unspacedScript.test(word) && pageToken.includes(word));
 }
@@ -476,7 +491,9 @@ function isRoadNumber(tokens: string[], index: number): boolean {
   );
 }
 
-const subAddressLabels = new Set(["floor", "suite", "room", "unit", "apartment", "building", "kat", "daire", "blok", "etage", "stock", "piso"]);
+const hashUnitLabels = new Set(["#", "suite", "unit", "apartment"]);
+
+const subAddressLabels = new Set(["#", "floor", "suite", "room", "unit", "apartment", "building", "kat", "daire", "blok", "etage", "stock", "piso"]);
 
 type AddressToken = { token: string; segment: number };
 
