@@ -1475,4 +1475,24 @@ describe("LocalBusiness NAP consistency rule", () => {
       'Schema streetAddress "8 Ocean Terrace" not found'
     );
   });
+
+  it("compares house numbers written in native digits", () => {
+    const arabicSchema = { "@type": "LocalBusiness", address: { "@type": "PostalAddress", streetAddress: "١٢ Main Street", addressCountry: "EG" } };
+    expect(napFinding(napPage(arabicSchema, "<address>١٤ Main Street</address>"))?.evidence[0]?.value).toContain(
+      'Schema streetAddress "١٢ Main Street" not found'
+    );
+    expect(napFinding(napPage(arabicSchema, "<address>١٢ Main Street</address>"))).toBeUndefined();
+    expect(napFinding(napPage(arabicSchema, "<p>Address: 12 Main Street</p>"))).toBeUndefined();
+  });
+
+  it("stops unit details at a following prefix-style street address", () => {
+    const suiteSchema = {
+      "@type": "LocalBusiness",
+      address: { "@type": "PostalAddress", streetAddress: "12 Main Street, Suite 100", addressCountry: "US" }
+    };
+    expect(
+      napFinding(napPage(suiteSchema, "<p>12 Main Street, Suite 200 | 99 Calle 15, Suite 100</p>"))?.evidence[0]?.value
+    ).toContain('Schema streetAddress "12 Main Street, Suite 100" not found');
+    expect(napFinding(napPage(suiteSchema, "<p>99 Calle 15, Suite 200 | 12 Main Street, Suite 100</p>"))).toBeUndefined();
+  });
 });

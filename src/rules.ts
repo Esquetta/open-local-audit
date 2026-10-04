@@ -414,8 +414,23 @@ const streetTypes = new Set([
 
 const fillerAddressTokens = new Set(["no", "nr", "the", "and", "jr"]);
 
+// Zero code points of common native decimal digit sets (Arabic-Indic, Persian, Indic scripts, Thai, fullwidth, ...).
+const nativeDigitZeros = [
+  0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66, 0xde6, 0xe50, 0xed0, 0xf20, 0x1040,
+  0x1090, 0x17e0, 0x1810, 0xff10
+];
+
+// House numbers written in native digits ("١٢") compare as ASCII digits ("12").
+function asciiDigits(value: string): string {
+  return value.replace(/[^\x00-\x7f]/gu, (char) => {
+    const code = char.codePointAt(0) ?? 0;
+    const zero = nativeDigitZeros.find((start) => code >= start && code <= start + 9);
+    return zero === undefined ? char : String(code - zero);
+  });
+}
+
 function addressTokens(value: string): string[] {
-  return value
+  return asciiDigits(value)
     .replace(/\s*([½¼¾])/gu, (_, fraction: string) => ` ${{ "½": "1/2", "¼": "1/4", "¾": "3/4" }[fraction]}`)
     // Keep fractional house numbers ("12 1/2") as one token so the fraction is not read as separate numbers.
     .replace(/(\d+)\s+(\d+)\/(\d+)(?![\p{L}\p{N}])/gu, "$1x$2x$3")
@@ -484,7 +499,8 @@ const numberStreetTypes =
   "crescent|cres|terrace|terr|circle|cir|trail|trl|alley|aly|plaza|plz|heights|hts|crossing|xing|turnpike|tpke|gardens|gdns|" +
   "grove|grv|parade|pde|esplanade|circuit|cct|expressway|expy|freeway|fwy";
 
-function hasComparableAddress(text: string, inAddressElement = false): boolean {
+function hasComparableAddress(rawText: string, inAddressElement = false): boolean {
+  const text = asciiDigits(rawText);
   const labelledAddress =
     /(?<!(?:e-?mail|web|website|site|url|uri|internet|homepage|ip|ipv4|ipv6|mac|hardware|wallet|bitcoin|server|network)\s)\b(?:address|adres|adresse|anschrift|direcci[oó]n|indirizzo)(?:\s*:\s*([^\n]{0,80})|\s+(\d[^\n]{0,79}))/iu;
   // Without a colon the value must open with the house number, so prose such as "our address changed in 2020" is skipped.
@@ -695,6 +711,11 @@ const addressLabelTokens = new Set(["address", "adres", "adresse", "anschrift", 
 function isAddressStart(region: string[], index: number): boolean {
   if (!isHouseNumber(region[index]) || subAddressLabels.has(region[index - 1])) {
     return false;
+  }
+
+  // Prefix-style streets ("99 Calle 15", "14 Rue de Rivoli") put the street type right after the number.
+  if (prefixStreetWords.has(region[index + 1])) {
+    return true;
   }
 
   for (let offset = index + 1; offset < Math.min(region.length, index + 7); offset += 1) {
