@@ -94,6 +94,7 @@ export interface PageSnapshot {
   statusCode: number;
   headers: Record<string, string>;
   html: string;
+  redirects?: RedirectHop[];
   resources?: {
     robotsTxt?: PageResource;
     sitemapXml?: PageResource;
@@ -118,6 +119,11 @@ export interface AuditOptions {
     url: string,
     options: Pick<AuditOptions, "timeoutMs" | "screenshot" | "screenshotPath" | "screenshotReportPath">
   ) => Promise<PageSnapshot>;
+}
+
+export interface RedirectHop {
+  url: string;
+  statusCode: number;
 }
 
 export interface PageResource {

@@ -1258,6 +1258,17 @@ const rules: Rule[] = [
     evidence: () => "A social profile URL contains a placeholder handle"
   },
   {
+    id: "redirect-chain-short",
+    title: "Page is reached through a chain of redirects",
+    category: "technical-health",
+    severity: "low",
+    source: "Redirect chain",
+    recommendation: "Redirect old and plain HTTP URLs straight to the final page in one step so visitors and search engines skip the extra hops.",
+    check: ({ snapshot }) => (snapshot.redirects?.length ?? 0) <= 1,
+    evidence: ({ snapshot }) =>
+      [...(snapshot.redirects ?? []).map((hop) => `${hop.url} (${hop.statusCode})`), snapshot.finalUrl].join(" -> ")
+  },
+  {
     id: "robots-txt-present",
     title: "robots.txt is missing or unavailable",
     category: "technical-health",

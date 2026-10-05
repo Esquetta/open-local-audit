@@ -6,7 +6,7 @@ import { isIP } from "node:net";
 import { load } from "cheerio";
 import { extractPublicContact } from "./contact.js";
 import { extractBusinessIdentities, type ObservedBusinessIdentity } from "./business-identity.js";
-import type { PageSnapshot, PublicContact } from "./types.js";
+import type { PageSnapshot, PublicContact, RedirectHop } from "./types.js";
 
 const USER_AGENT = "open-local-audit/0.1 (+https://github.com/Esquetta/open-local-audit)";
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -376,6 +376,7 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
   };
   const fetchPage = async (requestedUrl: string, homepageHost: string): Promise<PageSnapshot> => {
     let current = new URL(requestedUrl);
+    const hops: RedirectHop[] = [];
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
       if (!/^https?:$/.test(current.protocol) || current.username || current.password || !sameBusinessHost(homepageHost, current.hostname)) {
         throw new BlockedError("redirect left the business website");
@@ -385,6 +386,7 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
       if (isRedirect(response)) {
         const location = response.headers.get("location");
         if (!location) throw new Error("redirect response had no location");
+        hops.push({ url: current.toString(), statusCode: response.status });
         current = new URL(location, current);
         continue;
       }
@@ -398,7 +400,7 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
       const html = await readLimitedText(response);
       pagesFetched += 1;
       if (!sourceUrls.includes(current.toString())) sourceUrls.push(current.toString());
-      return { url: requestedUrl, finalUrl: current.toString(), statusCode: response.status, headers: normalizeHeaders(response.headers), html };
+      return { url: requestedUrl, finalUrl: current.toString(), statusCode: response.status, headers: normalizeHeaders(response.headers), html, redirects: hops };
     }
     throw new Error(`exceeded redirect limit of ${MAX_REDIRECTS}`);
   };
