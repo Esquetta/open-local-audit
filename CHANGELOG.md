@@ -2,7 +2,7 @@
 
 All notable changes to Open Local Audit will be documented here.
 
-## Unreleased
+## v0.72.0 - 2026-10-05
 
 - Added the `redirect-chain-short` audit rule. It records each redirect hop (URL and status) while fetching the audited page and flags pages reached through more than one redirect, showing the full chain as evidence. A single redirect, such as plain HTTP to HTTPS, is not flagged, and rendered audits without redirect data are left unchecked.
 
