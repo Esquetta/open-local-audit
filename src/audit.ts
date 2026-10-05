@@ -1,4 +1,4 @@
-import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, Score } from "./types.js";
+import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, RedirectHop, Score } from "./types.js";
 import { applyProfileAdjustments } from "./profiles.js";
 import { runRules } from "./rules.js";
 import { load } from "cheerio";
@@ -34,6 +34,7 @@ function normalizeHeaders(headers: Headers): Record<string, string> {
 
 async function fetchWithRedirects(url: string, options: AuditOptions): Promise<PageSnapshot> {
   let currentUrl = url;
+  const redirects: RedirectHop[] = [];
 
   for (let redirectCount = 0; redirectCount <= options.maxRedirects; redirectCount += 1) {
     const controller = new AbortController();
@@ -50,6 +51,7 @@ async function fetchWithRedirects(url: string, options: AuditOptions): Promise<P
 
       const location = response.headers.get("location");
       if (location && response.status >= 300 && response.status < 400) {
+        redirects.push({ url: currentUrl, statusCode: response.status });
         currentUrl = new URL(location, currentUrl).toString();
         continue;
       }
@@ -59,7 +61,8 @@ async function fetchWithRedirects(url: string, options: AuditOptions): Promise<P
         finalUrl: response.url || currentUrl,
         statusCode: response.status,
         headers: normalizeHeaders(response.headers),
-        html: await response.text()
+        html: await response.text(),
+        redirects
       };
     } finally {
       clearTimeout(timeout);

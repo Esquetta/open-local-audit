@@ -5,6 +5,7 @@
 - HTTP status is successful.
 - HTTPS is enabled.
 - Redirect chain is reasonable.
+  - Rule `redirect-chain-short` flags pages reached through more than one redirect and lists every hop with its status code. One redirect, such as HTTP to HTTPS, is accepted. Rendered audits (`--render`, `--screenshot`) do not record redirect hops, so the rule is skipped there.
 - Final URL is stable.
 - Page has title.
 - Page has meta description.
