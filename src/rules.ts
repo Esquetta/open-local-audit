@@ -979,6 +979,43 @@ function isPlaceholderSocialHref(href: string): boolean {
   return segments.some((segment) => placeholderSegments.has(segment));
 }
 
+const SEARCH_CRAWLERS = new Set(["robots", "googlebot"]);
+const PARAMETER_DIRECTIVES = new Set(["unavailable_after", "max-snippet", "max-image-preview", "max-video-preview"]);
+
+function blocksIndexing(directives: string): boolean {
+  return directives
+    .split(",")
+    .some((directive) => ["noindex", "none"].includes(directive.trim().toLowerCase()));
+}
+
+function robotsHeaderBlocksIndexing(value: string): boolean {
+  let crawler = "robots";
+  return value.split(",").some((part) => {
+    let directive = part.trim();
+    const prefixed = /^([\w-]+)\s*:\s*(.*)$/.exec(directive);
+    if (prefixed && !PARAMETER_DIRECTIVES.has(prefixed[1].toLowerCase())) {
+      crawler = prefixed[1].toLowerCase();
+      directive = prefixed[2];
+    }
+    return SEARCH_CRAWLERS.has(crawler) && blocksIndexing(directive);
+  });
+}
+
+function noindexSignals($: CheerioAPI, snapshot: PageSnapshot): string[] {
+  const signals = $("meta[name][content]")
+    .toArray()
+    .flatMap((element) => {
+      const name = ($(element).attr("name") ?? "").trim().toLowerCase();
+      const content = ($(element).attr("content") ?? "").trim();
+      return SEARCH_CRAWLERS.has(name) && blocksIndexing(content) ? [`meta ${name}: ${content}`] : [];
+    });
+  const header = snapshot.headers["x-robots-tag"];
+  if (header && robotsHeaderBlocksIndexing(header)) {
+    signals.push(`X-Robots-Tag: ${header}`);
+  }
+  return signals;
+}
+
 function hasPlaceholderSocialLinks($: CheerioAPI): boolean {
   return $("a")
     .toArray()
@@ -1005,6 +1042,16 @@ const rules: Rule[] = [
     recommendation: "Serve the public site over HTTPS and redirect plain HTTP traffic to the secure URL.",
     check: ({ snapshot }) => snapshot.finalUrl.startsWith("https://"),
     evidence: ({ snapshot }) => snapshot.finalUrl
+  },
+  {
+    id: "page-indexable",
+    title: "Page tells search engines not to index it",
+    category: "search-basics",
+    severity: "high",
+    source: "Robots directives",
+    recommendation: "Remove the noindex directive from the page and its X-Robots-Tag header so the page can appear in search results.",
+    check: ({ $, snapshot }) => noindexSignals($, snapshot).length === 0,
+    evidence: ({ $, snapshot }) => noindexSignals($, snapshot).join("; ")
   },
   {
     id: "title-present",
