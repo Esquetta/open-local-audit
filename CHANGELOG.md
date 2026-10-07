@@ -2,9 +2,10 @@
 
 All notable changes to Open Local Audit will be documented here.
 
-## Unreleased
+## v0.73.0 - 2026-10-07
 
 - Added the `page-indexable` audit rule. It flags pages that tell search engines not to index them through a `noindex` or `none` directive in a `robots` or `googlebot` meta tag or in the `X-Robots-Tag` response header, listing each directive as evidence. Directives aimed only at other crawlers are ignored.
+- Updated the locked `source-map-js` development dependency to a patched release after the release audit reported a high-severity event-loop denial-of-service advisory.
 
 ## v0.72.0 - 2026-10-05
 
