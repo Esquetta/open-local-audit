@@ -7,6 +7,8 @@
 - Redirect chain is reasonable.
   - Rule `redirect-chain-short` flags pages reached through more than one redirect and lists every hop with its status code. One redirect, such as HTTP to HTTPS, is accepted. Rendered audits (`--render`, `--screenshot`) do not record redirect hops, so the rule is skipped there.
 - Final URL is stable.
+- Page can be indexed by search engines.
+  - Rule `page-indexable` flags a `noindex` or `none` directive in a `robots` or `googlebot` meta tag or in the `X-Robots-Tag` response header. Directives aimed only at other crawlers are ignored, and `robots.txt` rules are not evaluated.
 - Page has title.
 - Page has meta description.
 - Page has viewport tag.
