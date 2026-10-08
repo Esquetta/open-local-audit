@@ -272,6 +272,7 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
           status: "success",
           score,
           topFinding: result.report.findings[0]?.title,
+          placeholder: result.report.findings[0]?.id === "website-placeholder" || undefined,
           reportPath: preferredReportPath(result.slug, result.outputs),
           contact: result.report.contact,
           dotnetStack: result.report.dotnetStack,
