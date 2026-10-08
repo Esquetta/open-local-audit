@@ -5,6 +5,7 @@ import { load } from "cheerio";
 import { renderPageSnapshot } from "./render.js";
 import { runLighthouseAudit } from "./lighthouse.js";
 import { extractPublicContact } from "./contact.js";
+import { detectDotnetStack } from "./dotnet-stack.js";
 
 const defaultOptions: AuditOptions = {
   timeoutMs: 10000,
@@ -29,6 +30,10 @@ function normalizeHeaders(headers: Headers): Record<string, string> {
   headers.forEach((value, key) => {
     output[key] = value;
   });
+  const cookies = headers.getSetCookie();
+  if (cookies.length > 0) {
+    output["set-cookie"] = cookies.join("\n");
+  }
   return output;
 }
 
@@ -191,6 +196,7 @@ export function auditSnapshot(
     findings,
     recommendations: Array.from(new Set(recommendations)),
     contact,
+    dotnetStack: detectDotnetStack(snapshot),
     evidence: [
       {
         label: "Status code",

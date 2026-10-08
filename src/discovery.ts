@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
-import type { AuditProfile, PublicContact } from "./types.js";
+import type { AuditProfile, DotnetStack, PublicContact } from "./types.js";
 import type { BusinessIdentityEvidence, BusinessIdentityResult } from "./business-identity.js";
 import type { AuditSelectionDecision } from "./audit-selection.js";
 
@@ -33,6 +33,7 @@ export interface DiscoveryAuditResult {
   error?: string;
   contact?: PublicContact;
   identity?: BusinessIdentityResult;
+  dotnetStack?: DotnetStack;
 }
 
 export interface ProspectRowInput {
@@ -77,6 +78,8 @@ export interface ProspectExportRow {
   lastReviewedAt?: string;
   reportPath?: string;
   error?: string;
+  dotnetStack?: DotnetStack["stack"];
+  dotnetLegacyFramework?: boolean;
   address?: string;
   country?: string;
   locality?: string;
@@ -1058,7 +1061,7 @@ function prospectContact(input: ProspectRowInput): PublicContact | undefined {
 export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow[] {
   return inputs.map((input) => {
     if (input.audit?.identity?.status === "conflict") {
-      input = { ...input, audit: { ...input.audit, status: "failed", contact: undefined, score: undefined, topFinding: undefined, reportPath: undefined, error: input.audit.error ?? "Website identity conflicts with the source; manual review is required." } };
+      input = { ...input, audit: { ...input.audit, status: "failed", contact: undefined, dotnetStack: undefined, score: undefined, topFinding: undefined, reportPath: undefined, error: input.audit.error ?? "Website identity conflicts with the source; manual review is required." } };
     }
     const audit = input.audit ?? { status: "not-audited" as const };
     const priority = priorityFor(input);
@@ -1105,7 +1108,9 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       ...priority,
       reviewStatus: "new",
       reportPath: audit.reportPath,
-      error: audit.error ?? input.resolution.reason
+      error: audit.error ?? input.resolution.reason,
+      dotnetStack: audit.dotnetStack?.stack,
+      dotnetLegacyFramework: audit.dotnetStack?.legacyFramework
     };
   });
 }
@@ -1238,6 +1243,8 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
     "lastReviewedAt",
     "reportPath",
     "error",
+    "dotnetStack",
+    "dotnetLegacyFramework",
     ...detailColumns
   ];
   const body = rows.map((row) =>
@@ -1276,6 +1283,8 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
       row.lastReviewedAt ?? "",
       row.reportPath ?? "",
       row.error ?? "",
+      row.dotnetStack ?? "",
+      row.dotnetLegacyFramework === undefined ? "" : row.dotnetLegacyFramework ? "yes" : "no",
       ...detailColumns.map((key) => key === "sourceProvenance" || key === "identityReasons" || key === "identityEvidence" ? JSON.stringify(row[key] ?? []) : String(row[key] ?? ""))
     ]
       .map(escapeCsvCell)

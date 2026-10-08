@@ -274,6 +274,7 @@ export async function runDiscovery(options: DiscoveryRunOptions): Promise<Discov
           topFinding: result.report.findings[0]?.title,
           reportPath: preferredReportPath(result.slug, result.outputs),
           contact: result.report.contact,
+          dotnetStack: result.report.dotnetStack,
           ...(options.provider === "overture" ? { identity: identities.get(stableLeadKey(input)) ?? compareBusinessIdentity(input.candidate, []) } : {})
         }
       };

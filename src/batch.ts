@@ -889,12 +889,15 @@ function renderProspectCsv(results: BatchReportResult[], preset: BatchCsvExportP
     "preferredContactChannel",
     "contactabilityReason",
     "report paths",
-    "error"
+    "error",
+    "dotnetStack",
+    "dotnetLegacyFramework"
   ];
   const rows = results.map((result) => {
     const reportPaths = reportPathsFor(result);
     const contact = result.status === "success" ? (result.report.contact ?? { socialProfiles: [], contactConfidence: "None" as const }) : undefined;
     const outreach = result.status === "success" ? contactHandoffFor(contact) : undefined;
+    const dotnetStack = result.status === "success" ? result.report.dotnetStack : undefined;
     const values = [
       result.url,
       result.label ?? "",
@@ -910,7 +913,9 @@ function renderProspectCsv(results: BatchReportResult[], preset: BatchCsvExportP
       outreach?.preferredContactChannel ?? "",
       outreach?.contactabilityReason ?? "",
       reportPaths,
-      result.status === "failed" ? result.error : ""
+      result.status === "failed" ? result.error : "",
+      dotnetStack?.stack ?? "",
+      dotnetStack ? (dotnetStack.legacyFramework ? "yes" : "no") : ""
     ];
 
     return values.map(escapeCsvCell).join(",");

@@ -899,7 +899,7 @@ describe("lead discovery", () => {
     ]);
 
     expect(csv.split(/\r?\n/)[0]).toBe(
-      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,publicEmail,publicPhone,whatsappUrl,contactPageUrl,socialProfiles,contactConfidence,contactSource,preferredContactChannel,outreachAction,contactabilityReason,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error"
+      "leadKey,source,sourceId,label,segment,profile,hasWebsite,websiteUrl,auditStatus,score,topFinding,opportunityScore,opportunityReasons,pitchAngle,recommendedOffer,estimatedNeed,outreachPriorityReason,publicEmail,publicPhone,whatsappUrl,contactPageUrl,socialProfiles,contactConfidence,contactSource,preferredContactChannel,outreachAction,contactabilityReason,priority,nextAction,reviewStatus,reviewReason,lastReviewedAt,reportPath,error,dotnetStack,dotnetLegacyFramework"
     );
     expect(csv).toContain('"Clinic, A"');
     expect(csv).toContain("No website URL found; Website-build opportunity");
