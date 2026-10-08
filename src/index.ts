@@ -10,6 +10,7 @@ export {
 } from "./compare.js";
 export type { AuditComparison, ScoreChange } from "./compare.js";
 export { extractPublicContact } from "./contact.js";
+export { detectDotnetStack } from "./dotnet-stack.js";
 export { fetchOvertureCandidates } from "./overture.js";
 export type { BoundingBox, FetchOvertureCandidatesOptions } from "./overture.js";
 export { defaultDiscoveryCacheDirectory } from "./discovery-cache.js";
@@ -178,6 +179,8 @@ export type {
   AuditProfile,
   AuditReport,
   AuditSummary,
+  DotnetStack,
+  DotnetStackEvidence,
   Evidence,
   Finding,
   FindingCategory,

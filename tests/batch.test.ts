@@ -765,7 +765,9 @@ describe("batch reports", () => {
         "preferredContactChannel",
         "contactabilityReason",
         "report paths",
-        "error"
+        "error",
+        "dotnetStack",
+        "dotnetLegacyFramework"
       ]);
       expect(rows[1]).toEqual([
         "https://good.test",
@@ -782,7 +784,9 @@ describe("batch reports", () => {
         "manual-review",
         "No public contact channel found on the audited website.",
         "good-test/open-local-audit-report.json",
-        ""
+        "",
+        "none",
+        "no"
       ]);
       expect(rows[2]).toEqual([
         "https://bad.test",
@@ -799,7 +803,9 @@ describe("batch reports", () => {
         "",
         "",
         "",
-        "timeout"
+        "timeout",
+        "",
+        ""
       ]);
     } finally {
       await rm(dir, { recursive: true, force: true });

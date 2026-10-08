@@ -64,6 +64,22 @@ export interface AuditReport {
   lighthouse?: LighthouseSummary;
   contact?: PublicContact;
   businessIdentity?: BusinessIdentityResult;
+  dotnetStack?: DotnetStack;
+}
+
+export interface DotnetStackEvidence {
+  source: "header" | "cookie" | "html";
+  signal: string;
+  value: string;
+}
+
+export interface DotnetStack {
+  detected: boolean;
+  stack: "aspnet-webforms" | "aspnet-mvc" | "aspnet-framework" | "aspnet-core" | "blazor" | "aspnet-unknown" | "none";
+  legacyFramework: boolean;
+  confidence: "high" | "medium" | "low" | "none";
+  frameworkVersion?: string;
+  evidence: DotnetStackEvidence[];
 }
 
 export interface PublicContact {

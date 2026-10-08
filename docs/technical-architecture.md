@@ -133,7 +133,7 @@ Failed batch entries keep only their error state and do not invent contactabilit
 
 Batch and discovery CSV exports support local-only presets:
 
-- `standard`: the operator/review CSV shape used by the existing workflow.
+- `standard`: the operator/review CSV shape used by the existing workflow, including `dotnetStack` and `dotnetLegacyFramework`.
 - `crm`: a normalized import CSV for CRM tools with company identity, website, segment, profile, score fields, contact handoff fields, source, lead key, and report path.
 
 The CRM preset changes only the local CSV column shape. It does not create CRM records, call remote CRM APIs, send outreach, or bypass CSV formula hardening.
@@ -154,6 +154,7 @@ Report fields:
 - `findings`
 - `recommendations`
 - `evidence`
+- `dotnetStack` (operator-only ASP.NET fingerprint from the fetched headers, `Set-Cookie` names, and HTML; not a finding and not scored)
 
 Finding fields:
 - `id`
