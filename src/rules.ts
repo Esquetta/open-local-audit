@@ -1016,6 +1016,40 @@ function noindexSignals($: CheerioAPI, snapshot: PageSnapshot): string[] {
   return signals;
 }
 
+function mixedContentUrls($: CheerioAPI, snapshot: PageSnapshot): string[] {
+  if (!snapshot.finalUrl.startsWith("https://")) {
+    return [];
+  }
+
+  const values = [
+    ...$("script[src], iframe[src], img[src], audio[src], video[src], source[src], track[src], embed[src]")
+      .toArray()
+      .map((element) => $(element).attr("src")),
+    ...$("object[data]")
+      .toArray()
+      .map((element) => $(element).attr("data")),
+    ...$("link[href]")
+      .toArray()
+      .filter((element) => /(^|\s)(stylesheet|icon)(\s|$)/i.test($(element).attr("rel") ?? ""))
+      .map((element) => $(element).attr("href")),
+    ...$("img[srcset], source[srcset]")
+      .toArray()
+      .flatMap((element) => ($(element).attr("srcset") ?? "").split(",").map((candidate) => candidate.trim().split(/\s+/)[0]))
+  ];
+  const urls = new Set<string>();
+  for (const value of values) {
+    try {
+      const url = new URL(value?.trim() ?? "", snapshot.finalUrl);
+      if (url.protocol === "http:") {
+        urls.add(url.toString());
+      }
+    } catch {
+      continue;
+    }
+  }
+  return Array.from(urls);
+}
+
 function hasPlaceholderSocialLinks($: CheerioAPI): boolean {
   return $("a")
     .toArray()
@@ -1052,6 +1086,19 @@ const rules: Rule[] = [
     recommendation: "Remove the noindex directive from the page and its X-Robots-Tag header so the page can appear in search results.",
     check: ({ $, snapshot }) => noindexSignals($, snapshot).length === 0,
     evidence: ({ $, snapshot }) => noindexSignals($, snapshot).join("; ")
+  },
+  {
+    id: "mixed-content-absent",
+    title: "Secure page loads files over plain HTTP",
+    category: "technical-health",
+    severity: "medium",
+    source: "Page resources",
+    recommendation: "Load every script, stylesheet, image, and embed over HTTPS so browsers do not block them or mark the page as not fully secure.",
+    check: ({ $, snapshot }) => mixedContentUrls($, snapshot).length === 0,
+    evidence: ({ $, snapshot }) => {
+      const urls = mixedContentUrls($, snapshot);
+      return [...urls.slice(0, 5), ...(urls.length > 5 ? [`and ${urls.length - 5} more`] : [])].join("; ");
+    }
   },
   {
     id: "title-present",

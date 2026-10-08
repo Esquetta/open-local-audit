@@ -6,6 +6,7 @@ All notable changes to Open Local Audit will be documented here.
 
 - Added the `compare` command. It reads an earlier and a later JSON report for the same site, from files or report directories, and writes a progress report listing fixed, still open, and new findings with category and overall score changes, as Markdown, JSON, or HTML with optional report branding. Reports for different sites or profiles, or given in reverse order, are rejected.
 - Exported `compareReports`, `readComparisonReport`, and the comparison renderers from the public API.
+- Added the `mixed-content-absent` audit rule. On pages served over HTTPS it flags scripts, stylesheets, icons, images (including `srcset` candidates), media, iframes, and embeds loaded over plain HTTP, listing up to five URLs as evidence. Plain HTTP links are not flagged.
 
 ## v0.73.0 - 2026-10-07
 
