@@ -1,10 +1,10 @@
 import type { AuditReport, Finding, ReportBrandConfig, ReportRenderOptions } from "./types.js";
 
-function escapeCell(value: string): string {
+export function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -23,7 +23,7 @@ function escapeMarkdown(value: string): string {
     .replace(/([`*_{}\[\]()#!|])/g, "\\$1");
 }
 
-function severityRank(finding: Finding): number {
+export function severityRank(finding: Finding): number {
   const ranks = {
     high: 0,
     medium: 1,
@@ -34,7 +34,7 @@ function severityRank(finding: Finding): number {
   return ranks[finding.severity];
 }
 
-function overallScore(report: AuditReport): number {
+export function overallScore(report: AuditReport): number {
   const scores = Object.values(report.scores);
   return scores.length === 0 ? 0 : Math.round(scores.reduce((total, score) => total + score.score, 0) / scores.length);
 }
@@ -61,7 +61,7 @@ function executiveSummary(report: AuditReport): { impact: string; firstFix: stri
   };
 }
 
-function brandName(brand: ReportBrandConfig | undefined): string {
+export function brandName(brand: ReportBrandConfig | undefined): string {
   return brand?.name ?? "Open Local Audit";
 }
 

@@ -2,6 +2,11 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## Unreleased
+
+- Added the `compare` command. It reads an earlier and a later JSON report for the same site, from files or report directories, and writes a progress report listing fixed, still open, and new findings with category and overall score changes, as Markdown, JSON, or HTML with optional report branding. Reports for different sites or profiles, or given in reverse order, are rejected.
+- Exported `compareReports`, `readComparisonReport`, and the comparison renderers from the public API.
+
 ## v0.73.0 - 2026-10-07
 
 - Added the `page-indexable` audit rule. It flags pages that tell search engines not to index them through a `noindex` or `none` directive in a `robots` or `googlebot` meta tag or in the `X-Robots-Tag` response header, listing each directive as evidence. Directives aimed only at other crawlers are ignored.

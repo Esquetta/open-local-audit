@@ -1,6 +1,14 @@
 export { auditUrl, auditSnapshot } from "./audit.js";
 export { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "./batch.js";
 export { readBrandConfig } from "./brand.js";
+export {
+  compareReports,
+  readComparisonReport,
+  renderComparisonHtml,
+  renderComparisonJson,
+  renderComparisonMarkdown
+} from "./compare.js";
+export type { AuditComparison, ScoreChange } from "./compare.js";
 export { extractPublicContact } from "./contact.js";
 export { fetchOvertureCandidates } from "./overture.js";
 export type { BoundingBox, FetchOvertureCandidatesOptions } from "./overture.js";

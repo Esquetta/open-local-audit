@@ -5,6 +5,13 @@ import { dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { readBrandConfig } from "./brand.js";
 import { readBatchInput, runBatchReports } from "./batch.js";
+import {
+  compareReports,
+  readComparisonReport,
+  renderComparisonHtml,
+  renderComparisonJson,
+  renderComparisonMarkdown
+} from "./compare.js";
 import { type DiscoverySummary } from "./discovery.js";
 import { runDiscovery } from "./discovery-runner.js";
 import type { DiscoveryRunResult } from "./discovery-runner.js";
@@ -424,6 +431,48 @@ const packageReportProgram = program
       process.stdout.write(`Packaged report for ${result.manifest.finalUrl}\n`);
       process.stdout.write(`Files: ${result.manifest.files.length}\n`);
       process.stdout.write(`Output: ${result.outDir}\n`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+const compareProgram = program
+  .command("compare")
+  .description("Compare two JSON reports for the same site to show fixed, remaining, and new findings.")
+  .argument("<before>", "earlier JSON report file or report directory")
+  .argument("<after>", "later JSON report file or report directory")
+  .option("-f, --format <format>", "comparison format: markdown, json, or html", "markdown")
+  .option("-o, --out <path>", "write the comparison to a file instead of stdout")
+  .option("--brand-config <path>", "read report branding from a JSON file")
+  .action(async (beforePath: string, afterPath: string) => {
+    try {
+      const options = compareProgram.opts() as { format: string; out?: string; brandConfig?: string };
+      if (!["markdown", "json", "html"].includes(options.format)) {
+        throw new Error("compare --format must be markdown, json, or html");
+      }
+
+      const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
+      const comparison = compareReports(await readComparisonReport(beforePath), await readComparisonReport(afterPath));
+      const content =
+        options.format === "json"
+          ? renderComparisonJson(comparison)
+          : options.format === "html"
+            ? renderComparisonHtml(comparison, { brand })
+            : renderComparisonMarkdown(comparison, { brand });
+
+      if (!options.out) {
+        process.stdout.write(content);
+        return;
+      }
+
+      await mkdir(dirname(options.out), { recursive: true });
+      await writeFile(options.out, content);
+      process.stdout.write(
+        `Compared ${comparison.url}: ${comparison.fixed.length} fixed, ${comparison.remaining.length} still open, ${comparison.introduced.length} new\n`
+      );
+      process.stdout.write(`Output: ${options.out}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);
