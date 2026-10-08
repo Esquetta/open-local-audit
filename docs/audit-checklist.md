@@ -4,6 +4,8 @@
 
 - HTTP status is successful.
 - HTTPS is enabled.
+- Secure pages load their files over HTTPS.
+  - Rule `mixed-content-absent` flags scripts, stylesheets, icons, images (including `srcset` candidates), media, iframes, and embeds loaded over plain HTTP on a page served over HTTPS. Links to HTTP pages are not mixed content and are not flagged.
 - Redirect chain is reasonable.
   - Rule `redirect-chain-short` flags pages reached through more than one redirect and lists every hop with its status code. One redirect, such as HTTP to HTTPS, is accepted. Rendered audits (`--render`, `--screenshot`) do not record redirect hops, so the rule is skipped there.
 - Final URL is stable.
