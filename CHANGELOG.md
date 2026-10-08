@@ -2,7 +2,7 @@
 
 All notable changes to Open Local Audit will be documented here.
 
-## Unreleased
+## v0.74.0 - 2026-10-08
 
 - Added the `compare` command. It reads an earlier and a later JSON report for the same site, from files or report directories, and writes a progress report listing fixed, still open, and new findings with category and overall score changes, as Markdown, JSON, or HTML with optional report branding. Reports for different sites or profiles, or given in reverse order, are rejected.
 - Exported `compareReports`, `readComparisonReport`, and the comparison renderers from the public API.
