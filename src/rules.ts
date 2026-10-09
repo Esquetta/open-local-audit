@@ -1454,11 +1454,11 @@ export function runRules(snapshot: PageSnapshot): Finding[] {
 export const ruleCount = rules.length;
 
 // Real sites can mention these phrases, so only short pages count as placeholders. Maintenance copy must be
-// about the whole site ("Website temporarily down") or open the page ("Under maintenance."), so a short page
+// about the whole site ("Website temporarily down", "Our site is offline") or open the page ("Under maintenance."), so a short page
 // saying "Our booking system is temporarily unavailable" keeps its normal audit.
 const placeholderTextLimit = 600;
 const maintenanceCopy =
-  /\b(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|^(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b/i;
+  /(?:^|[.!?]\s+|\b(?:our|this|the) )(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|^(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b/i;
 const parkedCopy =
   /\b(?:(?:this )?domain (?:name )?(?:may be|is) for sale|buy this domain|domain is parked|parked (?:free,? )?(?:courtesy of|by)|this domain has been registered)\b/i;
 
