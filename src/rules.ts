@@ -1453,10 +1453,12 @@ export function runRules(snapshot: PageSnapshot): Finding[] {
 
 export const ruleCount = rules.length;
 
-// Real sites can mention these phrases, so only short pages count as placeholders.
+// Real sites can mention these phrases, so only short pages count as placeholders. Maintenance copy must be
+// about the whole site ("Website temporarily down") or open a sentence ("Under maintenance."), so a short page
+// saying "Our booking system is temporarily unavailable" keeps its normal audit.
 const placeholderTextLimit = 600;
 const maintenanceCopy =
-  /\b(?:temporarily (?:down|unavailable|offline)|(?:down|offline|closed) (?:for|due to) maintenance|under maintenance|scheduled maintenance|maintenance mode|we(?:'|’)ll be back soon)\b/i;
+  /\b(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|(?:^|[.!:|–—-]\s*)(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b/i;
 const parkedCopy =
   /\b(?:(?:this )?domain (?:name )?(?:may be|is) for sale|buy this domain|domain is parked|parked (?:free,? )?(?:courtesy of|by)|this domain has been registered)\b/i;
 
@@ -1486,7 +1488,7 @@ export function detectPlaceholderPage(snapshot: PageSnapshot): Finding | undefin
     evidence: [
       {
         label: "Page content",
-        value: `${parked ? "Parked domain" : "Placeholder page"}: "${match[0]}" in ${text.length} characters of page text`
+        value: `${parked ? "Parked domain" : "Placeholder page"}: "${match[0].replace(/^[^a-z]+/i, "")}" in ${text.length} characters of page text`
       }
     ]
   };

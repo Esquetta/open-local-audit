@@ -41,6 +41,13 @@ describe("detectDotnetStack", () => {
     expect(JSON.stringify(result)).not.toContain("/wEPDwUKLTY1MzQ5");
   });
 
+  it("ignores Web Forms handlers and .aspx pages on other sites", () => {
+    const html =
+      '<a href="https://another-site.example/WebResource.axd">Resource</a><script src="https://cdn.example/ScriptResource.axd"></script><a href="https://another-site.example/page.aspx">Page</a>';
+
+    expect(detect({}, html)).toMatchObject({ detected: false, stack: "none", evidence: [] });
+  });
+
   it("reads the framework version from X-AspNet-Version and keeps only cookie names", () => {
     const result = detect({
       "X-AspNet-Version": "4.0.30319",
