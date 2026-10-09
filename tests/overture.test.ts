@@ -464,13 +464,30 @@ describe("Overture Places discovery", () => {
     expect(duckdb.close).toHaveBeenCalledOnce();
   });
 
+  it("queries the current Overture law-firm taxonomy for lawyer aliases and old category names", async () => {
+    for (const category of ["lawyer", "Solicitor", "attorney_and_law_services"]) {
+      configureDuckDb([]);
+      await fetchOvertureCandidates({ category, bbox: [-1.8, 53.7, -1.29, 53.95], release: "2026-09-23.1" });
+
+      const sql = duckdb.runAndReadAll.mock.calls.at(-1)?.[0] as string;
+      expect(sql).toContain("taxonomy.primary IN ('attorney_or_law_firm')");
+      expect(sql).toContain("list_has_any(taxonomy.hierarchy, ['attorney_or_law_firm'])");
+    }
+  });
+
   it("documents mappings for the supported business categories", () => {
     expect(overtureCategoryMappings).toMatchObject({
       dental: ["dentist", "dental_clinic"],
       restaurant: ["restaurant"],
       beauty: expect.any(Array),
       hotel: expect.arrayContaining(["hotel"]),
-      gym: expect.any(Array)
+      gym: expect.any(Array),
+      lawyer: ["attorney_or_law_firm"],
+      solicitor: ["attorney_or_law_firm"],
+      attorney: ["attorney_or_law_firm"],
+      legal: ["legal_service"],
+      legal_services: ["legal_service"],
+      attorney_and_law_services: ["attorney_or_law_firm"]
     });
   });
 });

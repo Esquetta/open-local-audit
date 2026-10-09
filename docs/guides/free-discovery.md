@@ -32,7 +32,7 @@ Use a city name and ISO two-letter country code, such as `TR`, `US`, `DE`, or `G
 node dist/cli.js discover beauty --bbox "28.85,40.95,29.10,41.10" --profile beauty --dry-run --export-csv reports/istanbul-beauty.csv
 ```
 
-Friendly categories include `dental`, `restaurant`, `beauty`, `hotel`, and `gym`; official Overture taxonomy identifiers also work. Matching includes descendants. `--profile` selects existing audit rules separately from the discovery category. No matches do not prove no businesses exist in the area.
+Friendly categories include `dental`, `restaurant`, `beauty`, `hotel`, `gym`, `lawyer` (also `solicitor` or `attorney`, mapped to `attorney_or_law_firm`), and `legal` (all of `legal_service`); official Overture taxonomy identifiers also work. Matching includes descendants. `--profile` selects existing audit rules separately from the discovery category. No matches do not prove no businesses exist in the area.
 
 ## Repeated-search cache
 

@@ -2,6 +2,10 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## Unreleased
+
+- `discover --provider overture` now accepts `lawyer`, `solicitor`, and `attorney` (Overture `attorney_or_law_firm`, including practice-area subcategories) and `legal` (`legal_service`). The older category names `legal_services` and `attorney_and_law_services`, which matched nothing in the current Overture taxonomy, now map to the same identifiers.
+
 ## v0.75.0 - 2026-10-09
 
 - Added an operator-only `dotnetStack` field to JSON audit reports. It fingerprints ASP.NET Web Forms, MVC, .NET Framework, ASP.NET Core, and Blazor from the response headers, `Set-Cookie` names, and page HTML the audit already fetched, with a `legacyFramework` flag, confidence, optional .NET Framework version from `X-AspNet-Version`, and matched evidence. IIS or `X-Powered-By: ASP.NET` alone stays `aspnet-unknown` with low confidence. Standard batch and discovery CSV exports gain `dotnetStack` and `dotnetLegacyFramework` columns. Findings, scores, and Markdown, HTML, and PDF reports are unchanged.
