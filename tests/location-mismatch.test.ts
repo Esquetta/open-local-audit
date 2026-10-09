@@ -35,6 +35,14 @@ describe("location mismatch", () => {
       buildProspectRows(inputs).filter((row) => row.opportunityReasons.some((reason) => reason.includes("area code"))).map((row) => row.label);
 
     expect(flagged([...leeds, lead("batley", "01924 473396", "Batley"), lead("mobile", "07827 123456", "Leeds")])).toEqual([]);
+    const noLocality = lead("no-locality", "01934 620220", "Leeds");
+    noLocality.candidate.sourceMetadata = { phones: ["01934 620220"], country: "GB" };
+    expect(flagged([...leeds, noLocality])).toEqual([]);
+    const abroad = (input: ProspectRowInput): ProspectRowInput => ({
+      ...input,
+      candidate: { ...input.candidate, sourceMetadata: { ...input.candidate.sourceMetadata, country: "ES", locality: "Malaga" } }
+    });
+    expect(flagged([...leeds, lead("twenty-2", "01934 620220", "Leeds")].map(abroad))).toEqual([]);
     expect(flagged([...leeds.slice(0, 3), lead("twenty-2", "01934 620220", "Leeds")])).toEqual([]);
     expect(
       flagged([...leeds.slice(0, 3), ...["0161 000 0001", "0161 000 0002", "0161 000 0003"].map((phone, index) => lead(`mcr-${index}`, phone, "Leeds"))])
