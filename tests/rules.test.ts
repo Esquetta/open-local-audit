@@ -104,6 +104,18 @@ describe("audit rules", () => {
     expect(report.recommendations.some((recommendation) => recommendation.includes("tappable phone link"))).toBe(true);
   });
 
+  it("says when the only H1 has no text instead of counting it", async () => {
+    const page = await fixture("complete-local-page.html");
+    const h1Evidence = (html: string) =>
+      auditSnapshot(snapshot(html)).findings.find((finding) => finding.id === "single-h1")?.evidence[0]?.value;
+
+    expect(h1Evidence(page.replace(/<h1>[\s\S]*?<\/h1>/, '<h1><a href="/"><img src="/logo.png" alt="Smile Dental"></a></h1>'))).toBe(
+      "The only H1 has no text; it contains only an image"
+    );
+    expect(h1Evidence(page.replace(/<h1>[\s\S]*?<\/h1>/, "<h1> </h1>"))).toBe("The only H1 has no text");
+    expect(h1Evidence(page.replace(/<h1>[\s\S]*?<\/h1>/, "<h1>One</h1><h1>Two</h1>"))).toBe("2 H1 elements");
+  });
+
   it("flags missing robots.txt and sitemap.xml discovery resources", async () => {
     const report = auditSnapshot(
       snapshot(await fixture("complete-local-page.html"), {

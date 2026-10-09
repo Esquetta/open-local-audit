@@ -6,6 +6,7 @@ All notable changes to Open Local Audit will be documented here.
 
 - Added an operator-only `dotnetStack` field to JSON audit reports. It fingerprints ASP.NET Web Forms, MVC, .NET Framework, ASP.NET Core, and Blazor from the response headers, `Set-Cookie` names, and page HTML the audit already fetched, with a `legacyFramework` flag, confidence, optional .NET Framework version from `X-AspNet-Version`, and matched evidence. IIS or `X-Powered-By: ASP.NET` alone stays `aspnet-unknown` with low confidence. Standard batch and discovery CSV exports gain `dotnetStack` and `dotnetLegacyFramework` columns. Findings, scores, and Markdown, HTML, and PDF reports are unchanged.
 - Static audits now keep every `Set-Cookie` response header instead of only the last one.
+- The `single-h1` finding now says when the only H1 has no text, for example when it wraps just a logo image, instead of reporting "1 H1 elements".
 - Maintenance and parked or for-sale pages now produce a single `website-placeholder` finding with all scores at 0 instead of a full SEO audit of the placeholder. Discovery ranks those leads as website-build opportunities with opportunity score 95 and high priority. Only pages with at most 600 characters of visible text are treated as placeholders.
 
 ## v0.74.0 - 2026-10-08

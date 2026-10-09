@@ -1138,7 +1138,15 @@ const rules: Rule[] = [
     source: "H1 count",
     recommendation: "Use one visible H1 that clearly names the core service or business.",
     check: ({ $ }) => $("h1").length === 1 && $("h1").first().text().trim().length > 0,
-    evidence: ({ $ }) => `${$("h1").length} H1 elements`
+    evidence: ({ $ }) => {
+      const h1 = $("h1");
+      if (h1.length !== 1) {
+        return `${h1.length} H1 elements`;
+      }
+
+      // Image alt text is not visible text, so a logo-only H1 does not name the page.
+      return h1.find("img").length > 0 ? "The only H1 has no text; it contains only an image" : "The only H1 has no text";
+    }
   },
   {
     id: "canonical-present",
