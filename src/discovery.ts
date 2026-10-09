@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { parsePhoneNumberFromString } from "libphonenumber-js/max";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditProfile, DotnetStack, PublicContact } from "./types.js";
@@ -1074,13 +1075,57 @@ function prospectContact(input: ProspectRowInput): PublicContact | undefined {
   };
 }
 
+// UK geographic area codes: 02x (020 London), 011x and 01x1 (0113 Leeds, 0161 Manchester), otherwise 01xxx (01934).
+function ukAreaCode(phone: string | undefined): string | undefined {
+  const parsed = phone ? parsePhoneNumberFromString(phone, "GB") : undefined;
+  if (parsed?.country !== "GB" || parsed.getType() !== "FIXED_LINE") return undefined;
+  const national = `0${parsed.nationalNumber}`;
+  if (national.startsWith("02")) return national.slice(0, 3);
+  if (/^01(1\d|\d1)/.test(national)) return national.slice(0, 4);
+  return national.startsWith("01") ? national.slice(0, 5) : undefined;
+}
+
+function mostCommon(values: Array<string | undefined>): [string, number] | undefined {
+  const counts = new Map<string, number>();
+  for (const value of values) if (value) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0];
+}
+
+// A lead listed in the search's main locality whose landline area code belongs elsewhere may be in the wrong
+// place (a Weston-super-Mare 01934 clinic geocoded into Leeds). Neighbouring towns at the edge of the search box
+// list their own locality, so they are not flagged. Only a clear majority area code counts.
+function areaCodeMismatches(inputs: ProspectRowInput[]): Map<ProspectRowInput, string> {
+  const leads = inputs.map((input) => {
+    const locality = input.candidate.sourceMetadata?.locality;
+    // Manual and Google Places lists can span several towns on purpose; only an Overture area search has one place.
+    const code = input.candidate.source === "overture" ? ukAreaCode(prospectContact(input)?.publicPhone) : undefined;
+    return { input, code, locality: typeof locality === "string" ? locality.trim().toLowerCase() : undefined };
+  });
+  const codes = leads.map((lead) => lead.code).filter(Boolean);
+  const [dominant, dominantCount] = mostCommon(codes) ?? [];
+  const mismatches = new Map<ProspectRowInput, string>();
+  if (!dominant || codes.length < 5 || dominantCount! / codes.length < 0.6) return mismatches;
+  const [mainLocality] = mostCommon(leads.filter((lead) => lead.code === dominant).map((lead) => lead.locality)) ?? [];
+  for (const { input, code, locality } of leads) {
+    if (code && code !== dominant && (!locality || locality === mainLocality)) {
+      mismatches.set(input, `Phone area code ${code} differs from ${dominant}, which most leads in this search use; the business may be listed in the wrong place`);
+    }
+  }
+  return mismatches;
+}
+
 export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow[] {
+  const locationMismatches = areaCodeMismatches(inputs);
   return inputs.map((input) => {
+    const locationMismatch = locationMismatches.get(input);
     if (input.audit?.identity?.status === "conflict") {
       input = { ...input, audit: { ...input.audit, status: "failed", contact: undefined, dotnetStack: undefined, score: undefined, topFinding: undefined, reportPath: undefined, error: input.audit.error ?? "Website identity conflicts with the source; manual review is required." } };
     }
     const audit = input.audit ?? { status: "not-audited" as const };
-    const priority = priorityFor(input);
+    const basePriority = priorityFor(input);
+    const priority: Pick<ProspectExportRow, "priority" | "nextAction"> = locationMismatch
+      ? { priority: basePriority.priority === "low" ? "low" : "medium", nextAction: "Confirm the business location before outreach; its phone area code does not match this search." }
+      : basePriority;
     const enrichment = enrichmentFor(input);
     const handoff = contactHandoffFor(input);
     const contact = prospectContact(input);
@@ -1102,7 +1147,7 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       score: audit.score,
       topFinding: audit.topFinding,
       opportunityScore: opportunityScoreFor(input),
-      opportunityReasons: opportunityReasonsFor(input),
+      opportunityReasons: locationMismatch ? [...opportunityReasonsFor(input), locationMismatch] : opportunityReasonsFor(input),
       ...enrichment,
       ...details,
       ...(input.candidate.source === "overture" ? {
