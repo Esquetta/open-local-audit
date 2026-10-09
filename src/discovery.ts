@@ -1097,8 +1097,10 @@ function mostCommon(values: Array<string | undefined>): [string, number] | undef
 function areaCodeMismatches(inputs: ProspectRowInput[]): Map<ProspectRowInput, string> {
   const leads = inputs.map((input) => {
     const locality = input.candidate.sourceMetadata?.locality;
-    // Manual and Google Places lists can span several towns on purpose; only an Overture area search has one place.
-    const code = input.candidate.source === "overture" ? ukAreaCode(prospectContact(input)?.publicPhone) : undefined;
+    // Manual and Google Places lists can span several towns on purpose; only an Overture area search has one place,
+    // and only UK listings are compared so a +44 number on a business abroad is never read as a UK area.
+    const ukOverture = input.candidate.source === "overture" && input.candidate.sourceMetadata?.country === "GB";
+    const code = ukOverture ? ukAreaCode(prospectContact(input)?.publicPhone) : undefined;
     return { input, code, locality: typeof locality === "string" ? locality.trim().toLowerCase() : undefined };
   });
   const codes = leads.map((lead) => lead.code).filter(Boolean);
@@ -1107,7 +1109,7 @@ function areaCodeMismatches(inputs: ProspectRowInput[]): Map<ProspectRowInput, s
   if (!dominant || codes.length < 5 || dominantCount! / codes.length < 0.6) return mismatches;
   const [mainLocality] = mostCommon(leads.filter((lead) => lead.code === dominant).map((lead) => lead.locality)) ?? [];
   for (const { input, code, locality } of leads) {
-    if (code && code !== dominant && (!locality || locality === mainLocality)) {
+    if (code && code !== dominant && locality !== undefined && locality === mainLocality) {
       mismatches.set(input, `Phone area code ${code} differs from ${dominant}, which most leads in this search use; the business may be listed in the wrong place`);
     }
   }
