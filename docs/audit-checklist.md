@@ -3,7 +3,7 @@
 ## Technical basics
 
 - The site is a real website, not a maintenance, placeholder, or parked page.
-  - Finding `website-placeholder` replaces the whole audit when a page with at most 600 characters of visible text says it is temporarily down or under maintenance, or that the domain is parked or for sale. All category scores are set to 0, and discovery ranks the lead as a website-build opportunity (opportunity score 95, high priority). Longer pages that mention the same phrases get the normal audit.
+  - Finding `website-placeholder` replaces the whole audit when a page with at most 600 characters of title and visible text says the website itself is down or under maintenance (for example "Website temporarily down" or a leading "Under maintenance"), or that the domain is parked or for sale. A short page that says only one feature, such as online booking, is unavailable keeps the normal audit. All category scores are set to 0, and discovery ranks the lead as a website-build opportunity (opportunity score 95, high priority). Longer pages that mention the same phrases get the normal audit.
 - HTTP status is successful.
 - HTTPS is enabled.
 - Secure pages load their files over HTTPS.

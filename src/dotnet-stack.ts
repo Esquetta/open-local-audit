@@ -89,7 +89,7 @@ export function detectDotnetStack(snapshot: Pick<PageSnapshot, "finalUrl" | "hea
     const file = path.slice(path.lastIndexOf("/") + 1);
     if (element.tagName === "script" && blazorScripts.includes(file)) {
       add("html", "Blazor script", raw);
-    } else if (webFormsHandlers.includes(file)) {
+    } else if (webFormsHandlers.includes(file) && pageUrl && sameSite(url, pageUrl)) {
       add("html", file === "webresource.axd" ? "WebResource.axd" : "ScriptResource.axd", raw);
     } else if (path.endsWith(".aspx") && pageUrl && sameSite(url, pageUrl)) {
       add("html", ".aspx path", raw);

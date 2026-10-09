@@ -27,7 +27,7 @@ describe("placeholder pages", () => {
     expect(report.findings[0]).toMatchObject({
       title: "Website is down or showing a placeholder page",
       severity: "high",
-      evidence: [{ value: 'Placeholder page: "temporarily down" in 44 characters of page text' }]
+      evidence: [{ value: 'Placeholder page: "Website temporarily down" in 44 characters of page text' }]
     });
     expect(Object.values(report.scores).every((score) => score.score === 0)).toBe(true);
   });
@@ -45,10 +45,32 @@ describe("placeholder pages", () => {
     expect(report.findings[0]?.evidence[0]?.value).toContain('Parked domain: "This domain may be for sale"');
   });
 
+  it("detects whole-site notices after a title or in a sentence", () => {
+    for (const html of [
+      "<html><head><title>Acme Dental</title></head><body><p>Our website is currently unavailable.</p></body></html>",
+      "<html><head><title>Acme Dental.</title></head><body><p>Site is temporarily offline.</p></body></html>"
+    ]) {
+      expect(auditSnapshot(snapshot(html)).findings.map((finding) => finding.id), html).toEqual(["website-placeholder"]);
+    }
+  });
+
   it("detects a maintenance page served with a 503 status", () => {
     const report = auditSnapshot(snapshot("<h1>Under maintenance</h1><p>We'll be back soon.</p>", 503));
 
     expect(report.findings.map((finding) => finding.id)).toEqual(["website-placeholder"]);
+  });
+
+  it("keeps the full audit for short pages where only one feature is down", () => {
+    for (const body of [
+      "<h1>Acme Plumbing</h1><p>Our booking system is temporarily unavailable. Call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>Our booking system is under maintenance. Call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>Our website is not down; call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>Online booking: Under maintenance. Call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>Our booking site is under maintenance. Call 0123456789 for service.</p>"
+    ]) {
+      const report = auditSnapshot(snapshot(body));
+      expect(report.findings.some((finding) => finding.id === "website-placeholder"), body).toBe(false);
+    }
   });
 
   it("keeps the full audit for real pages that mention the same phrases", async () => {
