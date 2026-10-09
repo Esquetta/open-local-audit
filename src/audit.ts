@@ -1,6 +1,6 @@
 import type { AuditOptions, AuditReport, AuditSummary, FindingCategory, PageResource, PageSnapshot, RedirectHop, Score } from "./types.js";
 import { applyProfileAdjustments } from "./profiles.js";
-import { runRules } from "./rules.js";
+import { detectPlaceholderPage, runRules } from "./rules.js";
 import { load } from "cheerio";
 import { renderPageSnapshot } from "./render.js";
 import { runLighthouseAudit } from "./lighthouse.js";
@@ -181,9 +181,18 @@ export function auditSnapshot(
   options: Pick<Partial<AuditOptions>, "profile"> = {}
 ): AuditReport {
   const profile = options.profile ?? "generic";
-  const findings = applyProfileAdjustments(runRules(snapshot), profile, snapshot);
+  // A maintenance or parked page is not the business website, so it gets one finding and a zero score
+  // instead of a full audit of the placeholder.
+  const placeholder = detectPlaceholderPage(snapshot);
+  const findings = placeholder ? [placeholder] : applyProfileAdjustments(runRules(snapshot), profile, snapshot);
   const recommendations = findings.map((finding) => finding.recommendation);
   const contact = extractPublicContact(snapshot.html, snapshot.finalUrl);
+  const scores = scoreCategories(findings);
+  if (placeholder) {
+    for (const score of Object.values(scores)) {
+      score.score = 0;
+    }
+  }
 
   const report: AuditReport = {
     url: snapshot.url,
@@ -192,7 +201,7 @@ export function auditSnapshot(
     statusCode: snapshot.statusCode,
     profile,
     summary: summarize(findings),
-    scores: scoreCategories(findings),
+    scores,
     findings,
     recommendations: Array.from(new Set(recommendations)),
     contact,

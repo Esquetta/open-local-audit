@@ -34,6 +34,7 @@ export interface DiscoveryAuditResult {
   contact?: PublicContact;
   identity?: BusinessIdentityResult;
   dotnetStack?: DotnetStack;
+  placeholder?: boolean;
 }
 
 export interface ProspectRowInput {
@@ -784,6 +785,13 @@ function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority
     };
   }
 
+  if (input.audit?.status === "success" && input.audit.placeholder) {
+    return {
+      priority: "high",
+      nextAction: "Replace the placeholder or parked page with a basic website."
+    };
+  }
+
   if (input.audit?.status === "success") {
     const score = input.audit.score ?? 0;
     if (score < 60) {
@@ -829,6 +837,10 @@ function opportunityScoreFor(input: ProspectRowInput): number {
     return 60;
   }
 
+  if (input.audit?.status === "success" && input.audit.placeholder) {
+    return 95;
+  }
+
   if (input.audit?.status === "success") {
     const score = input.audit.score ?? 0;
     if (score < 60) {
@@ -860,6 +872,10 @@ function opportunityReasonsFor(input: ProspectRowInput): string[] {
 
   if (input.audit?.status === "failed") {
     return ["Audit failed and needs manual review"];
+  }
+
+  if (input.audit?.status === "success" && input.audit.placeholder) {
+    return [`Top finding: ${input.audit.topFinding}`, "Website-build opportunity"];
   }
 
   if (input.audit?.status === "success") {
@@ -894,7 +910,7 @@ function enrichmentFor(input: ProspectRowInput): Pick<
   if (input.candidate.source === "overture" && !input.resolution.hasWebsite) {
     return { pitchAngle: "Verify business information", recommendedOffer: "Manual qualification", estimatedNeed: "Unknown", outreachPriorityReason: reasons.join("; ") };
   }
-  if (input.resolution.status === "missing") {
+  if (input.resolution.status === "missing" || (input.audit?.status === "success" && input.audit.placeholder)) {
     return {
       pitchAngle: "Launch a credible local website",
       recommendedOffer: "Starter website build",
