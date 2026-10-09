@@ -1444,3 +1444,42 @@ export function runRules(snapshot: PageSnapshot): Finding[] {
 }
 
 export const ruleCount = rules.length;
+
+// Real sites can mention these phrases, so only short pages count as placeholders.
+const placeholderTextLimit = 600;
+const maintenanceCopy =
+  /\b(?:temporarily (?:down|unavailable|offline)|(?:down|offline|closed) (?:for|due to) maintenance|under maintenance|scheduled maintenance|maintenance mode|we(?:'|’)ll be back soon)\b/i;
+const parkedCopy =
+  /\b(?:(?:this )?domain (?:name )?(?:may be|is) for sale|buy this domain|domain is parked|parked (?:free,? )?(?:courtesy of|by)|this domain has been registered)\b/i;
+
+export function detectPlaceholderPage(snapshot: PageSnapshot): Finding | undefined {
+  const $ = load(snapshot.html);
+  const text = `${$("title").text()} ${collapsedText(visibleBody($))}`.replace(/\s+/g, " ").trim();
+  if (text.length > placeholderTextLimit) {
+    return undefined;
+  }
+
+  const parked = text.match(parkedCopy);
+  const maintenance = parked ? undefined : text.match(maintenanceCopy);
+  const match = parked ?? maintenance;
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    id: "website-placeholder",
+    title: parked ? "Domain is parked or for sale instead of hosting the business website" : "Website is down or showing a placeholder page",
+    severity: "high",
+    category: "technical-health",
+    source: "Page content",
+    recommendation: parked
+      ? "Point the domain at a real business website; a parked or for-sale page tells visitors the business is not online."
+      : "Restore or launch the real website; a maintenance or placeholder page tells visitors the business is not online.",
+    evidence: [
+      {
+        label: "Page content",
+        value: `${parked ? "Parked domain" : "Placeholder page"}: "${match[0]}" in ${text.length} characters of page text`
+      }
+    ]
+  };
+}
