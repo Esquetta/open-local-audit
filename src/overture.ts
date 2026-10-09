@@ -36,7 +36,14 @@ export const overtureCategoryMappings: Readonly<Record<string, readonly string[]
   restaurant: ["restaurant"],
   beauty: ["beauty_salon", "hair_salon", "nail_salon", "spa"],
   hotel: ["hotel", "motel", "resort_hotel"],
-  gym: ["gym", "fitness_center"]
+  gym: ["gym", "fitness_center"],
+  lawyer: ["attorney_or_law_firm"],
+  solicitor: ["attorney_or_law_firm"],
+  attorney: ["attorney_or_law_firm"],
+  legal: ["legal_service"],
+  // Category names from older Overture schemas that users still type.
+  legal_services: ["legal_service"],
+  attorney_and_law_services: ["attorney_or_law_firm"]
 };
 
 interface OverturePlaceRow {
