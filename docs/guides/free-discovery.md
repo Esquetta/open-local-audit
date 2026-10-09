@@ -34,6 +34,8 @@ node dist/cli.js discover beauty --bbox "28.85,40.95,29.10,41.10" --profile beau
 
 Friendly categories include `dental`, `restaurant`, `beauty`, `hotel`, `gym`, `lawyer` (also `solicitor` or `attorney`, mapped to `attorney_or_law_firm`), and `legal` (all of `legal_service`); official Overture taxonomy identifiers also work. Matching includes descendants. `--profile` selects existing audit rules separately from the discovery category. No matches do not prove no businesses exist in the area.
 
+For UK searches, a lead whose locality matches most other leads but whose landline area code differs from the code at least 60% of them share (with five or more landlines in the search) gets the reason "Phone area code ... differs from ..." and the next action "Confirm the business location before outreach", with its priority capped at medium. This catches source records placed in the wrong town, such as a Weston-super-Mare `01934` clinic listed in Leeds. Neighbouring towns at the edge of the search box that list their own locality, mobile numbers, and non-geographic numbers are not flagged. The check is advisory and never removes a lead.
+
 ## Repeated-search cache
 
 `discover` with Overture and `start` enable the local business-result cache by default. An entry is reusable only for the same normalized category, numeric bounding box, candidate limit, and Overture release, and for at most seven days. A different audit profile reuses source data with the newly selected profile. Website audits are never taken from this cache; they run again up to the requested audit cap.
