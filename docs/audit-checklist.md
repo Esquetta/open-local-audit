@@ -6,6 +6,8 @@
   - Finding `website-placeholder` replaces the whole audit when a page with at most 600 characters of title and visible text says the website itself is down or under maintenance (for example "Website temporarily down" or a leading "Under maintenance"), or that the domain is parked or for sale. A short page that says only one feature, such as online booking, is unavailable keeps the normal audit. All category scores are set to 0, and discovery ranks the lead as a website-build opportunity (opportunity score 95, high priority). Longer pages that mention the same phrases get the normal audit.
 - HTTP status is successful.
 - HTTPS is enabled.
+- HTTPS certificate is trusted and not about to expire.
+  - Rule `tls-certificate-valid` opens one TLS connection to the final HTTPS host and flags a certificate that is not trusted (for example `DEPTH_ZERO_SELF_SIGNED_CERT`), has expired, or has fewer than 14 days left. Automated issuers such as Let's Encrypt renew at 30 days left, so fewer than 14 days means automatic renewal is failing. The rule is skipped for HTTP pages and when the connection fails.
 - Secure pages load their files over HTTPS.
   - Rule `mixed-content-absent` flags scripts, stylesheets, icons, images (including `srcset` candidates), media, iframes, and embeds loaded over plain HTTP on a page served over HTTPS. Links to HTTP pages are not mixed content and are not flagged.
 - Redirect chain is reasonable.
@@ -25,6 +27,7 @@
 - Phone action exists.
 - WhatsApp action exists when relevant.
 - Email action exists when relevant.
+- Visitors can send an enquiry without calling: an enquiry form, a contact or booking page link, or an email link (a newsletter signup does not count).
 - Address is visible.
 - Map or directions link exists.
 - Opening hours are visible.

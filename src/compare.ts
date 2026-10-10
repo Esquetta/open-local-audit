@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { brandName, escapeCell, escapeHtml, overallScore, severityRank } from "./reporters.js";
 import type { AuditProfile, AuditReport, Finding, FindingCategory, ReportRenderOptions } from "./types.js";
 
@@ -21,6 +21,16 @@ export interface AuditComparison {
   fixed: Finding[];
   introduced: Finding[];
   remaining: Finding[];
+  screenshots: { before?: string; after?: string };
+}
+
+export interface ComparisonScreenshot {
+  data: Buffer;
+  type: "png" | "jpeg";
+}
+
+export interface ComparisonRenderOptions extends ReportRenderOptions {
+  screenshots?: { before?: ComparisonScreenshot; after?: ComparisonScreenshot };
 }
 
 function siteHost(url: string): string {
@@ -52,7 +62,7 @@ export async function readComparisonReport(path: string): Promise<AuditReport> {
 
   let report: Partial<AuditReport>;
   try {
-    report = JSON.parse(content.replace(/^﻿/, "")) as Partial<AuditReport>;
+    report = JSON.parse(content.replace(/^\uFEFF/, "")) as Partial<AuditReport>;
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(`${reportPath} is not valid JSON`);
@@ -72,7 +82,57 @@ export async function readComparisonReport(path: string): Promise<AuditReport> {
     throw new Error(`${reportPath} is not an Open Local Audit JSON report`);
   }
 
-  return report as AuditReport;
+  // Screenshot paths are written relative to the report directory. Only files inside that directory are used, so a
+  // report from elsewhere cannot pull unrelated local images into a customer-facing comparison.
+  const reportDir = dirname(reportPath);
+  const inside = (path: unknown): string | undefined => {
+    if (typeof path !== "string" || !path.trim()) {
+      return undefined;
+    }
+    const resolved = resolve(reportDir, path);
+    const fromReport = relative(reportDir, resolved);
+    return fromReport && !fromReport.startsWith("..") && !isAbsolute(fromReport) ? resolved : undefined;
+  };
+  const visualEvidence = Array.isArray(report.visualEvidence)
+    ? report.visualEvidence.flatMap((item) => {
+        const path = inside(item?.path);
+        const screenshot = inside(item?.screenshotPath);
+        return path ? [{ ...item, path, ...(screenshot ? { screenshotPath: screenshot } : { screenshotPath: undefined }) }] : [];
+      })
+    : undefined;
+  return { ...report, visualEvidence } as AuditReport;
+}
+
+function screenshotPath(report: AuditReport): string | undefined {
+  return report.visualEvidence?.find((item) => item.screenshotPath)?.screenshotPath;
+}
+
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+async function readScreenshot(path: string | undefined): Promise<ComparisonScreenshot | undefined> {
+  if (!path) {
+    return undefined;
+  }
+
+  let data: Buffer;
+  try {
+    data = await readFile(path);
+  } catch {
+    return undefined;
+  }
+  if (data.subarray(0, 8).equals(pngSignature)) {
+    return { data, type: "png" };
+  }
+  return data[0] === 0xff && data[1] === 0xd8 ? { data, type: "jpeg" } : undefined;
+}
+
+export async function loadComparisonScreenshots(
+  comparison: AuditComparison
+): Promise<NonNullable<ComparisonRenderOptions["screenshots"]>> {
+  return {
+    before: await readScreenshot(comparison.screenshots.before),
+    after: await readScreenshot(comparison.screenshots.after)
+  };
 }
 
 export function compareReports(before: AuditReport, after: AuditReport): AuditComparison {
@@ -117,7 +177,8 @@ export function compareReports(before: AuditReport, after: AuditReport): AuditCo
     scores,
     fixed: bySeverity(before.findings.filter((finding) => !afterIds.has(finding.id))),
     introduced: bySeverity(after.findings.filter((finding) => !beforeIds.has(finding.id))),
-    remaining: bySeverity(after.findings.filter((finding) => beforeIds.has(finding.id)))
+    remaining: bySeverity(after.findings.filter((finding) => beforeIds.has(finding.id))),
+    screenshots: { before: screenshotPath(before), after: screenshotPath(after) }
   };
 }
 
@@ -176,13 +237,24 @@ export function renderComparisonMarkdown(comparison: AuditComparison, options: R
       "No new issues were found.",
       ["Severity", "Finding", "Evidence", "Recommendation"],
       comparison.introduced.map((finding) => [finding.severity, finding.title, evidence(finding), finding.recommendation])
-    )
+    ),
+    ...(comparison.screenshots.before || comparison.screenshots.after
+      ? [
+          "## Screenshots",
+          "",
+          `- Before: ${comparison.screenshots.before ? "Captured" : "Not captured"}`,
+          `- After: ${comparison.screenshots.after ? "Captured" : "Not captured"}`,
+          "",
+          "Use the HTML or PDF format to see them side by side.",
+          ""
+        ]
+      : [])
   ];
 
   return `${lines.join("\n")}\n`;
 }
 
-export function renderComparisonHtml(comparison: AuditComparison, options: ReportRenderOptions = {}): string {
+export function renderComparisonHtml(comparison: AuditComparison, options: ComparisonRenderOptions = {}): string {
   const brand = options.brand;
   const name = brandName(brand);
   const table = (empty: string, header: string[], rows: string[][]): string =>
@@ -204,6 +276,20 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
   const footer =
     brand?.footerText || brand?.contact
       ? `<footer class="meta">${escapeHtml([brand.footerText, brand.contact].filter(Boolean).join(" | "))}</footer>\n`
+      : "";
+  const figure = (label: string, scannedAt: string, screenshot: ComparisonScreenshot | undefined): string => {
+    const image = screenshot
+      ? `<img src="data:image/${screenshot.type};base64,${screenshot.data.toString("base64")}" alt="${escapeHtml(label)} screenshot">`
+      : "<p>Not captured</p>";
+    return `<figure>${image}<figcaption>${escapeHtml(label)} (${escapeHtml(scannedAt)})</figcaption></figure>`;
+  };
+  const screenshots =
+    options.screenshots?.before || options.screenshots?.after
+      ? `    <section>
+    <h2>Before and After</h2>
+    <div class="shots">${figure("Before", comparison.beforeScannedAt, options.screenshots.before)}${figure("After", comparison.afterScannedAt, options.screenshots.after)}</div>
+    </section>
+`
       : "";
 
   return `<!doctype html>
@@ -229,6 +315,10 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
       th, td { border-bottom: 1px solid var(--line); padding: 0.65rem; text-align: left; vertical-align: top; }
       th { background: var(--panel); color: var(--muted); font-size: 0.82rem; text-transform: uppercase; }
       tr:last-child td { border-bottom: 0; }
+      .shots { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+      figure { margin: 0; }
+      figure img { border: 1px solid var(--line); border-radius: 8px; display: block; max-height: 900px; object-fit: cover; object-position: top; width: 100%; }
+      figcaption { color: var(--muted); margin-top: 0.4rem; }
     </style>
   </head>
   <body>
@@ -260,8 +350,104 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
     <h2>New Issues</h2>
     ${table("No new issues were found.", ["Severity", "Finding", "Evidence", "Recommendation"], comparison.introduced.map((finding) => [finding.severity, finding.title, evidence(finding), finding.recommendation]))}
     </section>
-${footer}    </main>
+${screenshots}${footer}    </main>
   </body>
 </html>
 `;
+}
+
+export async function renderComparisonPdf(comparison: AuditComparison, options: ComparisonRenderOptions = {}): Promise<Buffer> {
+  const brand = options.brand;
+  const name = brandName(brand);
+  const primaryColor = brand?.primaryColor ?? "#145a73";
+  const accentColor = brand?.accentColor ?? "#2f7d5f";
+  // pdfkit is loaded on demand so the CLI does not pay for it on every start.
+  const { default: PDFDocument } = await import("pdfkit");
+  const doc = new PDFDocument({ size: "A4", margin: 48, info: { Title: `${name} Progress Report`, Author: name } });
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const finished = new Promise<Buffer>((resolveBuffer, reject) => {
+    doc.on("end", () => resolveBuffer(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+  const sectionTitle = (title: string) => {
+    doc.moveDown(1);
+    doc.font("Helvetica-Bold").fontSize(14).fillColor(primaryColor).text(title);
+    doc.moveDown(0.3);
+    doc.font("Helvetica").fontSize(10).fillColor("#172026");
+  };
+  const findingList = (findings: Finding[], empty: string, withRecommendation: boolean) => {
+    if (findings.length === 0) {
+      doc.text(empty);
+      return;
+    }
+    for (const finding of findings) {
+      doc.font("Helvetica-Bold").text(`${finding.severity.toUpperCase()} - ${finding.title}`);
+      if (withRecommendation) {
+        doc.font("Helvetica").text(finding.recommendation);
+      }
+      doc.font("Helvetica").moveDown(0.3);
+    }
+  };
+
+  doc.rect(0, 0, doc.page.width, 92).fill(primaryColor);
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(22).text(`${name} Progress Report`, 48, 32);
+  doc.font("Helvetica").fontSize(10).text(comparison.url, 48, 60);
+  doc.fillColor("#172026").fontSize(10).text("", 48, 118);
+  doc.text(`Before: ${comparison.beforeScannedAt}`);
+  doc.text(`After: ${comparison.afterScannedAt}`);
+  doc.text(`Profile: ${comparison.profile}`);
+  doc.moveDown(0.8);
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(18)
+    .fillColor(accentColor)
+    .text(`Overall Health: ${comparison.overall.before} -> ${comparison.overall.after} (${signed(comparison.overall.change)})`);
+  doc
+    .font("Helvetica")
+    .fontSize(10)
+    .fillColor("#172026")
+    .text(`Fixed: ${comparison.fixed.length}    Still open: ${comparison.remaining.length}    New: ${comparison.introduced.length}`);
+
+  sectionTitle("Score Changes");
+  for (const score of Object.values(comparison.scores)) {
+    doc.text(`${score.label}: ${score.before}/${score.max} -> ${score.after}/${score.max} (${signed(score.change)})`);
+  }
+  sectionTitle("Fixed Issues");
+  findingList(comparison.fixed, "No issues from the earlier audit were fixed.", false);
+  sectionTitle("Still Open");
+  findingList(comparison.remaining, "No issues from the earlier audit are still open.", true);
+  sectionTitle("New Issues");
+  findingList(comparison.introduced, "No new issues were found.", true);
+
+  const shots = [
+    ["Before", comparison.beforeScannedAt, options.screenshots?.before],
+    ["After", comparison.afterScannedAt, options.screenshots?.after]
+  ] as const;
+  if (shots.some(([, , shot]) => shot)) {
+    doc.addPage();
+    doc.font("Helvetica-Bold").fontSize(14).fillColor(primaryColor).text("Before and After");
+    const top = doc.y + 8;
+    const width = (doc.page.width - 48 * 2 - 16) / 2;
+    shots.forEach(([label, scannedAt, shot], index) => {
+      const x = 48 + index * (width + 16);
+      doc.font("Helvetica").fontSize(9).fillColor("#5f6b75").text(`${label} (${scannedAt})`, x, top, { width });
+      if (shot) {
+        doc.image(shot.data, x, top + 16, { fit: [width, doc.page.height - top - 96], align: "center" });
+      } else {
+        doc.text("Not captured", x, top + 16, { width });
+      }
+    });
+  }
+
+  if (brand?.footerText || brand?.contact) {
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor("#5f6b75")
+      .text([brand.footerText, brand.contact].filter(Boolean).join(" | "), 48, doc.page.height - 64, { width: doc.page.width - 96 });
+  }
+
+  doc.end();
+  return await finished;
 }

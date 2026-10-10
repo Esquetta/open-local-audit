@@ -6,6 +6,9 @@ import { renderPageSnapshot } from "./render.js";
 import { runLighthouseAudit } from "./lighthouse.js";
 import { extractPublicContact } from "./contact.js";
 import { detectDotnetStack } from "./dotnet-stack.js";
+import { probeTlsCertificate } from "./tls-probe.js";
+
+export { probeTlsCertificate };
 
 const defaultOptions: AuditOptions = {
   timeoutMs: 10000,
@@ -24,6 +27,8 @@ const categories: FindingCategory[] = [
   "mobile-usability",
   "trust-contact"
 ];
+
+const tlsCertificateErrorCode = /^(?:CERT_|ERR_TLS_CERT_|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$|UNABLE_TO_)/;
 
 function normalizeHeaders(headers: Headers): Record<string, string> {
   const output: Record<string, string> = {};
@@ -69,6 +74,12 @@ async function fetchWithRedirects(url: string, options: AuditOptions): Promise<P
         html: await response.text(),
         redirects
       };
+    } catch (error) {
+      const code = (error as { cause?: { code?: unknown } }).cause?.code;
+      if (typeof code === "string" && tlsCertificateErrorCode.test(code)) {
+        throw new Error(`TLS certificate error (${code}) for ${currentUrl}`, { cause: error });
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -262,6 +273,10 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
     snapshot.internalLinks = await Promise.all(
       collectInternalLinks(snapshot, effectiveOptions.maxPages).map((link) => fetchResource(link, effectiveOptions))
     );
+  }
+
+  if (snapshot.finalUrl.startsWith("https://")) {
+    snapshot.tls = await probeTlsCertificate(snapshot.finalUrl, effectiveOptions.timeoutMs);
   }
 
   const report = auditSnapshot(snapshot, new Date().toISOString(), {

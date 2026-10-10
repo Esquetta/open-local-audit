@@ -102,13 +102,14 @@ export async function renderPdfReport(report: AuditReport, options: ReportRender
     writeKeyValue(doc, "SEO", categories.seo?.toString() ?? "N/A");
   }
 
-  if (report.contact && report.contact.contactConfidence !== "None") {
+  if (report.contact && (report.contact.contactConfidence !== "None" || report.contact.contactFormUrl)) {
     writeSectionTitle(doc, "Contact Readiness");
     writeKeyValue(doc, "Confidence", report.contact.contactConfidence);
     writeKeyValue(doc, "Public email", report.contact.publicEmail ?? "");
     writeKeyValue(doc, "Public phone", report.contact.publicPhone ?? "");
     writeKeyValue(doc, "WhatsApp", report.contact.whatsappUrl ?? "");
     writeKeyValue(doc, "Contact page", report.contact.contactPageUrl ?? "");
+    writeKeyValue(doc, "Contact form", report.contact.contactFormUrl ?? "");
     writeKeyValue(doc, "Social profiles", report.contact.socialProfiles.join("; "));
   }
 

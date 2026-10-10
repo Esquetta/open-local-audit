@@ -3,12 +3,14 @@ export { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "
 export { readBrandConfig } from "./brand.js";
 export {
   compareReports,
+  loadComparisonScreenshots,
   readComparisonReport,
   renderComparisonHtml,
   renderComparisonJson,
-  renderComparisonMarkdown
+  renderComparisonMarkdown,
+  renderComparisonPdf
 } from "./compare.js";
-export type { AuditComparison, ScoreChange } from "./compare.js";
+export type { AuditComparison, ComparisonRenderOptions, ComparisonScreenshot, ScoreChange } from "./compare.js";
 export { extractPublicContact } from "./contact.js";
 export { detectDotnetStack } from "./dotnet-stack.js";
 export { fetchOvertureCandidates } from "./overture.js";
@@ -56,6 +58,8 @@ export {
 } from "./review.js";
 export { runLighthouseAudit } from "./lighthouse.js";
 export { renderPdfReport } from "./pdf.js";
+export { buildPitchBrief, readLeadReport, renderPitchBriefsMarkdown } from "./pitch-brief.js";
+export type { PitchBrief, PitchPoint, PitchReportStatus } from "./pitch-brief.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 export {
   buildLeadShortlist,

@@ -87,6 +87,7 @@ export interface PublicContact {
   publicPhone?: string;
   whatsappUrl?: string;
   contactPageUrl?: string;
+  contactFormUrl?: string;
   socialProfiles: string[];
   contactConfidence: "High" | "Medium" | "Low" | "None";
   contactSource?: string;
@@ -117,6 +118,15 @@ export interface PageSnapshot {
   };
   internalLinks?: PageResource[];
   visualEvidence?: VisualEvidence[];
+  tls?: {
+    validFrom: string;
+    validTo: string;
+    // Whole days from the probe time to validTo, negative once expired, so rules do not read the clock.
+    daysRemaining: number;
+    issuer?: string;
+    authorized: boolean;
+    error?: string;
+  };
 }
 
 export interface AuditOptions {

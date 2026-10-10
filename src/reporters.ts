@@ -131,7 +131,7 @@ function renderMarkdownLighthouse(report: AuditReport): string[] {
 }
 
 function renderMarkdownContactReadiness(report: AuditReport): string[] {
-  if (!report.contact || report.contact.contactConfidence === "None") {
+  if (!report.contact || (report.contact.contactConfidence === "None" && !report.contact.contactFormUrl)) {
     return [];
   }
 
@@ -145,6 +145,7 @@ function renderMarkdownContactReadiness(report: AuditReport): string[] {
     `| Public phone | ${escapeCell(report.contact.publicPhone ?? "")} |`,
     `| WhatsApp | ${escapeCell(report.contact.whatsappUrl ?? "")} |`,
     `| Contact page | ${escapeCell(report.contact.contactPageUrl ?? "")} |`,
+    `| Contact form | ${escapeCell(report.contact.contactFormUrl ?? "")} |`,
     `| Social profiles | ${escapeCell(report.contact.socialProfiles.join("; "))} |`,
     ""
   ];
@@ -227,7 +228,7 @@ ${warnings}
 }
 
 function renderHtmlContactReadiness(report: AuditReport): string {
-  if (!report.contact || report.contact.contactConfidence === "None") {
+  if (!report.contact || (report.contact.contactConfidence === "None" && !report.contact.contactFormUrl)) {
     return "";
   }
 
@@ -237,6 +238,7 @@ function renderHtmlContactReadiness(report: AuditReport): string {
     ["Public phone", report.contact.publicPhone ?? ""],
     ["WhatsApp", report.contact.whatsappUrl ?? ""],
     ["Contact page", report.contact.contactPageUrl ?? ""],
+    ["Contact form", report.contact.contactFormUrl ?? ""],
     ["Social profiles", report.contact.socialProfiles.join("; ")]
   ]
     .map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`)

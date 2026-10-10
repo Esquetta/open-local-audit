@@ -21,7 +21,7 @@ describe("report pack", () => {
           headers: {
             "content-type": "text/html"
           },
-          html: "<html><head><title></title></head><body><h1></h1><a href=\"mailto:hello@clinic.test\">Email</a></body></html>"
+          html: "<html><head><title></title></head><body><h1></h1><a href=\"mailto:hello@clinic.test\">Email</a><form><input name=\"name\"><textarea name=\"message\"></textarea></form></body></html>"
         },
         "2026-05-28T00:00:00.000Z"
       );
@@ -40,7 +40,9 @@ describe("report pack", () => {
         "reports/open-local-audit-report.html"
       ]);
       expect(await readFile(join(outDir, "README.md"), "utf8")).toContain("# Open Local Audit Report Pack");
-      expect(await readFile(join(outDir, "next-actions.md"), "utf8")).toContain("# Next Actions");
+      const nextActions = await readFile(join(outDir, "next-actions.md"), "utf8");
+      expect(nextActions).toContain("# Next Actions");
+      expect(nextActions).toContain("- Contact form: https://clinic.test");
       expect(JSON.parse(await readFile(join(outDir, "manifest.json"), "utf8"))).toMatchObject({
         sourceReport: "open-local-audit-report.json",
         url: "https://clinic.test",
