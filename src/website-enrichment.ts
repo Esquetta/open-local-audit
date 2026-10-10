@@ -6,6 +6,7 @@ import { isIP } from "node:net";
 import { load } from "cheerio";
 import { extractPublicContact } from "./contact.js";
 import { extractBusinessIdentities, type ObservedBusinessIdentity } from "./business-identity.js";
+import { probeTlsCertificate } from "./tls-probe.js";
 import type { PageSnapshot, PublicContact, RedirectHop } from "./types.js";
 
 const USER_AGENT = "open-local-audit/0.1 (+https://github.com/Esquetta/open-local-audit)";
@@ -35,6 +36,8 @@ export interface WebsiteEnrichmentOptions {
   fetch?: typeof fetch;
   /** Test seam for deterministic DNS checks. Production uses Node's resolver. */
   resolve?: Resolver;
+  /** Test seam for the certificate probe. Skipped by default when `fetch` is injected. */
+  probeTls?: typeof probeTlsCertificate;
 }
 
 class BlockedError extends Error {}
@@ -259,8 +262,10 @@ function extractSchemaContact(html: string): Pick<PublicContact, "publicEmail" |
 
 function mergeContacts(entries: Array<{ contact: PublicContact; pageUrl: string }>): PublicContact | undefined {
   const populated = entries.filter(({ contact }) => contact.publicEmail || contact.publicPhone || contact.whatsappUrl || contact.contactPageUrl || contact.socialProfiles.length > 0);
+  const contactFormUrl = entries.map(({ contact }) => contact.contactFormUrl).find(Boolean);
   if (populated.length === 0) {
-    return undefined;
+    // A contact form is not an outreach channel on its own, so a form-only site keeps "None" confidence.
+    return contactFormUrl ? { contactFormUrl, socialProfiles: [], contactConfidence: "None", contactSource: "" } : undefined;
   }
   const first = <K extends keyof PublicContact>(key: K): PublicContact[K] | undefined => populated.map(({ contact }) => contact[key]).find(Boolean);
   const socialProfiles = Array.from(new Set(populated.flatMap(({ contact }) => contact.socialProfiles)));
@@ -272,6 +277,7 @@ function mergeContacts(entries: Array<{ contact: PublicContact; pageUrl: string 
     publicPhone,
     whatsappUrl: first("whatsappUrl") as string | undefined,
     contactPageUrl: first("contactPageUrl") as string | undefined,
+    contactFormUrl,
     socialProfiles,
     contactConfidence: publicEmail && publicPhone || channelCount >= 3 ? "High" : "Medium",
     contactSource: populated.map(({ pageUrl }) => pageUrl).join(", ")
@@ -411,6 +417,26 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
       throw new BlockedError("only public HTTP(S) URLs are allowed");
     }
     const homepage = await fetchPage(initial.toString(), initial.hostname);
+    // Read the homepage certificate for the TLS rule from an address that passes the same public-address check,
+    // connecting to it directly so a second DNS answer cannot redirect the handshake. Failures skip the rule.
+    const probe = options.probeTls ?? (options.fetch ? undefined : probeTlsCertificate);
+    if (probe && homepage.finalUrl.startsWith("https://")) {
+      let dnsTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const [address] = await Promise.race([
+          resolvePublicAddresses(new URL(homepage.finalUrl).hostname, resolve),
+          new Promise<never>((_resolve, reject) => {
+            dnsTimer = setTimeout(() => reject(new TimeoutError("request timed out")), remainingMs());
+          })
+        ]);
+        // A stalled handshake must not use up the time left for the contact page fetches.
+        homepage.tls = await probe(homepage.finalUrl, Math.min(remainingMs(), 5_000), address);
+      } catch {
+        homepage.tls = undefined;
+      } finally {
+        clearTimeout(dnsTimer);
+      }
+    }
     const contactEntries = [{ contact: combinePageContact(homepage.html, homepage.finalUrl), pageUrl: homepage.finalUrl }];
     const businessIdentities = extractBusinessIdentities(homepage.html, homepage.finalUrl);
     const followUps = contactLinks(homepage.html, homepage.finalUrl, new URL(homepage.finalUrl).origin, maxPages - 1);

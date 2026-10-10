@@ -111,7 +111,8 @@ function renderNextActions(report: AuditReport): string {
     `- Confidence: ${report.contact?.contactConfidence ?? "None"}`,
     `- Public email: ${report.contact?.publicEmail ?? ""}`,
     `- Public phone: ${report.contact?.publicPhone ?? ""}`,
-    `- Contact page: ${report.contact?.contactPageUrl ?? ""}`
+    `- Contact page: ${report.contact?.contactPageUrl ?? ""}`,
+    `- Contact form: ${report.contact?.contactFormUrl ?? ""}`
   ].join("\n")}\n`;
 }
 

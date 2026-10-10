@@ -1,5 +1,6 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
+import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
 import type { Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
 type Rule = {
@@ -1050,6 +1051,20 @@ function mixedContentUrls($: CheerioAPI, snapshot: PageSnapshot): string[] {
   return Array.from(urls);
 }
 
+// Let's Encrypt and most automated issuers renew at 30 days left, so fewer than 14 means automatic renewal is failing.
+const certificateWarningDays = 14;
+
+function tlsCertificateEvidence(tls: NonNullable<PageSnapshot["tls"]>): string {
+  const date = tls.validTo.slice(0, 10);
+  const status =
+    tls.daysRemaining < 0
+      ? `Certificate expired ${date}`
+      : !tls.authorized
+        ? `Certificate not trusted: ${tls.error ?? "unknown reason"}`
+        : `Certificate expires ${date} (${tls.daysRemaining} day${tls.daysRemaining === 1 ? "" : "s"})`;
+  return tls.issuer ? `${status}; issuer ${tls.issuer}` : status;
+}
+
 function hasPlaceholderSocialLinks($: CheerioAPI): boolean {
   return $("a")
     .toArray()
@@ -1076,6 +1091,18 @@ const rules: Rule[] = [
     recommendation: "Serve the public site over HTTPS and redirect plain HTTP traffic to the secure URL.",
     check: ({ snapshot }) => snapshot.finalUrl.startsWith("https://"),
     evidence: ({ snapshot }) => snapshot.finalUrl
+  },
+  {
+    id: "tls-certificate-valid",
+    title: "HTTPS certificate is invalid or about to expire",
+    category: "technical-health",
+    severity: "high",
+    source: "TLS certificate",
+    recommendation:
+      "Renew or fix the site's HTTPS certificate so visitors do not see a security warning, and turn on automatic renewal with your host.",
+    check: ({ snapshot }) =>
+      !snapshot.tls || (snapshot.tls.authorized && snapshot.tls.daysRemaining >= certificateWarningDays),
+    evidence: ({ snapshot }) => (snapshot.tls ? tlsCertificateEvidence(snapshot.tls) : "")
   },
   {
     id: "page-indexable",
@@ -1298,6 +1325,21 @@ const rules: Rule[] = [
     recommendation: "Add a clear booking, appointment, contact, or quote CTA near the main content.",
     check: ({ $ }) => hasPrimaryCta($),
     evidence: () => "No primary booking/contact CTA found"
+  },
+  {
+    id: "contact-form-present",
+    title: "No way to send an enquiry from the page",
+    category: "trust-contact",
+    severity: "medium",
+    source: "Contact options",
+    recommendation:
+      "Add a short enquiry form or a clear link to a contact page so visitors who don't want to call can still reach you.",
+    check: ({ $, snapshot }) =>
+      detectPageForms($, snapshot.finalUrl).enquiryForm ||
+      hasContactOrBookingLink($, snapshot.finalUrl) ||
+      hasLink($, (href) => href.toLowerCase().startsWith("mailto:")),
+    evidence: ({ $, snapshot }) =>
+      `No enquiry form, contact page link, or email link${detectPageForms($, snapshot.finalUrl).newsletterForm ? "; only a newsletter signup form" : ""}`
   },
   {
     id: "placeholder-copy-absent",

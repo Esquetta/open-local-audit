@@ -1,19 +1,25 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
 import {
   compareReports,
+  loadComparisonScreenshots,
   readComparisonReport,
   renderComparisonHtml,
   renderComparisonJson,
-  renderComparisonMarkdown
+  renderComparisonMarkdown,
+  renderComparisonPdf
 } from "../src/compare.js";
 import type { AuditReport } from "../src/types.js";
 
 const tempDirs: string[] = [];
+const tinyPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64"
+);
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
@@ -109,7 +115,7 @@ describe("report comparison", () => {
 
   it("reads a report file or a report directory and rejects other JSON", async () => {
     const dir = tempDir();
-    writeFileSync(join(dir, "open-local-audit-report.json"), `﻿${JSON.stringify(before)}`);
+    writeFileSync(join(dir, "open-local-audit-report.json"), `\uFEFF${JSON.stringify(before)}`);
     writeFileSync(join(dir, "other.json"), JSON.stringify({ hello: "world" }));
     writeFileSync(join(dir, "broken.json"), "{");
 
@@ -124,6 +130,64 @@ describe("report comparison", () => {
     writeFileSync(join(dir, "bad-url.json"), JSON.stringify({ ...before, finalUrl: "example" }));
     await expect(readComparisonReport(join(dir, "bad-date.json"))).rejects.toThrow("is not an Open Local Audit JSON report");
     await expect(readComparisonReport(join(dir, "bad-url.json"))).rejects.toThrow("is not an Open Local Audit JSON report");
+  });
+
+  it("resolves screenshots next to each report and shows them before and after", async () => {
+    const beforeDir = tempDir();
+    const afterDir = tempDir();
+    mkdirSync(join(beforeDir, "artifacts"));
+    writeFileSync(join(beforeDir, "artifacts", "homepage.png"), tinyPng);
+    writeFileSync(join(afterDir, "homepage.png"), "not an image");
+    const shot = (path: string) => [{ label: "Homepage screenshot", path, screenshotPath: path }];
+    writeFileSync(join(beforeDir, "open-local-audit-report.json"), JSON.stringify({ ...before, visualEvidence: shot("artifacts/homepage.png") }));
+    writeFileSync(join(afterDir, "open-local-audit-report.json"), JSON.stringify({ ...after, visualEvidence: shot("homepage.png") }));
+
+    const comparison = compareReports(await readComparisonReport(beforeDir), await readComparisonReport(afterDir));
+    expect(comparison.screenshots).toEqual({
+      before: join(beforeDir, "artifacts", "homepage.png"),
+      after: join(afterDir, "homepage.png")
+    });
+
+    const screenshots = await loadComparisonScreenshots(comparison);
+    expect(screenshots.before?.type).toBe("png");
+    expect(screenshots.after).toBeUndefined();
+
+    const html = renderComparisonHtml(comparison, { screenshots });
+    expect(html).toContain("<h2>Before and After</h2>");
+    expect(html).toContain(`src="data:image/png;base64,${tinyPng.toString("base64")}"`);
+    expect(html).toContain("<p>Not captured</p>");
+    expect(renderComparisonHtml(comparison)).not.toContain("Before and After");
+    expect(renderComparisonMarkdown(comparison)).toContain("- Before: Captured\n- After: Captured");
+    expect(renderComparisonMarkdown(comparison)).not.toContain(beforeDir);
+    expect(renderComparisonMarkdown(compareReports(before, after))).not.toContain("## Screenshots");
+
+    const withShots = await renderComparisonPdf(comparison, { screenshots, brand: { name: "Torut Web", footerText: "Thanks" } });
+    const withoutShots = await renderComparisonPdf(comparison);
+    expect(withShots.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(withShots.toString("latin1")).toMatch(/\/Subtype \/Image/);
+    expect(withoutShots.toString("latin1")).not.toMatch(/\/Subtype \/Image/);
+  });
+
+  it("ignores screenshots outside the report directory and malformed visual evidence", async () => {
+    const outside = tempDir();
+    const reportDir = tempDir();
+    writeFileSync(join(outside, "private.png"), tinyPng);
+    writeFileSync(
+      join(reportDir, "open-local-audit-report.json"),
+      JSON.stringify({
+        ...before,
+        visualEvidence: [
+          { label: "Escapes", path: join(outside, "private.png"), screenshotPath: join(outside, "private.png") },
+          { label: "Relative escape", path: "../private.png", screenshotPath: "../private.png" },
+          { label: "Malformed", path: 42 },
+          null
+        ]
+      })
+    );
+
+    const report = await readComparisonReport(reportDir);
+    expect(report.visualEvidence).toEqual([]);
+    expect(compareReports(report, after).screenshots).toEqual({ before: undefined, after: undefined });
   });
 
   it("writes a comparison from the CLI", () => {
@@ -151,11 +215,28 @@ describe("report comparison", () => {
 
     const badFormat = spawnSync(
       process.execPath,
-      ["--import", "tsx", "src/cli.ts", "compare", beforePath, afterPath, "--format", "pdf"],
+      ["--import", "tsx", "src/cli.ts", "compare", beforePath, afterPath, "--format", "xml"],
       { encoding: "utf8" }
     );
     expect(badFormat.status).toBe(1);
-    expect(badFormat.stderr).toContain("compare --format must be markdown, json, or html");
+    expect(badFormat.stderr).toContain("compare --format must be markdown, json, html, or pdf");
+
+    const pdfToStdout = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "compare", beforePath, afterPath, "--format", "pdf"],
+      { encoding: "utf8" }
+    );
+    expect(pdfToStdout.status).toBe(1);
+    expect(pdfToStdout.stderr).toContain("--out is required when compare --format pdf is used");
+
+    const pdfPath = join(dir, "out", "progress.pdf");
+    const pdf = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "compare", beforePath, afterPath, "--format", "pdf", "--out", pdfPath],
+      { encoding: "utf8" }
+    );
+    expect(pdf.status).toBe(0);
+    expect(readFileSync(pdfPath).subarray(0, 5).toString()).toBe("%PDF-");
 
     const reversed = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "compare", afterPath, beforePath], {
       encoding: "utf8"

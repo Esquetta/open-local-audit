@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { enrichWebsite } from "../src/website-enrichment.js";
 
 const publicResolver = async () => ["93.184.216.34"];
@@ -21,6 +21,31 @@ describe("website enrichment", () => {
     expect(requests).not.toContain("https://shop.example/contact");
     expect(result.status).toBe("success");
     expect(result.contact?.publicEmail).toBe("home@shop.example");
+  });
+  it("reads the homepage certificate from a checked public address", async () => {
+    const tls = { validFrom: "2026-07-01T00:00:00.000Z", validTo: "2026-10-15T00:00:00.000Z", daysRemaining: 5, issuer: "R11", authorized: true };
+    const probeTls = vi.fn(async () => tls);
+    const fetchPage = async (input: string | URL | Request) =>
+      input.toString().endsWith("/robots.txt") ? response("", 404) : response("<title>Shop</title>");
+
+    const probed = await enrichWebsite("https://shop.example/", { resolve: publicResolver, fetch: fetchPage, probeTls });
+    expect(probeTls).toHaveBeenCalledWith("https://shop.example/", expect.any(Number), "93.184.216.34");
+    expect(probed.snapshot?.tls).toEqual(tls);
+
+    let lookups = 0;
+    const rebinding = vi.fn(async () => tls);
+    const rebound = await enrichWebsite("https://shop.example/", {
+      // The page requests see a public address; the lookup before the probe answers with loopback.
+      resolve: async () => (++lookups > 2 ? ["127.0.0.1"] : ["93.184.216.34"]),
+      fetch: fetchPage,
+      probeTls: rebinding
+    });
+    expect(rebound.status).toBe("success");
+    expect(rebinding).not.toHaveBeenCalled();
+    expect(rebound.snapshot?.tls).toBeUndefined();
+
+    expect((await enrichWebsite("http://shop.example/", { resolve: publicResolver, fetch: fetchPage, probeTls })).snapshot?.tls).toBeUndefined();
+    expect((await enrichWebsite("https://shop.example/", { resolve: publicResolver, fetch: fetchPage })).snapshot?.tls).toBeUndefined();
   });
   it("bounds stalled DNS and rejects mapped loopback addresses", async () => {
     const result = await enrichWebsite("https://shop.example/", { timeoutMs: 10, resolve: () => new Promise(() => undefined) });
@@ -125,6 +150,31 @@ describe("website enrichment", () => {
       socialProfiles: ["https://www.instagram.com/shop"]
     });
     expect(result.contact?.contactSource).toContain("https://shop.example/contact");
+  });
+
+  it("keeps the first page with an enquiry form as the contact form", async () => {
+    const form = '<form><input name="name"><textarea name="message"></textarea></form>';
+    const enrich = (homepage: string) =>
+      enrichWebsite("https://shop.example/", {
+        resolve: publicResolver,
+        fetch: async (input) => {
+          const url = input.toString();
+          if (url.endsWith("/robots.txt")) return response("", 404, { "content-type": "text/plain" });
+          if (url.endsWith("/contact")) return response(`<a href="tel:+902125550000">Call</a>${form}`);
+          return response(homepage);
+        }
+      });
+
+    const viaContactPage = await enrich('<a href="/contact">Contact</a>');
+    expect(viaContactPage.contact?.contactFormUrl).toBe("https://shop.example/contact");
+
+    const formOnly = await enrich(form);
+    expect(formOnly.contact).toEqual({
+      contactFormUrl: "https://shop.example/",
+      socialProfiles: [],
+      contactConfidence: "None",
+      contactSource: ""
+    });
   });
 
   it("retains business identities from the homepage and contact page it actually fetched", async () => {

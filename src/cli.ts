@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { auditUrl } from "./audit.js";
 import { readBrandConfig } from "./brand.js";
-import { readBatchInput, runBatchReports } from "./batch.js";
 import {
   compareReports,
+  loadComparisonScreenshots,
   readComparisonReport,
   renderComparisonHtml,
   renderComparisonJson,
-  renderComparisonMarkdown
+  renderComparisonMarkdown,
+  renderComparisonPdf
 } from "./compare.js";
 import { type DiscoverySummary } from "./discovery.js";
-import { runDiscovery } from "./discovery-runner.js";
 import type { DiscoveryRunResult } from "./discovery-runner.js";
 import { defaultDiscoveryCacheDirectory } from "./discovery-cache.js";
 import { shouldFailOnThreshold } from "./exit-policy.js";
@@ -24,7 +24,6 @@ import {
   type ExportValidationFormat,
   type ExportValidationPreset
 } from "./export-validation.js";
-import { writeReportOutputs } from "./output.js";
 import { packageReport } from "./report-pack.js";
 import {
   readLeadKeysFromReviewInput,
@@ -45,14 +44,17 @@ import {
   runWorkflowPreflight
 } from "./workflow-preflight.js";
 import { renderWorkflowPlanJson, renderWorkflowPlanTerminal, runWorkflowPlan } from "./workflow-plan.js";
-import {
-  renderWorkflowStatusJson,
-  renderWorkflowStatusTerminal,
-  runWorkflowStatus
-} from "./workflow-status.js";
-import { runResolvedWorkflow } from "./workflow.js";
+
+// Modules that load cheerio, libphonenumber-js metadata, or pdfkit are imported inside the
+// command actions that need them, so help output and early validation errors start quickly.
 
 const program = new Command().enablePositionalOptions();
+
+// Workflow runs keep reports in a "reports" folder next to the lead CSV; "start" writes them beside it.
+function defaultReportsDir(input: string): string {
+  const reports = join(dirname(input), "reports");
+  return existsSync(reports) ? reports : dirname(input);
+}
 
 function optsWithLocalCliPrecedence(command: Command): Record<string, unknown> {
   const options = command.optsWithGlobals();
@@ -190,6 +192,7 @@ discoveryProgram.action(async (query?: string) => {
       process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
     }
 
+    const { runDiscovery } = await import("./discovery-runner.js");
     const result = await runDiscovery({
       ...cacheOptions,
       provider: options.provider,
@@ -246,6 +249,7 @@ startProgram.action(async () => {
       throw error;
     }
     process.stdout.write("Searching businesses...\n");
+    const { runDiscovery } = await import("./discovery-runner.js");
     const result = await runDiscovery({ ...options, ...cacheOptions });
     printDiscoveryResult(result);
     process.stdout.write(`Prospects: ${options.exportCsv}\nSummary: ${options.summaryJson}\n`);
@@ -304,6 +308,7 @@ workflowProgram.action(async () => {
       }
 
       if (options.status) {
+        const { renderWorkflowStatusJson, renderWorkflowStatusTerminal, runWorkflowStatus } = await import("./workflow-status.js");
         const report = await runWorkflowStatus(config);
         process.stdout.write(
           outputFormat === "json"
@@ -355,6 +360,7 @@ workflowProgram.action(async () => {
       process.stderr.write("open-local-audit: Google Maps Platform billing may apply for --provider google-places\n");
     }
 
+    const { runResolvedWorkflow } = await import("./workflow.js");
     const summary = await runResolvedWorkflow(resolvedConfig, {}, { resume: options.resume });
     process.stdout.write("Workflow completed\n");
     process.stdout.write(`Discovered: ${summary.discoveredLeads}\n`);
@@ -443,24 +449,31 @@ const compareProgram = program
   .description("Compare two JSON reports for the same site to show fixed, remaining, and new findings.")
   .argument("<before>", "earlier JSON report file or report directory")
   .argument("<after>", "later JSON report file or report directory")
-  .option("-f, --format <format>", "comparison format: markdown, json, or html", "markdown")
+  .option("-f, --format <format>", "comparison format: markdown, json, html, or pdf", "markdown")
   .option("-o, --out <path>", "write the comparison to a file instead of stdout")
   .option("--brand-config <path>", "read report branding from a JSON file")
   .action(async (beforePath: string, afterPath: string) => {
     try {
       const options = compareProgram.opts() as { format: string; out?: string; brandConfig?: string };
-      if (!["markdown", "json", "html"].includes(options.format)) {
-        throw new Error("compare --format must be markdown, json, or html");
+      if (!["markdown", "json", "html", "pdf"].includes(options.format)) {
+        throw new Error("compare --format must be markdown, json, html, or pdf");
+      }
+
+      if (options.format === "pdf" && !options.out) {
+        throw new Error("--out is required when compare --format pdf is used");
       }
 
       const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
       const comparison = compareReports(await readComparisonReport(beforePath), await readComparisonReport(afterPath));
+      const screenshots = ["html", "pdf"].includes(options.format) ? await loadComparisonScreenshots(comparison) : undefined;
       const content =
         options.format === "json"
           ? renderComparisonJson(comparison)
           : options.format === "html"
-            ? renderComparisonHtml(comparison, { brand })
-            : renderComparisonMarkdown(comparison, { brand });
+            ? renderComparisonHtml(comparison, { brand, screenshots })
+            : options.format === "pdf"
+              ? await renderComparisonPdf(comparison, { brand, screenshots })
+              : renderComparisonMarkdown(comparison, { brand });
 
       if (!options.out) {
         process.stdout.write(content);
@@ -512,11 +525,15 @@ const shortlistProgram = program
   .option("--sort <sort>", "shortlist sort: opportunity-desc, score-desc, company-asc, last-reviewed-asc, contact-confidence-desc, priority-desc, or source-asc", "opportunity-desc")
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
+  .option("--pitch-brief <path>", "write Markdown pitch notes for each shortlisted lead from its audit report")
+  .option("--reports-dir <path>", "resolve lead report paths for --pitch-brief from this directory (default: reports next to --input)")
   .action(async () => {
     const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
       out?: string;
       reviewCsv?: string;
+      pitchBrief?: string;
+      reportsDir?: string;
       top: string;
       minOpportunityScore?: string;
       minScore?: string;
@@ -558,6 +575,10 @@ const shortlistProgram = program
         throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
+      if (options.reportsDir && !options.pitchBrief) {
+        throw new Error("--reports-dir is only used with --pitch-brief");
+      }
+
       const top = Number(options.top);
       const minOpportunityScore =
         options.minOpportunityScore === undefined ? undefined : Number(options.minOpportunityScore);
@@ -568,6 +589,9 @@ const shortlistProgram = program
         out: options.out,
         summaryJson: options.summaryJson,
         reviewCsv: options.reviewCsv,
+        pitchBrief: options.pitchBrief
+          ? { out: options.pitchBrief, reportsDir: options.reportsDir ?? defaultReportsDir(options.input) }
+          : undefined,
         format,
         shortlist: {
           top,
@@ -602,6 +626,9 @@ const shortlistProgram = program
       process.stdout.write(`Output: ${options.out}\n`);
       if (options.summaryJson) {
         process.stdout.write(`Summary: ${options.summaryJson}\n`);
+      }
+      if (options.pitchBrief) {
+        process.stdout.write(`Pitch brief: ${options.pitchBrief}\n`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -787,6 +814,7 @@ program
           throw new Error("--format pdf is only supported for single URL audits");
         }
 
+        const [{ auditUrl }, { readBatchInput, runBatchReports }] = await Promise.all([import("./audit.js"), import("./batch.js")]);
         const urls = await readBatchInput(options.input);
         const results = await runBatchReports(urls, {
           format: options.format,
@@ -849,6 +877,7 @@ program
 
       const screenshotOutDir = options.screenshot ? options.outDir : undefined;
       const url = inputUrlSchema.parse(rawUrl);
+      const [{ auditUrl }, { writeReportOutputs }] = await Promise.all([import("./audit.js"), import("./output.js")]);
       const report = await auditUrl(url, {
         ...auditOptions,
         screenshotPath: screenshotOutDir ? join(screenshotOutDir, "artifacts", "homepage.png") : undefined,

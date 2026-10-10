@@ -25,6 +25,15 @@ describe("runDiscovery", () => {
       expect(enrich).toHaveBeenCalledTimes(2);
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
+  it("applies the TLS rule to the certificate that website enrichment read", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "open-local-audit-discovery-tls-"));
+    try {
+      vi.spyOn(overture, "fetchOvertureCandidates").mockResolvedValue([{ source: "overture", sourceId: "place-tls", label: "Sample", websiteUri: "https://sample.test" }]);
+      vi.spyOn(websiteEnrichment, "enrichWebsite").mockResolvedValue({ status: "success", snapshot: { url: "https://sample.test", finalUrl: "https://sample.test/", statusCode: 200, headers: {}, html: "<html><title>Sample</title><body>Sample</body></html>", tls: { validFrom: "2026-07-01T00:00:00.000Z", validTo: "2026-10-15T00:00:00.000Z", daysRemaining: 5, issuer: "R11", authorized: true } }, pagesFetched: 1, durationMs: 1, sourceUrls: ["https://sample.test/"] });
+      const result = await runDiscovery({ provider: "overture", query: "dental", bbox: "28.8,40.9,29.1,41.1", profile: "dental", exportCsv: join(dir, "leads.csv"), outDir: join(dir, "reports"), dryRun: false, maxAudits: 1, concurrency: 1 });
+      expect(result.rows[0].topFinding).toBe("HTTPS certificate is invalid or about to expire");
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
   it("passes an explicit cache location and exposes original source retrieval time", async () => {
     const dir = await mkdtemp(join(tmpdir(), "open-local-audit-cache-runner-"));
     try {

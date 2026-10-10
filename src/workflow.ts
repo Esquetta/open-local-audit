@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { runDiscovery, type DiscoveryRunResult } from "./discovery-runner.js";
+import type { DiscoveryRunResult, runDiscovery } from "./discovery-runner.js";
 import { packageReport, type ReportPackResult } from "./report-pack.js";
 import { summarizeReviewCsvFile, type ReviewSummary } from "./review.js";
 import { runShortlistReport, type ShortlistRunOptions } from "./shortlist-runner.js";
@@ -136,7 +136,8 @@ export class WorkflowRunError extends Error {
 
 const defaultDependencies: WorkflowDependencies = {
   readWorkflowConfig,
-  runDiscovery,
+  // Loaded on first use so status and checkpoint inspection do not pull in the audit and discovery stack.
+  runDiscovery: async (options) => (await import("./discovery-runner.js")).runDiscovery(options),
   runShortlistReport,
   summarizeReviewCsvFile,
   packageReport,

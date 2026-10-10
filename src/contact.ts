@@ -1,8 +1,23 @@
-import { load } from "cheerio";
+import { load, type CheerioAPI } from "cheerio";
 import type { PublicContact } from "./types.js";
 
 const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-const contactPathPattern = /(?:^|\/)(contact|contact-us|iletisim|reach-us|booking|appointment)(?:\/|$)/i;
+// Contact extraction keeps its narrow patterns because a contact page link raises contact confidence and picks the
+// outreach channel; the broader link patterns below only decide whether a visitor can reach the business.
+const contactPagePathPattern = /(?:^|\/)(contact|contact-us|iletisim|reach-us|booking|appointment)(?:\/|$)/i;
+const contactPageTextPattern = /contact|iletisim|appointment|booking/i;
+const contactPathPattern =
+  /(?:^|\/)(contact|contact-us|get-in-touch|enquir(?:e|y|ies)|iletisim|reach-us|book|booking|appointments?)(?:\.[a-z]+)?(?:\/|$)/i;
+const contactTextPattern = /contact|get in touch|enquir|iletisim|iletişim|appointment|\bbook(?:ings?)?\b/i;
+const bookingPathPattern = /(?:^|[/._-])(book|booking|bookings|appointments?|reserve|reservations?)(?:[/._-]|$)/i;
+const bookingTextPattern = /\b(?:book(?:ings?)?|appointments?|reserve|reservations?)\b/i;
+const bookingHostPattern =
+  /dentally|setmore|calendly|fresha|treatwell|booksy|simplybook|acuityscheduling|mindbody|resdiary|opentable|zocdoc|vagaro|gettimely|phorest|youcanbook/i;
+const embeddedFormPattern = /forms\.gle|docs\.google\.com\/forms|typeform\.com|jotform|formstack|hsforms|wufoo|cognitoforms|tally\.so/i;
+const textInputTypes = new Set(["", "text", "email", "tel"]);
+const ignoredInputTypes = new Set(["hidden", "submit", "button", "reset", "image", "checkbox", "radio"]);
+const enquiryFieldPattern = /name|phone|e-?mail|message/i;
+const newsletterCuePattern = /newsletter|subscri|mailchimp|list-manage/i;
 const socialHosts = ["facebook.com", "instagram.com", "linkedin.com", "x.com", "twitter.com", "tiktok.com", "youtube.com"];
 const placeholderSocialPattern = /\/(yourbusiness|example|placeholder|your-company|yourcompany)(?:\/?$)/i;
 
@@ -62,6 +77,119 @@ function isPlaceholderSocial(url: string): boolean {
   } catch {
     return true;
   }
+}
+
+function isContactLink(url: string, text: string): boolean {
+  return contactPathPattern.test(new URL(url).pathname) || contactTextPattern.test(text);
+}
+
+function siteHost(url: string): string {
+  return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+}
+
+function isBookingLink(url: string, text: string): boolean {
+  const parsed = new URL(url);
+  return bookingHostPattern.test(parsed.hostname) || bookingPathPattern.test(parsed.pathname) || bookingTextPattern.test(text);
+}
+
+// Links to another page of the same site (or a subdomain) that look like a contact or booking page, or
+// off-site links to a booking page. An off-site link that only says "contact" (such as a web agency footer) does not count.
+// Anchors back to the audited page itself are skipped: that page's own forms and email links are checked directly.
+export function hasContactOrBookingLink($: CheerioAPI, pageUrl: string): boolean {
+  const page = normalizeUrl(pageUrl, pageUrl);
+  if (!page) {
+    return false;
+  }
+
+  const host = siteHost(page);
+  return $("a[href]")
+    .toArray()
+    .some((element) => {
+      const url = normalizeUrl($(element).attr("href")?.trim() ?? "", page);
+      if (!url || url === page) {
+        return false;
+      }
+
+      const linkHost = siteHost(url);
+      const text = $(element).text().trim();
+      return linkHost === host || linkHost.endsWith(`.${host}`) ? isContactLink(url, text) : isBookingLink(url, text);
+    });
+}
+
+export interface PageForms {
+  enquiryForm: boolean;
+  newsletterForm: boolean;
+}
+
+// An enquiry form has a message box, or at least two text-like fields that look like contact details.
+// Search forms and newsletter signups are not enquiry forms; embedded form providers count as one.
+export function detectPageForms($: CheerioAPI, pageUrl: string): PageForms {
+  let enquiryForm = false;
+  let newsletterForm = false;
+
+  for (const form of $("form").toArray()) {
+    const $form = $(form);
+    const fields = $form
+      .find("input")
+      .toArray()
+      .map((input) => ({
+        type: ($(input).attr("type") ?? "").trim().toLowerCase(),
+        name: $(input).attr("name") ?? "",
+        label: `${$(input).attr("name") ?? ""} ${$(input).attr("id") ?? ""}`
+      }))
+      .filter((input) => !ignoredInputTypes.has(input.type));
+    const textFields = fields.filter((input) => textInputTypes.has(input.type));
+    // reCAPTCHA/hCaptcha inject a hidden response textarea into rendered pages; it is not a message box.
+    const hasTextarea = $form.find("textarea").not('[name*="captcha"], [id*="captcha"]').length > 0;
+    const isEmail = (input: (typeof fields)[number]) => input.type === "email" || /e-?mail/i.test(input.label);
+
+    const isSearch =
+      $form.closest('[role="search"]').length > 0 ||
+      /search/i.test($form.attr("action") ?? "") ||
+      (fields.length === 1 && (fields[0].type === "search" || /^(q|s|search)$/i.test(fields[0].name)));
+    if (isSearch) {
+      continue;
+    }
+
+    const newsletterCue = [
+      $form.attr("action"),
+      $form.attr("id"),
+      $form.attr("class"),
+      ...$form
+        .find('button, input[type="submit"]')
+        .toArray()
+        .map((button) => `${$(button).text()} ${$(button).attr("value") ?? ""}`)
+    ].join(" ");
+    const isNewsletter =
+      !hasTextarea &&
+      ((fields.length === 1 && isEmail(fields[0])) || (newsletterCuePattern.test(newsletterCue) && textFields.some(isEmail)));
+    if (isNewsletter) {
+      newsletterForm = true;
+      continue;
+    }
+
+    if (
+      hasTextarea ||
+      (textFields.length >= 2 &&
+        textFields.some((input) => input.type === "email" || input.type === "tel" || enquiryFieldPattern.test(input.label)))
+    ) {
+      enquiryForm = true;
+    }
+  }
+
+  const embeddedForm = $("iframe[src], script[src]")
+    .toArray()
+    .some((element) => {
+      const src = normalizeUrl($(element).attr("src")?.trim() ?? "", pageUrl);
+      if (!src) {
+        return false;
+      }
+
+      const url = new URL(src);
+      return embeddedFormPattern.test(`${url.hostname}${url.pathname}`);
+    });
+
+  return { enquiryForm: enquiryForm || embeddedForm, newsletterForm };
 }
 
 function confidenceFor(contact: Omit<PublicContact, "contactConfidence" | "contactSource">, sourceCount: number): PublicContact["contactConfidence"] {
@@ -127,7 +255,7 @@ export function extractPublicContact(html: string, finalUrl: string): PublicCont
     }
 
     const text = $(element).text().trim();
-    if (contactPathPattern.test(new URL(url).pathname) || /contact|iletisim|appointment|booking/i.test(text)) {
+    if (contactPagePathPattern.test(new URL(url).pathname) || contactPageTextPattern.test(text)) {
       contactPageUrls.push(url);
       sources.push("contact-page");
     }
@@ -146,6 +274,7 @@ export function extractPublicContact(html: string, finalUrl: string): PublicCont
     publicPhone: unique(phones)[0],
     whatsappUrl: unique(whatsappUrls)[0],
     contactPageUrl: unique(contactPageUrls)[0],
+    contactFormUrl: detectPageForms($, finalUrl).enquiryForm ? finalUrl : undefined,
     socialProfiles: unique(socialProfiles)
   };
   const uniqueSources = unique(sources);

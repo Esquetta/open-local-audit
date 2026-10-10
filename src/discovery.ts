@@ -82,6 +82,7 @@ export interface ProspectExportRow {
   error?: string;
   dotnetStack?: DotnetStack["stack"];
   dotnetLegacyFramework?: boolean;
+  chainReason?: string;
   address?: string;
   country?: string;
   locality?: string;
@@ -1116,18 +1117,99 @@ function areaCodeMismatches(inputs: ProspectRowInput[]): Map<ProspectRowInput, s
   return mismatches;
 }
 
+const publicSectorDomains = ["nhs.uk", "gov.uk", "gov", "police.uk", "ac.uk", "sch.uk"];
+// Social, link-in-bio, directory, site-builder, and booking hosts give each business its own page on a shared host,
+// so sharing the host or having a deep path says nothing about being a chain. Such leads usually lack a real website.
+const hostedPageDomains = [
+  ...sharedProfileHostnames,
+  "facebook.com",
+  "instagram.com",
+  "linkedin.com",
+  "x.com",
+  "twitter.com",
+  "tiktok.com",
+  "youtube.com",
+  "sites.google.com",
+  "google.com",
+  "yell.com",
+  "tripadvisor.com",
+  "tripadvisor.co.uk",
+  "booking.com",
+  "treatwell.co.uk",
+  "fresha.com",
+  "booksy.com",
+  "setmore.com",
+  "calendly.com",
+  "opentable.com",
+  "opentable.co.uk",
+  "resdiary.com"
+];
+
+function isHostedPage(host: string): boolean {
+  return hostedPageDomains.some((domain) => host === domain || host.endsWith(`.${domain}`));
+}
+
+function websiteUrlOf(input: ProspectRowInput): URL | undefined {
+  if (!input.resolution.hasWebsite || !input.resolution.websiteUrl) return undefined;
+  try {
+    return new URL(input.resolution.websiteUrl);
+  } catch {
+    return undefined;
+  }
+}
+
+// Chain branches and public bodies rarely buy small-business website work. The strongest signal wins: a
+// public-sector domain, then one website host shared by several leads in this search, then a deep branch page.
+function chainReasons(inputs: ProspectRowInput[]): Map<ProspectRowInput, string> {
+  const leads = inputs.flatMap((input) => {
+    const url = websiteUrlOf(input);
+    return url ? [{ input, url, host: url.hostname.toLowerCase().replace(/^www\./, "") }] : [];
+  });
+  // Count distinct business names over distinct leads per host, so one record listed twice or two source records
+  // for the same business do not look like a chain.
+  const namesByHost = new Map<string, Map<string, string>>();
+  for (const { input, host } of leads) {
+    const key = stableLeadKey(input);
+    const names = namesByHost.get(host) ?? new Map<string, string>();
+    if (!names.has(key)) names.set(key, normalizeLabel(input.candidate.label) ?? key);
+    namesByHost.set(host, names);
+  }
+  const reasons = new Map<ProspectRowInput, string>();
+  for (const { input, url, host } of leads) {
+    const publicDomain = publicSectorDomains.find((domain) => host === domain || host.endsWith(`.${domain}`));
+    const hosted = isHostedPage(host);
+    const sharedCount = hosted ? 0 : new Set(namesByHost.get(host)?.values()).size;
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (/^[a-z]{2}(-[a-z]{2})?$/i.test(segments[0] ?? "")) segments.shift();
+    if (/^index\.(html|php)$/i.test(segments.at(-1) ?? "")) segments.pop();
+    const reason = publicDomain
+      ? `Website is on a public-sector domain (${publicDomain}); this is not a small-business lead`
+      : sharedCount >= 2
+        ? `${sharedCount} leads in this search share ${host}; this looks like a multi-location brand`
+        : !hosted && segments.length >= 2
+          ? `Website URL is a branch page on a larger site (/${segments[0]}/…)`
+          : undefined;
+    if (reason) reasons.set(input, reason);
+  }
+  return reasons;
+}
+
 export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow[] {
   const locationMismatches = areaCodeMismatches(inputs);
+  const chains = chainReasons(inputs);
   return inputs.map((input) => {
     const locationMismatch = locationMismatches.get(input);
+    const chainReason = chains.get(input);
     if (input.audit?.identity?.status === "conflict") {
       input = { ...input, audit: { ...input.audit, status: "failed", contact: undefined, dotnetStack: undefined, score: undefined, topFinding: undefined, reportPath: undefined, error: input.audit.error ?? "Website identity conflicts with the source; manual review is required." } };
     }
     const audit = input.audit ?? { status: "not-audited" as const };
     const basePriority = priorityFor(input);
-    const priority: Pick<ProspectExportRow, "priority" | "nextAction"> = locationMismatch
-      ? { priority: basePriority.priority === "low" ? "low" : "medium", nextAction: "Confirm the business location before outreach; its phone area code does not match this search." }
-      : basePriority;
+    const priority: Pick<ProspectExportRow, "priority" | "nextAction"> = chainReason
+      ? { priority: "low", nextAction: "Skip unless you are targeting the head office; this lead looks like a chain branch or public body." }
+      : locationMismatch
+        ? { priority: basePriority.priority === "low" ? "low" : "medium", nextAction: "Confirm the business location before outreach; its phone area code does not match this search." }
+        : basePriority;
     const enrichment = enrichmentFor(input);
     const handoff = contactHandoffFor(input);
     const contact = prospectContact(input);
@@ -1148,8 +1230,8 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       auditStatus: audit.status,
       score: audit.score,
       topFinding: audit.topFinding,
-      opportunityScore: opportunityScoreFor(input),
-      opportunityReasons: locationMismatch ? [...opportunityReasonsFor(input), locationMismatch] : opportunityReasonsFor(input),
+      opportunityScore: chainReason ? Math.min(opportunityScoreFor(input), 20) : opportunityScoreFor(input),
+      opportunityReasons: [...opportunityReasonsFor(input), ...[locationMismatch, chainReason].filter((reason) => reason !== undefined)],
       ...enrichment,
       ...details,
       ...(input.candidate.source === "overture" ? {
@@ -1173,7 +1255,8 @@ export function buildProspectRows(inputs: ProspectRowInput[]): ProspectExportRow
       reportPath: audit.reportPath,
       error: audit.error ?? input.resolution.reason,
       dotnetStack: audit.dotnetStack?.stack,
-      dotnetLegacyFramework: audit.dotnetStack?.legacyFramework
+      dotnetLegacyFramework: audit.dotnetStack?.legacyFramework,
+      chainReason
     };
   });
 }
@@ -1308,6 +1391,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
     "error",
     "dotnetStack",
     "dotnetLegacyFramework",
+    "chainReason",
     ...detailColumns
   ];
   const body = rows.map((row) =>
@@ -1348,6 +1432,7 @@ export function renderProspectRowsCsv(rows: ProspectExportRow[], preset: Prospec
       row.error ?? "",
       row.dotnetStack ?? "",
       row.dotnetLegacyFramework === undefined ? "" : row.dotnetLegacyFramework ? "yes" : "no",
+      row.chainReason ?? "",
       ...detailColumns.map((key) => key === "sourceProvenance" || key === "identityReasons" || key === "identityEvidence" ? JSON.stringify(row[key] ?? []) : String(row[key] ?? ""))
     ]
       .map(escapeCsvCell)

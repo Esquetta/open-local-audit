@@ -79,7 +79,7 @@ node dist/cli.js discover dental --city Istanbul --country TR --profile dental -
 
 `--dry-run` writes source data without visiting business websites. Otherwise `--max-audits` bounds the sample. Overture audit concurrency is capped at eight; requests to the same business hostname are serialized.
 
-Each site receives a static scan of at most three HTML pages: its homepage and linked same-origin contact/about pages. The crawler checks robots rules, limits response size, has a total timeout, validates public destinations, and pins DNS for production HTTP requests. It does not log in, submit forms, bypass challenges, send messages, or open a browser. JavaScript-only contact data can remain unavailable.
+Each site receives a static scan of at most three HTML pages: its homepage and linked same-origin contact/about pages. The crawler checks robots rules, limits response size, has a total timeout, validates public destinations, and pins DNS for production HTTP requests. It does not log in, submit forms, bypass challenges, send messages, or open a browser. JavaScript-only contact data can remain unavailable. For an HTTPS homepage it also opens one TLS handshake to an address that passes the same public-address check, only to read the certificate's expiry and trust status for the `tls-certificate-valid` rule.
 
 Blocked/failed sites are recorded. If an optional secondary page fails, usable homepage data is retained with a warning. Redirects beyond the equivalent `www` host are conservatively blocked and may require manual review.
 
