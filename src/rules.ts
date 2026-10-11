@@ -199,6 +199,8 @@ function nodeIdKey(node: JsonLdNode, base: string): string | undefined {
 }
 
 // The key of a node reference such as {"@id": "#hours"} found in one of the owner node's properties.
+// As in JSON-LD expansion, an object holding only @id keeps the owner's context even when that context
+// does not propagate; any other nested object returns to the previous context.
 function referenceKey(reference: unknown, owner: JsonLdNode, base: string): string | undefined {
   const scope = nodeScopes.get(owner);
   if (!scope || !hasObjectField(reference)) {
@@ -206,9 +208,9 @@ function referenceKey(reference: unknown, owner: JsonLdNode, base: string): stri
   }
 
   const fields = reference as JsonLdNode;
-  return typeof fields["@id"] === "string"
-    ? nodeKey(fields["@id"], applyTypeContext(scope.nestedContext, fields["@context"]), scope.block, base)
-    : undefined;
+  const idOnly = Object.keys(fields).length === 1;
+  const context = idOnly ? scope.context : applyTypeContext(scope.nestedContext, fields["@context"]);
+  return typeof fields["@id"] === "string" ? nodeKey(fields["@id"], context, scope.block, base) : undefined;
 }
 
 // Every JSON-LD node with each @id, embedded ones included, keyed as above; nodes sharing an @id

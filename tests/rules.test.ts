@@ -533,6 +533,18 @@ describe("audit rules", () => {
         ]
       })
     ).not.toContain("localbusiness-schema-contact-fields");
+
+    const nonPropagating = (reference: object) =>
+      schemaFindings({
+        "@context": { ...context, "@propagate": false },
+        ...base,
+        openingHoursSpecification: reference,
+        "@included": [{ "@id": "https://example.test/hours/weekly", opens: "09:00" }]
+      });
+    expect(nonPropagating({ "@id": "h:weekly" })).not.toContain("localbusiness-schema-contact-fields");
+    expect(nonPropagating({ "@id": "h:weekly", "@type": "OpeningHoursSpecification" })).toContain(
+      "localbusiness-schema-contact-fields"
+    );
   });
 
   it("keeps blank node labels local to their JSON-LD block", () => {
