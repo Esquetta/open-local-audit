@@ -158,12 +158,13 @@ const localBusinessTypes = new Set([
 
 // A term definition as written in a local context: the IRI value (null when the term is explicitly
 // unmapped, undefined when an expanded definition omits @id and the IRI comes from @vocab), whether
-// it is a simple string, and whether "@prefix": true marks it as a prefix.
-type RawTermDefinition = { iri: string | null | undefined; simple: boolean; prefix: boolean };
+// it is a simple string, whether "@prefix": true marks it as a prefix, and its property-scoped @context.
+type RawTermDefinition = { iri: string | null | undefined; simple: boolean; prefix: boolean; scopedContext?: unknown };
 
-// A processed term definition: its fully expanded IRI, frozen when its context was applied, and
-// whether it may be used as the prefix of a compact IRI such as "schema:Dentist".
-type TermDefinition = { iri: string | null; prefix: boolean };
+// A processed term definition: its fully expanded IRI, frozen when its context was applied, whether it
+// may be used as the prefix of a compact IRI such as "schema:Dentist", and the @context that applies to
+// values of the property it names.
+type TermDefinition = { iri: string | null; prefix: boolean; scopedContext?: unknown };
 
 // The parts of a JSON-LD active context that decide which IRI a @type or @id expands to.
 export type JsonLdTypeContext = {
@@ -197,7 +198,7 @@ function rawTermDefinition(definition: unknown): RawTermDefinition | undefined {
     const fields = definition as Record<string, unknown>;
     const id = fields["@id"];
     if (id === null || id === undefined || typeof id === "string") {
-      return { iri: id, simple: false, prefix: fields["@prefix"] === true };
+      return { iri: id, simple: false, prefix: fields["@prefix"] === true, scopedContext: fields["@context"] };
     }
   }
 
@@ -235,7 +236,7 @@ function resolveTerm(
         : (expandIri(raw.iri, context, local, nested) ?? null);
   // Follows JSON-LD 1.1: a term is a prefix with "@prefix": true, or when it is a simple string term
   // whose expanded IRI ends with a gen-delim character.
-  return { iri, prefix: raw.prefix || (raw.simple && iri !== null && genDelimEnd.test(iri)) };
+  return { iri, prefix: raw.prefix || (raw.simple && iri !== null && genDelimEnd.test(iri)), scopedContext: raw.scopedContext };
 }
 
 // Expands a term, compact IRI, or absolute IRI.

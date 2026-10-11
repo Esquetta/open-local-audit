@@ -198,10 +198,11 @@ function nodeIdKey(node: JsonLdNode, base: string): string | undefined {
   return scope && typeof node["@id"] === "string" ? nodeKey(node["@id"], scope.context, scope.block, base) : undefined;
 }
 
-// The key of a node reference such as {"@id": "#hours"} found in one of the owner node's properties.
-// As in JSON-LD expansion, an object holding only @id keeps the owner's context even when that context
-// does not propagate; any other nested object returns to the previous context.
-function referenceKey(reference: unknown, owner: JsonLdNode, base: string): string | undefined {
+// The key of a node reference such as {"@id": "#hours"} found in the owner node's property. As in JSON-LD
+// expansion, an object holding only @id keeps the owner's context even when that context does not
+// propagate, while any other nested object returns to the previous context; the property term's own
+// scoped @context then applies, and finally the reference's own @context.
+function referenceKey(reference: unknown, owner: JsonLdNode, property: string, base: string): string | undefined {
   const scope = nodeScopes.get(owner);
   if (!scope || !hasObjectField(reference)) {
     return undefined;
@@ -209,7 +210,8 @@ function referenceKey(reference: unknown, owner: JsonLdNode, base: string): stri
 
   const fields = reference as JsonLdNode;
   const idOnly = Object.keys(fields).length === 1;
-  const context = idOnly ? scope.context : applyTypeContext(scope.nestedContext, fields["@context"]);
+  const propertyContext = applyTypeContext(idOnly ? scope.context : scope.nestedContext, scope.context.terms.get(property)?.scopedContext);
+  const context = idOnly ? propertyContext : applyTypeContext(propertyContext, fields["@context"]);
   return typeof fields["@id"] === "string" ? nodeKey(fields["@id"], context, scope.block, base) : undefined;
 }
 
@@ -242,7 +244,7 @@ function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNod
   return (
     stringValues(node.openingHours).length > 0 ||
     specifications.some((specification) => {
-      const reference = referenceKey(specification, node, base);
+      const reference = referenceKey(specification, node, "openingHoursSpecification", base);
       const referenced = reference === undefined ? [] : (nodesById.get(reference) ?? []);
       return hasOpeningHoursData(specification) || referenced.some(hasOpeningHoursData);
     })
@@ -938,20 +940,25 @@ function streetAddressVisible(streetAddress: string, regions: string[][]): boole
   });
 }
 
-function localBusinessNapMismatches($: CheerioAPI): string[] {
+// As with the contact fields, the business's telephone and address may sit on any node sharing its @id.
+function localBusinessNapMismatches($: CheerioAPI, snapshot: PageSnapshot): string[] {
   const nodes = localBusinessNodes($);
   if (nodes.length === 0) {
     return [];
   }
 
   const index = jsonLdIndex($);
+  const base = documentBase($, snapshot);
+  const nodesById = jsonLdNodesById($, base);
   const body = visibleBody($);
   const regions = visibleAddressRegions($, body);
   const mismatches: string[] = [];
 
   for (const node of nodes) {
-    for (const telephone of stringValues(node.telephone)) {
-      const country = schemaCountry(node, index) ?? parsePhoneNumberFromString(telephone.trim())?.country;
+    const fragments = nodeFragments(node, nodesById, base);
+    const fragmentCountry = fragments.map((fragment) => schemaCountry(fragment, index)).find((code) => code !== undefined);
+    for (const telephone of fragments.flatMap((fragment) => stringValues(fragment.telephone))) {
+      const country = fragmentCountry ?? parsePhoneNumberFromString(telephone.trim())?.country;
       const phones = visiblePhones($, body, country);
       if (phones.length === 0) {
         continue;
@@ -970,7 +977,7 @@ function localBusinessNapMismatches($: CheerioAPI): string[] {
     }
 
     if (regions.length > 0) {
-      for (const streetAddress of streetAddresses(node, index)) {
+      for (const streetAddress of fragments.flatMap((fragment) => streetAddresses(fragment, index))) {
         if (!streetAddressVisible(streetAddress, regions)) {
           mismatches.push(`Schema streetAddress "${streetAddress.trim()}" not found in visible page text`);
         }
@@ -1416,8 +1423,8 @@ const rules: Rule[] = [
     source: "JSON-LD",
     recommendation:
       "Make the LocalBusiness schema telephone and streetAddress match the phone number and address shown on the page, so search engines and customers see one consistent listing.",
-    check: ({ $ }) => localBusinessNapMismatches($).length === 0,
-    evidence: ({ $ }) => localBusinessNapMismatches($).join("; ")
+    check: ({ $, snapshot }) => localBusinessNapMismatches($, snapshot).length === 0,
+    evidence: ({ $, snapshot }) => localBusinessNapMismatches($, snapshot).join("; ")
   },
   {
     id: "organization-schema-present",
@@ -1640,22 +1647,42 @@ export const ruleCount = rules.length;
 
 // Real sites can mention these phrases, so only short pages count as placeholders. Maintenance copy must be
 // about the whole site ("Website temporarily down", "Our site is offline") or open the page ("Under maintenance."), so a short page
-// saying "Our booking system is temporarily unavailable" keeps its normal audit.
+// saying "Our booking system is temporarily unavailable" keeps its normal audit. Conditional copy such as
+// "If our site is offline, call us" describes a fallback, not the site's state.
 const placeholderTextLimit = 600;
 const maintenanceCopy =
   /(?:^|[.!?]\s+|\b(?:our|this|the) )(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|^(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b/i;
 const parkedCopy =
   /\b(?:(?:this )?domain (?:name )?(?:may be|is) for sale|buy this domain|domain is parked|parked (?:free,? )?(?:courtesy of|by)|this domain has been registered)\b/i;
+const conditionalWords = /\b(?:if|when|whenever|unless|in case|should)\b/i;
+
+// The first maintenance notice whose sentence is not conditional; "If for any reason our site is offline,
+// call us" describes a fallback, not the site's state.
+function maintenanceNotice(text: string): RegExpMatchArray | undefined {
+  for (const match of text.matchAll(new RegExp(maintenanceCopy.source, "gi"))) {
+    // A match opening with sentence punctuation starts a new sentence, so nothing before it applies.
+    const sentence = /^[.!?]/.test(match[0]) ? "" : (text.slice(0, match.index).split(/[.!?]/).pop() ?? "");
+    if (!conditionalWords.test(`${sentence} ${match[0]}`)) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
 
 export function detectPlaceholderPage(snapshot: PageSnapshot): Finding | undefined {
   const $ = load(snapshot.html);
-  const text = `${$("title").text()} ${collapsedText(visibleBody($))}`.replace(/\s+/g, " ").trim();
+  const title = $("title").text().replace(/\s+/g, " ").trim();
+  const body = collapsedText(visibleBody($));
+  const text = `${title} ${body}`.trim();
   if (text.length > placeholderTextLimit) {
     return undefined;
   }
 
+  // The title and body are matched separately, so a notice opening the body is not read as continuing the
+  // title ("Acme Dental" then "Site is temporarily offline.").
   const parked = text.match(parkedCopy);
-  const maintenance = parked ? undefined : text.match(maintenanceCopy);
+  const maintenance = parked ? undefined : (maintenanceNotice(body) ?? maintenanceNotice(title));
   const match = parked ?? maintenance;
   if (!match) {
     return undefined;

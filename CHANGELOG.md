@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## Unreleased
+
+- `localbusiness-schema-contact-fields` applies the `@context` scoped to the `openingHoursSpecification` term when it resolves an hours reference such as `{"@id": "h:weekly"}`, so a business whose hours prefix is defined there no longer gets a false missing-fields finding.
+- `localbusiness-schema-nap-consistency` reads the telephone and street address from every JSON-LD node that shares the business's `@id`, as the contact-fields rule does, so a mismatching phone or address on a separate fragment is now reported.
+- `website-placeholder` matches the page title and visible text separately, so "Site is temporarily offline." after an unpunctuated title is detected, and it ignores conditional copy such as "If our site is offline, call us".
+
 ## v0.78.0 - 2026-10-11
 
 - The `localbusiness-schema-present`, `localbusiness-schema-contact-fields`, and `localbusiness-schema-nap-consistency` rules now recognise schema.org LocalBusiness subtypes such as `Dentist`, `Attorney`, `MedicalClinic`, `Ophthalmology`, `Restaurant`, and `Plumber` (every LocalBusiness descendant in schema.org 30.1). Types are expanded through the page's JSON-LD `@context` (`@vocab`, including a compact `@vocab`, prefixes with JSON-LD 1.1 prefix rules, term definitions, including ones that take their IRI from `@vocab`, `null` resets, and `@propagate`), so `Dentist` under the schema.org context, `schema:Dentist`, and `https://schema.org/Dentist` match, while types that expand to another vocabulary do not. Pages without any `@context` still read bare and `schema:` types as schema.org types. Pages that use only a subtype no longer get a false "LocalBusiness structured data is missing" finding, and their schema telephone, address, and opening hours are now checked.

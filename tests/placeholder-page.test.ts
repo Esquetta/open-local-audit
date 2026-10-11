@@ -48,7 +48,9 @@ describe("placeholder pages", () => {
   it("detects whole-site notices after a title or in a sentence", () => {
     for (const html of [
       "<html><head><title>Acme Dental</title></head><body><p>Our website is currently unavailable.</p></body></html>",
-      "<html><head><title>Acme Dental.</title></head><body><p>Site is temporarily offline.</p></body></html>"
+      "<html><head><title>Acme Dental.</title></head><body><p>Site is temporarily offline.</p></body></html>",
+      "<html><head><title>Acme Dental</title></head><body><p>Site is temporarily offline.</p></body></html>",
+      "<html><head><title>Under maintenance</title></head><body><p>Acme Dental</p></body></html>"
     ]) {
       expect(auditSnapshot(snapshot(html)).findings.map((finding) => finding.id), html).toEqual(["website-placeholder"]);
     }
@@ -66,7 +68,10 @@ describe("placeholder pages", () => {
       "<h1>Acme Plumbing</h1><p>Our booking system is under maintenance. Call 0123456789 for service.</p>",
       "<h1>Acme Plumbing</h1><p>Our website is not down; call 0123456789 for service.</p>",
       "<h1>Acme Plumbing</h1><p>Online booking: Under maintenance. Call 0123456789 for service.</p>",
-      "<h1>Acme Plumbing</h1><p>Our booking site is under maintenance. Call 0123456789 for service.</p>"
+      "<h1>Acme Plumbing</h1><p>Our booking site is under maintenance. Call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>If our site is offline, call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>When the website is down, call 0123456789.</p>",
+      "<h1>Acme Plumbing</h1><p>If for any reason our site is offline, call 0123456789.</p>"
     ]) {
       const report = auditSnapshot(snapshot(body));
       expect(report.findings.some((finding) => finding.id === "website-placeholder"), body).toBe(false);
