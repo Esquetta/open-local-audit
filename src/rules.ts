@@ -1667,7 +1667,7 @@ function maintenanceNotice(text: string): RegExpMatchArray | undefined {
     const sentence = /^[.!?]/.test(match[0]) ? "" : (text.slice(0, match.index).split(/[.!?;\n]/).pop() ?? "");
     // A condition right after the notice governs it too ("Our site is offline when scheduled maintenance
     // occurs"), but a later, separate clause does not ("Our site is offline, so if you need help call us").
-    const governedAfter = /^\s*,?\s*(?:if|when|whenever|unless|in case)\b/i.test(text.slice((match.index ?? 0) + match[0].length));
+    const governedAfter = /^\s*,?\s*(?:(?:only|just|even|except|usually|sometimes)\s+)?(?:if|when|whenever|unless|in case)\b/i.test(text.slice((match.index ?? 0) + match[0].length));
     if (!governedAfter && !conditionalWords.test(`${sentence} ${match[0]}`)) {
       return match;
     }
