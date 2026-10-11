@@ -187,6 +187,85 @@ describe("audit rules", () => {
     expect(report.findings.map((finding) => finding.id)).not.toContain("localbusiness-schema-present");
   });
 
+  function schemaFindings(schema: object, body = "<h1>Smile Dental</h1>"): string[] {
+    return auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>Smile Dental</title>
+            <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", ...schema })}</script>
+          </head>
+          <body>${body}</body>
+        </html>
+      `)
+    ).findings.map((finding) => finding.id);
+  }
+
+  it.each<{ type: string | string[] }>([
+    { type: "Dentist" },
+    { type: "Attorney" },
+    { type: "MedicalClinic" },
+    { type: "Plumber" },
+    { type: "https://schema.org/Restaurant" },
+    { type: ["MedicalBusiness", "Dentist"] }
+  ])(
+    "treats the LocalBusiness subtype $type as LocalBusiness structured data",
+    ({ type }) => {
+      const findings = schemaFindings({
+        "@type": type,
+        name: "Smile Dental",
+        telephone: "+902120000000",
+        address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" },
+        openingHours: "Mo-Fr 09:00-18:00"
+      });
+
+      expect(findings).not.toContain("localbusiness-schema-present");
+      expect(findings).not.toContain("localbusiness-schema-contact-fields");
+    }
+  );
+
+  it("still flags pages whose only schema type is not a local business", () => {
+    expect(schemaFindings({ "@type": "WebSite", name: "Smile Dental" })).toContain("localbusiness-schema-present");
+  });
+
+  it("checks contact fields and visible details on LocalBusiness subtypes", () => {
+    expect(schemaFindings({ "@type": "Dentist", name: "Smile Dental" })).toContain("localbusiness-schema-contact-fields");
+
+    const mismatch = schemaFindings(
+      {
+        "@type": "Dentist",
+        name: "Smile Dental",
+        telephone: "+902129999999",
+        address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" },
+        openingHours: "Mo-Fr 09:00-18:00"
+      },
+      `<h1>Smile Dental</h1><p>Call <a href="tel:+902120000000">+90 212 000 00 00</a></p>`
+    );
+    expect(mismatch).toContain("localbusiness-schema-nap-consistency");
+  });
+
+  it("accepts openingHoursSpecification and openingHours lists as opening hours", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+    };
+    const specification = {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: ["Monday", "Tuesday"],
+      opens: "09:00",
+      closes: "18:00"
+    };
+
+    expect(schemaFindings({ ...base, openingHoursSpecification: specification })).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: [specification] })).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHours: ["Mo-Fr 09:00-18:00"] })).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: [] })).toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings(base)).toContain("localbusiness-schema-contact-fields");
+  });
+
   it("flags weak structured data and local-business conversion signals", () => {
     const report = auditSnapshot(
       snapshot(`

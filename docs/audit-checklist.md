@@ -44,6 +44,7 @@
 ## Structured data
 
 - LocalBusiness schema exists where relevant.
+  - Rules `localbusiness-schema-present`, `localbusiness-schema-contact-fields`, and `localbusiness-schema-nap-consistency` accept schema.org LocalBusiness subtypes such as `Dentist`, `Attorney`, `MedicalClinic`, `Restaurant`, and `Plumber`. Opening hours count as either `openingHours` (text or a list) or `openingHoursSpecification`.
 - Organization schema exists where relevant.
 - ContactPoint data is present where relevant.
 - Address data is consistent with visible page content.

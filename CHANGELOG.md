@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.78.0 - 2026-10-11
+
+- The `localbusiness-schema-present`, `localbusiness-schema-contact-fields`, and `localbusiness-schema-nap-consistency` rules now recognise schema.org LocalBusiness subtypes such as `Dentist`, `Attorney`, `MedicalClinic`, `Restaurant`, and `Plumber`, including full `https://schema.org/` type URLs. Pages that use only a subtype no longer get a false "LocalBusiness structured data is missing" finding, and their schema telephone, address, and opening hours are now checked.
+- `localbusiness-schema-contact-fields` accepts `openingHoursSpecification` (one object or a list) and a list of `openingHours` strings as opening hours.
+- These changes can remove `localbusiness-schema-present` findings and add contact-field or NAP findings on pages with subtype schema, so `compare` against earlier reports may show them as fixed or new.
+
 ## v0.77.0 - 2026-10-10
 
 - Discovery now flags leads that look like a chain branch or public body, such as `mydentist.co.uk` branch pages, Rodericks practice pages, and `nhs.uk` listings: a public-sector website domain, a website host shared by two or more differently named leads in the same search, or a branch page URL with two or more path segments. Social, link-in-bio, directory, site-builder, and booking-platform pages such as `facebook.com`, `linktr.ee`, `sites.google.com`, Treatwell, and Fresha are never treated as chains. Flagged leads stay in the export with the reason in `opportunityReasons` and a new standard CSV `chainReason` column, low priority, an opportunity score of at most 20, and a "Skip unless you are targeting the head office" next action. This applies to every discovery source; the CRM preset is unchanged.

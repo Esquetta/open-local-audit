@@ -1,6 +1,7 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
+import { isLocalBusinessType } from "./local-business-types.js";
 import type { Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
 type Rule = {
@@ -101,9 +102,7 @@ function hasSuccessfulResource(statusCode: number | undefined): boolean {
 }
 
 function localBusinessNodes($: CheerioAPI): JsonLdNode[] {
-  return jsonLdNodes($).filter((node) =>
-    jsonLdTypes(node).some((type) => type.endsWith("LocalBusiness") || type === "LocalBusiness")
-  );
+  return jsonLdNodes($).filter((node) => jsonLdTypes(node).some(isLocalBusinessType));
 }
 
 function hasObjectField(value: unknown): boolean {
@@ -114,6 +113,14 @@ function hasStringField(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+// openingHours may be one string or a list; openingHoursSpecification is one object or a list of them.
+function hasOpeningHoursField(node: JsonLdNode): boolean {
+  const specifications = Array.isArray(node.openingHoursSpecification)
+    ? node.openingHoursSpecification
+    : [node.openingHoursSpecification];
+  return stringValues(node.openingHours).length > 0 || specifications.some(hasObjectField);
+}
+
 function hasLocalBusinessContactFields($: CheerioAPI): boolean {
   const nodes = localBusinessNodes($);
   if (nodes.length === 0) {
@@ -121,7 +128,7 @@ function hasLocalBusinessContactFields($: CheerioAPI): boolean {
   }
 
   return nodes.some(
-    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasStringField(node.openingHours)
+    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasOpeningHoursField(node)
   );
 }
 
@@ -1252,7 +1259,7 @@ const rules: Rule[] = [
     severity: "medium",
     source: "JSON-LD",
     recommendation: "Add LocalBusiness schema when the page represents a local business location.",
-    check: ({ $ }) => hasJsonLdType($, (type) => type.endsWith("LocalBusiness") || type === "LocalBusiness"),
+    check: ({ $ }) => hasJsonLdType($, isLocalBusinessType),
     evidence: () => "No LocalBusiness JSON-LD type found"
   },
   {
@@ -1261,9 +1268,9 @@ const rules: Rule[] = [
     category: "search-basics",
     severity: "medium",
     source: "JSON-LD",
-    recommendation: "Add telephone, address, and openingHours fields to LocalBusiness schema.",
+    recommendation: "Add telephone, address, and openingHours or openingHoursSpecification fields to LocalBusiness schema.",
     check: ({ $ }) => hasLocalBusinessContactFields($),
-    evidence: () => "LocalBusiness schema is missing telephone, address, or openingHours"
+    evidence: () => "LocalBusiness schema is missing telephone, address, or opening hours"
   },
   {
     id: "localbusiness-schema-nap-consistency",
