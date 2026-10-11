@@ -78,7 +78,8 @@ describe("placeholder pages", () => {
       "<h1>Acme Plumbing</h1><p>When the website is down, call 0123456789.</p>",
       "<h1>Acme Plumbing</h1><p>If for any reason our site is offline, call 0123456789.</p>",
       "<h1>Acme Plumbing</h1><p>Our site is offline when scheduled maintenance occurs.</p>",
-      "<h1>Acme Plumbing</h1><p>Our site is offline only when scheduled maintenance occurs.</p>"
+      "<h1>Acme Plumbing</h1><p>Our site is offline only when scheduled maintenance occurs.</p>",
+      "<h1>Acme Plumbing</h1><p>Our site is offline, but only when scheduled maintenance occurs.</p>"
     ]) {
       const report = auditSnapshot(snapshot(body));
       expect(report.findings.some((finding) => finding.id === "website-placeholder"), body).toBe(false);
