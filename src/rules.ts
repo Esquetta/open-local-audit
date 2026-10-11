@@ -1,7 +1,7 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
-import { isLocalBusinessType } from "./local-business-types.js";
+import { applyTypeContext, isLocalBusinessType, noTypeContext, type JsonLdTypeContext } from "./local-business-types.js";
 import type { Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
 type Rule = {
@@ -56,35 +56,12 @@ function jsonLdTypes(node: JsonLdNode): string[] {
   return types.filter((type): type is string => typeof type === "string");
 }
 
-// Nodes whose nearest @context sets a non-schema.org vocabulary, so a bare @type such as "Restaurant" is not a schema.org term.
-const outsideSchemaOrgVocab = new WeakSet<JsonLdNode>();
+// The active JSON-LD context of each flattened node, used to expand its @type.
+const typeContexts = new WeakMap<JsonLdNode, JsonLdTypeContext>();
 
-function isSchemaOrgVocab(value: unknown): boolean {
-  return typeof value === "string" && /^(?:https?:\/\/)?(?:www\.)?schema\.org\/?$/i.test(value.trim());
-}
-
-// Returns whether the context makes bare terms schema.org terms, or undefined when it does not set a vocabulary.
-function contextUsesSchemaOrgVocab(context: unknown): boolean | undefined {
-  if (Array.isArray(context)) {
-    return context.reduce<boolean | undefined>((current, entry) => contextUsesSchemaOrgVocab(entry) ?? current, undefined);
-  }
-
-  // A remote context on schema.org, such as https://schema.org/docs/jsonldcontext.json, is the schema.org context.
-  if (typeof context === "string") {
-    return /^(?:https?:\/\/)?(?:www\.)?schema\.org(?:\/.*)?$/i.test(context.trim());
-  }
-
-  if (context && typeof context === "object" && "@vocab" in context) {
-    return isSchemaOrgVocab((context as JsonLdNode)["@vocab"]);
-  }
-
-  return undefined;
-}
-
-// A page without any @context keeps the lenient reading that bare types are schema.org terms.
-function flattenJsonLd(value: unknown, schemaOrgVocab = true): JsonLdNode[] {
+function flattenJsonLd(value: unknown, context: JsonLdTypeContext = noTypeContext): JsonLdNode[] {
   if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenJsonLd(item, schemaOrgVocab));
+    return value.flatMap((item) => flattenJsonLd(item, context));
   }
 
   if (!value || typeof value !== "object") {
@@ -92,12 +69,9 @@ function flattenJsonLd(value: unknown, schemaOrgVocab = true): JsonLdNode[] {
   }
 
   const node = value as JsonLdNode;
-  const nodeVocab = contextUsesSchemaOrgVocab(node["@context"]) ?? schemaOrgVocab;
-  if (!nodeVocab) {
-    outsideSchemaOrgVocab.add(node);
-  }
-
-  const graphNodes = flattenJsonLd(node["@graph"], nodeVocab);
+  const nodeContext = applyTypeContext(context, node["@context"]);
+  typeContexts.set(node, nodeContext);
+  const graphNodes = flattenJsonLd(node["@graph"], nodeContext);
   return [node, ...graphNodes];
 }
 
@@ -134,7 +108,7 @@ function hasSuccessfulResource(statusCode: number | undefined): boolean {
 
 function localBusinessNodes($: CheerioAPI): JsonLdNode[] {
   return jsonLdNodes($).filter((node) =>
-    jsonLdTypes(node).some((type) => isLocalBusinessType(type, !outsideSchemaOrgVocab.has(node)))
+    jsonLdTypes(node).some((type) => isLocalBusinessType(type, typeContexts.get(node)))
   );
 }
 
@@ -146,12 +120,32 @@ function hasStringField(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-// openingHours may be one string or a list; openingHoursSpecification is one object or a list of them.
-function hasOpeningHoursField(node: JsonLdNode): boolean {
+function hasOpeningHoursData(specification: unknown): boolean {
+  if (!hasObjectField(specification)) {
+    return false;
+  }
+
+  const fields = specification as JsonLdNode;
+  return ["dayOfWeek", "opens", "closes"].some((field) => {
+    const values = Array.isArray(fields[field]) ? (fields[field] as unknown[]) : [fields[field]];
+    return values.some((value) => hasStringField(value) || hasObjectField(value));
+  });
+}
+
+// openingHours may be one string or a list; openingHoursSpecification is one object or a list of them,
+// each with a day or time, or an {"@id": ...} reference to one elsewhere in the graph.
+function hasOpeningHoursField(node: JsonLdNode, index: JsonLdIndex): boolean {
   const specifications = Array.isArray(node.openingHoursSpecification)
     ? node.openingHoursSpecification
     : [node.openingHoursSpecification];
-  return stringValues(node.openingHours).length > 0 || specifications.some(hasObjectField);
+  return (
+    stringValues(node.openingHours).length > 0 ||
+    specifications.some((specification) => {
+      const reference = hasObjectField(specification) ? (specification as JsonLdNode)["@id"] : undefined;
+      const referenced = typeof reference === "string" ? index.get(reference) : undefined;
+      return hasOpeningHoursData(specification) || hasOpeningHoursData(referenced);
+    })
+  );
 }
 
 function hasLocalBusinessContactFields($: CheerioAPI): boolean {
@@ -160,8 +154,9 @@ function hasLocalBusinessContactFields($: CheerioAPI): boolean {
     return true;
   }
 
+  const index = jsonLdIndex($);
   return nodes.some(
-    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasOpeningHoursField(node)
+    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasOpeningHoursField(node, index)
   );
 }
 

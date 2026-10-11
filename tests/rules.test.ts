@@ -250,6 +250,18 @@ describe("audit rules", () => {
     expect(
       missing({ "@context": { "@vocab": "https://example.com/" }, "@graph": [{ "@context": "https://schema.org", "@type": "Dentist" }] })
     ).toBe(false);
+    expect(missing({ "@context": "https://schema.org", "@graph": [{ "@context": null, "@type": "Restaurant" }] })).toBe(true);
+    expect(missing({ "@context": { "Dentist": "https://example.com/Dentist" }, "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": { "Clinic": "https://schema.org/Dentist" }, "@type": "Clinic" })).toBe(false);
+  });
+
+  it("expands prefixed types through the JSON-LD @context", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(missing({ "@context": { "schema": { "@id": "https://example.com/", "@prefix": true } }, "@type": "schema:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "schema": "https://schema.org/" }, "@type": "schema:Dentist" })).toBe(false);
+    expect(missing({ "@context": { "s": "http://schema.org/" }, "@type": "s:Dentist" })).toBe(false);
+    expect(missing({ "@context": undefined, "@type": "schema:Dentist" })).toBe(false);
   });
 
   it("checks contact fields and visible details on LocalBusiness subtypes", () => {
@@ -286,6 +298,24 @@ describe("audit rules", () => {
     expect(schemaFindings({ ...base, openingHoursSpecification: [specification] })).not.toContain("localbusiness-schema-contact-fields");
     expect(schemaFindings({ ...base, openingHours: ["Mo-Fr 09:00-18:00"] })).not.toContain("localbusiness-schema-contact-fields");
     expect(schemaFindings({ ...base, openingHoursSpecification: [] })).toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: {} })).toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: [{ "@type": "OpeningHoursSpecification" }] })).toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    expect(schemaFindings({ ...base, openingHoursSpecification: { dayOfWeek: "https://schema.org/Monday" } })).not.toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@id": "#hours", "@type": "OpeningHoursSpecification", opens: "09:00", closes: "18:00" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: { "@id": "#missing" } })).toContain(
+      "localbusiness-schema-contact-fields"
+    );
     expect(schemaFindings(base)).toContain("localbusiness-schema-contact-fields");
   });
 
