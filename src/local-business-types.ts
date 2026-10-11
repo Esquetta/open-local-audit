@@ -165,15 +165,17 @@ type RawTermDefinition = { iri: string | null | undefined; simple: boolean; pref
 // whether it may be used as the prefix of a compact IRI such as "schema:Dentist".
 type TermDefinition = { iri: string | null; prefix: boolean };
 
-// The parts of a JSON-LD active context that decide which IRI a @type expands to.
+// The parts of a JSON-LD active context that decide which IRI a @type or @id expands to.
 export type JsonLdTypeContext = {
   // False until a @context applies; without one, bare and "schema:" types are read as schema.org terms.
   declared: boolean;
   vocab: string | null;
   terms: Map<string, TermDefinition>;
+  // The @base values applied on top of the document base, in order; null removes the base.
+  bases: readonly (string | null)[];
 };
 
-export const noTypeContext: JsonLdTypeContext = { declared: false, vocab: null, terms: new Map() };
+export const noTypeContext: JsonLdTypeContext = { declared: false, vocab: null, terms: new Map(), bases: [] };
 
 const schemaOrgRoot = "https://schema.org/";
 const schemaOrgType = /^https?:\/\/(?:www\.)?schema\.org\/([A-Za-z]+)$/;
@@ -285,19 +287,20 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
 
   // A null context removes everything inherited.
   if (context === null) {
-    return { declared: true, vocab: null, terms: new Map() };
+    return { declared: true, vocab: null, terms: new Map(), bases: [] };
   }
 
   // schema.org's own context sets the schema.org vocabulary and "schema" prefix; any other remote
-  // context is unknown and may redefine every term.
+  // context is unknown and may redefine every term. A remote context cannot change the base.
   if (typeof context === "string") {
     return schemaOrgContext.test(context.trim())
       ? {
           declared: true,
           vocab: schemaOrgRoot,
-          terms: new Map([...active.terms, ["schema", { iri: schemaOrgRoot, prefix: true }]])
+          terms: new Map([...active.terms, ["schema", { iri: schemaOrgRoot, prefix: true }]]),
+          bases: active.bases
         }
-      : { declared: true, vocab: null, terms: new Map() };
+      : { declared: true, vocab: null, terms: new Map(), bases: active.bases };
   }
 
   if (typeof context !== "object") {
@@ -305,7 +308,12 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
   }
 
   const fields = context as Record<string, unknown>;
-  const next: JsonLdTypeContext = { declared: true, vocab: active.vocab, terms: new Map(active.terms) };
+  const next: JsonLdTypeContext = { declared: true, vocab: active.vocab, terms: new Map(active.terms), bases: active.bases };
+  const base = fields["@base"];
+  if (base === null || typeof base === "string") {
+    next.bases = [...active.bases, base];
+  }
+
   // As in JSON-LD context processing, @vocab is expanded with the terms defined before this context.
   if ("@vocab" in fields) {
     const vocab = fields["@vocab"];
@@ -329,6 +337,22 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
   }
 
   return next;
+}
+
+// The base IRI that relative @id values resolve against: the document base with each @base applied in
+// turn, or null after "@base": null, when relative IRIs stay relative.
+export function contextBase(documentBase: string, context: JsonLdTypeContext): string | null {
+  return context.bases.reduce<string | null>((base, value) => {
+    if (value === null) {
+      return null;
+    }
+
+    try {
+      return new URL(value, base ?? undefined).href;
+    } catch {
+      return base;
+    }
+  }, documentBase);
 }
 
 // Expands a node @id through its JSON-LD context. Unlike types, @id values do not use terms or @vocab:

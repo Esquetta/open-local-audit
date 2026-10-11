@@ -457,6 +457,27 @@ describe("audit rules", () => {
     ).toBe(false);
   });
 
+  it("resolves JSON-LD @id references against the context @base", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" },
+      openingHoursSpecification: { "@id": "#hours" }
+    };
+    const withBase = (contextBase: string | null, hoursId: string) =>
+      schemaFindings({
+        "@context": { "@vocab": "https://schema.org/", "@base": contextBase },
+        "@graph": [base, { "@id": hoursId, opens: "09:00" }]
+      });
+
+    expect(withBase("https://cdn.example/", "https://cdn.example/#hours")).not.toContain("localbusiness-schema-contact-fields");
+    expect(withBase("https://cdn.example/", "https://example.test/#hours")).toContain("localbusiness-schema-contact-fields");
+    expect(withBase("/clinic/", "https://example.test/clinic/#hours")).not.toContain("localbusiness-schema-contact-fields");
+    expect(withBase(null, "#hours")).not.toContain("localbusiness-schema-contact-fields");
+    expect(withBase(null, "https://example.test/#hours")).toContain("localbusiness-schema-contact-fields");
+  });
+
   it("expands compact @id values and reads nodes from @included", () => {
     const base = {
       "@type": "Dentist",
@@ -495,6 +516,22 @@ describe("audit rules", () => {
     ).toContain("localbusiness-schema-contact-fields");
     expect(
       schemaFindings({ ...base, openingHoursSpecification: { "@id": "#hours" }, "@included": [{ "@id": "#hours", opens: "09:00" }] })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@type": "WebPage", mainEntity: { "@type": "OpeningHoursSpecification", "@id": "#hours", opens: "09:00" } }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@type": "WebPage", hasPart: { "@list": [{ "@id": "#hours", closes: "18:00" }] } }
+        ]
+      })
     ).not.toContain("localbusiness-schema-contact-fields");
   });
 

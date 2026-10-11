@@ -3,6 +3,7 @@ import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type 
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
 import {
   applyTypeContext,
+  contextBase,
   expandNodeId,
   isLocalBusinessType,
   noTypeContext,
@@ -67,9 +68,11 @@ function jsonLdTypes(node: JsonLdNode): string[] {
 type JsonLdNodeScope = { context: JsonLdTypeContext; nestedContext: JsonLdTypeContext; block: number };
 const nodeScopes = new WeakMap<JsonLdNode, JsonLdNodeScope>();
 
-function flattenJsonLd(value: unknown, block: number, context: JsonLdTypeContext = noTypeContext): JsonLdNode[] {
+// Flattens top-level and @graph or @included node objects; with embedded set, also node objects nested
+// as property values, such as an address or a mainEntity.
+function flattenJsonLd(value: unknown, block: number, context: JsonLdTypeContext = noTypeContext, embedded = false): JsonLdNode[] {
   if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenJsonLd(item, block, context));
+    return value.flatMap((item) => flattenJsonLd(item, block, context, embedded));
   }
 
   if (!value || typeof value !== "object") {
@@ -86,17 +89,20 @@ function flattenJsonLd(value: unknown, block: number, context: JsonLdTypeContext
   const childContext = propagates ? nodeContext : { ...context, declared: true };
   nodeScopes.set(node, { context: nodeContext, nestedContext: childContext, block });
   // @graph and @included both hold further node objects of the same document.
-  return [node, ...flattenJsonLd(node["@graph"], block, childContext), ...flattenJsonLd(node["@included"], block, childContext)];
+  const nestedKeys = embedded
+    ? Object.keys(node).filter((key) => !key.startsWith("@") || ["@graph", "@included", "@list", "@set"].includes(key))
+    : ["@graph", "@included"];
+  return [node, ...nestedKeys.flatMap((key) => flattenJsonLd(node[key], block, childContext, embedded))];
 }
 
-function jsonLdNodes($: CheerioAPI): JsonLdNode[] {
+function jsonLdNodes($: CheerioAPI, embedded = false): JsonLdNode[] {
   return $('script[type="application/ld+json"]')
     .toArray()
     .flatMap((element, block) => {
       const raw = $(element).text();
       try {
         const parsed = JSON.parse(raw) as unknown;
-        return flattenJsonLd(parsed, block);
+        return flattenJsonLd(parsed, block, noTypeContext, embedded);
       } catch {
         return [];
       }
@@ -172,15 +178,16 @@ function documentBase($: CheerioAPI, snapshot: PageSnapshot): string {
 }
 
 // An @id as a lookup key: compact IRIs expand through the JSON-LD context and relative IRIs resolve
-// against the document base, while blank node labels such as "_:b0" stay local to their script block.
-function nodeKey(id: string, context: JsonLdTypeContext, block: number, base: string): string {
+// against the context's @base or the document base, while blank node labels such as "_:b0" stay local
+// to their script block.
+function nodeKey(id: string, context: JsonLdTypeContext, block: number, documentBaseIri: string): string {
   const expanded = expandNodeId(id, context);
   if (expanded.startsWith("_:")) {
     return `${block} ${expanded}`;
   }
 
   try {
-    return new URL(expanded, base).href;
+    return new URL(expanded, contextBase(documentBaseIri, context) ?? undefined).href;
   } catch {
     return expanded;
   }
@@ -204,10 +211,11 @@ function referenceKey(reference: unknown, owner: JsonLdNode, base: string): stri
     : undefined;
 }
 
-// Every JSON-LD node with each @id, keyed as above; nodes sharing an @id describe the same thing.
+// Every JSON-LD node with each @id, embedded ones included, keyed as above; nodes sharing an @id
+// describe the same thing.
 function jsonLdNodesById($: CheerioAPI, base: string): Map<string, JsonLdNode[]> {
   const nodesById = new Map<string, JsonLdNode[]>();
-  for (const node of jsonLdNodes($)) {
+  for (const node of jsonLdNodes($, true)) {
     const key = nodeIdKey(node, base);
     if (key !== undefined) {
       nodesById.set(key, [...(nodesById.get(key) ?? []), node]);
