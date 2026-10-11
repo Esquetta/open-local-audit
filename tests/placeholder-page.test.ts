@@ -51,7 +51,8 @@ describe("placeholder pages", () => {
       "<html><head><title>Acme Dental.</title></head><body><p>Site is temporarily offline.</p></body></html>",
       "<html><head><title>Acme Dental</title></head><body><p>Site is temporarily offline.</p></body></html>",
       "<html><head><title>Under maintenance</title></head><body><p>Acme Dental</p></body></html>",
-      "<html><body><nav>When to contact us</nav><h1>Our site is currently offline</h1></body></html>"
+      "<html><body><nav>When to contact us</nav><h1>Our site is currently offline</h1></body></html>",
+      "<html><body><p>If you need help, call us; our site is currently offline.</p></body></html>"
     ]) {
       expect(auditSnapshot(snapshot(html)).findings.map((finding) => finding.id), html).toEqual(["website-placeholder"]);
     }

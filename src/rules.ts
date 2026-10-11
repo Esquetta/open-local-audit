@@ -1657,12 +1657,12 @@ const parkedCopy =
 const conditionalWords = /\b(?:if|when|whenever|unless|in case|should)\b/i;
 
 // The first maintenance notice whose sentence is not conditional; "If for any reason our site is offline,
-// call us" describes a fallback, not the site's state. Line breaks between visible blocks end a sentence, so
+// call us" describes a fallback, not the site's state. Semicolons and line breaks between visible blocks end the clause, so
 // a "When to contact us" menu item does not hide the notice under it.
 function maintenanceNotice(text: string): RegExpMatchArray | undefined {
   for (const match of text.matchAll(new RegExp(maintenanceCopy.source, "gi"))) {
     // A match opening with sentence punctuation starts a new sentence, so nothing before it applies.
-    const sentence = /^[.!?]/.test(match[0]) ? "" : (text.slice(0, match.index).split(/[.!?\n]/).pop() ?? "");
+    const sentence = /^[.!?]/.test(match[0]) ? "" : (text.slice(0, match.index).split(/[.!?;\n]/).pop() ?? "");
     if (!conditionalWords.test(`${sentence} ${match[0]}`)) {
       return match;
     }
