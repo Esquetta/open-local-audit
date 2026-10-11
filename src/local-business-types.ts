@@ -157,8 +157,9 @@ const localBusinessTypes = new Set([
 ]);
 
 // A term definition as written in a local context: the IRI value (null when the term is explicitly
-// unmapped), whether it is a simple string, and whether "@prefix": true marks it as a prefix.
-type RawTermDefinition = { iri: string | null; simple: boolean; prefix: boolean };
+// unmapped, undefined when an expanded definition omits @id and the IRI comes from @vocab), whether
+// it is a simple string, and whether "@prefix": true marks it as a prefix.
+type RawTermDefinition = { iri: string | null | undefined; simple: boolean; prefix: boolean };
 
 // A processed term definition: its fully expanded IRI, frozen when its context was applied, and
 // whether it may be used as the prefix of a compact IRI such as "schema:Dentist".
@@ -193,7 +194,7 @@ function rawTermDefinition(definition: unknown): RawTermDefinition | undefined {
   if (definition && typeof definition === "object" && !Array.isArray(definition)) {
     const fields = definition as Record<string, unknown>;
     const id = fields["@id"];
-    if (id === null || typeof id === "string") {
+    if (id === null || id === undefined || typeof id === "string") {
       return { iri: id, simple: false, prefix: fields["@prefix"] === true };
     }
   }
@@ -218,7 +219,18 @@ function resolveTerm(
     return undefined;
   }
 
-  const iri = raw.iri === null ? null : (expandIri(raw.iri, context, local, new Set([...resolving, term])) ?? null);
+  const nested = new Set([...resolving, term]);
+  // Without @id, a term containing ":" is a compact IRI and any other term is appended to @vocab.
+  const iri =
+    raw.iri === null
+      ? null
+      : raw.iri === undefined
+        ? term.includes(":")
+          ? (expandIri(term, context, local, nested) ?? null)
+          : context.vocab
+            ? context.vocab + term
+            : null
+        : (expandIri(raw.iri, context, local, nested) ?? null);
   // Follows JSON-LD 1.1: a term is a prefix with "@prefix": true, or when it is a simple string term
   // whose expanded IRI ends with a gen-delim character.
   return { iri, prefix: raw.prefix || (raw.simple && iri !== null && genDelimEnd.test(iri)) };

@@ -153,21 +153,45 @@ function hasOpeningHoursData(specification: unknown): boolean {
   });
 }
 
-// Every JSON-LD node with each @id; nodes sharing an @id describe the same thing.
-function jsonLdNodesById($: CheerioAPI): Map<string, JsonLdNode[]> {
+// JSON-LD @id values are IRIs relative to the document base: the page URL, or its <base href>.
+function documentBase($: CheerioAPI, snapshot: PageSnapshot): string {
+  const pageUrl = snapshot.finalUrl || snapshot.url;
+  try {
+    return new URL($("base[href]").first().attr("href") ?? "", pageUrl).href;
+  } catch {
+    return pageUrl;
+  }
+}
+
+function nodeKey(id: string, base: string): string {
+  try {
+    return new URL(id, base).href;
+  } catch {
+    return id;
+  }
+}
+
+// Every JSON-LD node with each @id, keyed by the absolute IRI; nodes sharing an @id describe the same thing.
+function jsonLdNodesById($: CheerioAPI, base: string): Map<string, JsonLdNode[]> {
   const nodesById = new Map<string, JsonLdNode[]>();
   for (const node of jsonLdNodes($)) {
     if (typeof node["@id"] === "string") {
-      nodesById.set(node["@id"], [...(nodesById.get(node["@id"]) ?? []), node]);
+      const key = nodeKey(node["@id"], base);
+      nodesById.set(key, [...(nodesById.get(key) ?? []), node]);
     }
   }
 
   return nodesById;
 }
 
+// A node together with every other node that shares its @id.
+function nodeFragments(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>, base: string): JsonLdNode[] {
+  return typeof node["@id"] === "string" ? (nodesById.get(nodeKey(node["@id"], base)) ?? [node]) : [node];
+}
+
 // openingHours may be one string or a list; openingHoursSpecification is one object or a list of them,
 // each with a day or time, or an {"@id": ...} reference to nodes elsewhere in the graph that have one.
-function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>): boolean {
+function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>, base: string): boolean {
   const specifications = Array.isArray(node.openingHoursSpecification)
     ? node.openingHoursSpecification
     : [node.openingHoursSpecification];
@@ -175,22 +199,29 @@ function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNod
     stringValues(node.openingHours).length > 0 ||
     specifications.some((specification) => {
       const reference = hasObjectField(specification) ? (specification as JsonLdNode)["@id"] : undefined;
-      const referenced = typeof reference === "string" ? (nodesById.get(reference) ?? []) : [];
+      const referenced = typeof reference === "string" ? (nodesById.get(nodeKey(reference, base)) ?? []) : [];
       return hasOpeningHoursData(specification) || referenced.some(hasOpeningHoursData);
     })
   );
 }
 
-function hasLocalBusinessContactFields($: CheerioAPI): boolean {
+// The business's fields may be split across nodes that share its @id.
+function hasLocalBusinessContactFields($: CheerioAPI, snapshot: PageSnapshot): boolean {
   const nodes = localBusinessNodes($);
   if (nodes.length === 0) {
     return true;
   }
 
-  const nodesById = jsonLdNodesById($);
-  return nodes.some(
-    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasOpeningHoursField(node, nodesById)
-  );
+  const base = documentBase($, snapshot);
+  const nodesById = jsonLdNodesById($, base);
+  return nodes.some((node) => {
+    const fragments = nodeFragments(node, nodesById, base);
+    return (
+      fragments.some((fragment) => hasStringField(fragment.telephone)) &&
+      fragments.some((fragment) => hasObjectField(fragment.address)) &&
+      fragments.some((fragment) => hasOpeningHoursField(fragment, nodesById, base))
+    );
+  });
 }
 
 function stringValues(value: unknown): string[] {
@@ -1330,7 +1361,7 @@ const rules: Rule[] = [
     severity: "medium",
     source: "JSON-LD",
     recommendation: "Add telephone, address, and openingHours or openingHoursSpecification fields to LocalBusiness schema.",
-    check: ({ $ }) => hasLocalBusinessContactFields($),
+    check: ({ $, snapshot }) => hasLocalBusinessContactFields($, snapshot),
     evidence: () => "LocalBusiness schema is missing telephone, address, or opening hours"
   },
   {

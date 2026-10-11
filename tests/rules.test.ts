@@ -255,6 +255,17 @@ describe("audit rules", () => {
     expect(missing({ "@context": "https://schema.org", "@graph": [{ "@context": null, "@type": "Restaurant" }] })).toBe(true);
     expect(missing({ "@context": { "Dentist": "https://example.com/Dentist" }, "@type": "Dentist" })).toBe(true);
     expect(missing({ "@context": { "Clinic": "https://schema.org/Dentist" }, "@type": "Clinic" })).toBe(false);
+    expect(
+      missing({
+        "@context": [
+          { "@vocab": "https://schema.org/", "Dentist": "https://schema.org/Dentist" },
+          { "@vocab": "https://example.com/", "Dentist": { "@type": "@id" } }
+        ],
+        "@type": "Dentist"
+      })
+    ).toBe(true);
+    expect(missing({ "@context": { "@vocab": "https://schema.org/", "Dentist": { "@type": "@id" } }, "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": { "Dentist": { "@type": "@id" } }, "@type": "Dentist" })).toBe(true);
   });
 
   it("expands prefixed types through the JSON-LD @context", () => {
@@ -392,6 +403,81 @@ describe("audit rules", () => {
       })
     ).not.toContain("localbusiness-schema-contact-fields");
     expect(schemaFindings(base)).toContain("localbusiness-schema-contact-fields");
+  });
+
+  it("resolves relative JSON-LD @id references against the page URL", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+    };
+    const hasContactFinding = (graph: object[], html = "") =>
+      auditSnapshot(
+        snapshot(
+          `<!doctype html><html><head><title>Smile Dental</title>${html}
+          <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@graph": graph })}</script>
+          </head><body><h1>Smile Dental</h1></body></html>`,
+          { url: "http://example.test", finalUrl: "https://example.test/clinic/" }
+        )
+      ).findings.some((finding) => finding.id === "localbusiness-schema-contact-fields");
+
+    expect(
+      hasContactFinding([
+        { ...base, openingHoursSpecification: { "@id": "#hours" } },
+        { "@id": "https://example.test/clinic/#hours", opens: "09:00" }
+      ])
+    ).toBe(false);
+    expect(
+      hasContactFinding([
+        { ...base, openingHoursSpecification: { "@id": "https://example.test/clinic/#hours" } },
+        { "@id": "#hours", opens: "09:00" }
+      ])
+    ).toBe(false);
+    expect(
+      hasContactFinding([
+        { ...base, openingHoursSpecification: { "@id": "#hours" } },
+        { "@id": "https://other.test/clinic/#hours", opens: "09:00" }
+      ])
+    ).toBe(true);
+    expect(
+      hasContactFinding(
+        [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@id": "https://cdn.example.test/#hours", opens: "09:00" }
+        ],
+        `<base href="https://cdn.example.test/">`
+      )
+    ).toBe(false);
+  });
+
+  it("combines LocalBusiness fields split across nodes that share an @id", () => {
+    const address = { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" };
+
+    expect(
+      schemaFindings({
+        "@graph": [
+          { "@id": "#business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" },
+          { "@id": "https://example.test/#business", address, openingHours: "Mo-Fr 09:00-18:00" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { "@id": "#business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" },
+          { "@id": "#business", address }
+        ]
+      })
+    ).toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { "@id": "#business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" },
+          { "@id": "#other", address, openingHours: "Mo-Fr 09:00-18:00" }
+        ]
+      })
+    ).toContain("localbusiness-schema-contact-fields");
   });
 
   it("flags weak structured data and local-business conversion signals", () => {
