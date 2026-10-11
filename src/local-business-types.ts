@@ -244,6 +244,12 @@ function expandIri(
   resolving: ReadonlySet<string> = new Set()
 ): string | undefined {
   const trimmed = value.trim();
+  // A term defined in the context, even one containing ":", is used before any prefix expansion.
+  const definition = resolveTerm(trimmed, context, local, resolving);
+  if (definition) {
+    return definition.iri ?? undefined;
+  }
+
   const colon = trimmed.indexOf(":");
   if (colon > 0) {
     const prefix = trimmed.slice(0, colon);
@@ -252,17 +258,12 @@ function expandIri(
       return trimmed;
     }
 
-    const definition = resolveTerm(prefix, context, local, resolving);
-    if (definition?.prefix && definition.iri) {
-      return definition.iri + suffix;
+    const prefixDefinition = resolveTerm(prefix, context, local, resolving);
+    if (prefixDefinition?.prefix && prefixDefinition.iri) {
+      return prefixDefinition.iri + suffix;
     }
 
     return !context.declared && prefix === "schema" ? schemaOrgRoot + suffix : trimmed;
-  }
-
-  const definition = resolveTerm(trimmed, context, local, resolving);
-  if (definition) {
-    return definition.iri ?? undefined;
   }
 
   if (!context.declared) {
@@ -328,6 +329,24 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
   }
 
   return next;
+}
+
+// Expands a node @id through its JSON-LD context. Unlike types, @id values do not use terms or @vocab:
+// only a compact IRI whose prefix is defined expands; anything else is returned as written, for the
+// caller to resolve against the document base. Blank node labels such as "_:b0" are left alone.
+export function expandNodeId(value: string, context: JsonLdTypeContext): string {
+  const trimmed = value.trim();
+  const colon = trimmed.indexOf(":");
+  if (colon > 0) {
+    const prefix = trimmed.slice(0, colon);
+    const suffix = trimmed.slice(colon + 1);
+    const definition = context.terms.get(prefix);
+    if (prefix !== "_" && !suffix.startsWith("//") && definition?.prefix && definition.iri) {
+      return definition.iri + suffix;
+    }
+  }
+
+  return trimmed;
 }
 
 // Expands the type through its JSON-LD context and accepts schema.org LocalBusiness types, so

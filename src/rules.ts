@@ -1,7 +1,13 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
-import { applyTypeContext, isLocalBusinessType, noTypeContext, type JsonLdTypeContext } from "./local-business-types.js";
+import {
+  applyTypeContext,
+  expandNodeId,
+  isLocalBusinessType,
+  noTypeContext,
+  type JsonLdTypeContext
+} from "./local-business-types.js";
 import type { Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
 type Rule = {
@@ -56,12 +62,14 @@ function jsonLdTypes(node: JsonLdNode): string[] {
   return types.filter((type): type is string => typeof type === "string");
 }
 
-// The active JSON-LD context of each flattened node, used to expand its @type.
-const typeContexts = new WeakMap<JsonLdNode, JsonLdTypeContext>();
+// Where each flattened node was found: the active JSON-LD context that expands its @type and @id, the
+// context its nested node objects use, and the script block it came from, which scopes blank node labels.
+type JsonLdNodeScope = { context: JsonLdTypeContext; nestedContext: JsonLdTypeContext; block: number };
+const nodeScopes = new WeakMap<JsonLdNode, JsonLdNodeScope>();
 
-function flattenJsonLd(value: unknown, context: JsonLdTypeContext = noTypeContext): JsonLdNode[] {
+function flattenJsonLd(value: unknown, block: number, context: JsonLdTypeContext = noTypeContext): JsonLdNode[] {
   if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenJsonLd(item, context));
+    return value.flatMap((item) => flattenJsonLd(item, block, context));
   }
 
   if (!value || typeof value !== "object") {
@@ -71,24 +79,24 @@ function flattenJsonLd(value: unknown, context: JsonLdTypeContext = noTypeContex
   const node = value as JsonLdNode;
   const localContext = node["@context"];
   const nodeContext = applyTypeContext(context, localContext);
-  typeContexts.set(node, nodeContext);
   // A context with "@propagate": false, alone or in a context array, applies to this node only; nested
   // nodes return to the previous context, which no longer gets the lenient no-context reading.
   const localContexts = Array.isArray(localContext) ? localContext : [localContext];
   const propagates = !localContexts.some((entry) => hasObjectField(entry) && (entry as JsonLdNode)["@propagate"] === false);
   const childContext = propagates ? nodeContext : { ...context, declared: true };
-  const graphNodes = flattenJsonLd(node["@graph"], childContext);
-  return [node, ...graphNodes];
+  nodeScopes.set(node, { context: nodeContext, nestedContext: childContext, block });
+  // @graph and @included both hold further node objects of the same document.
+  return [node, ...flattenJsonLd(node["@graph"], block, childContext), ...flattenJsonLd(node["@included"], block, childContext)];
 }
 
 function jsonLdNodes($: CheerioAPI): JsonLdNode[] {
   return $('script[type="application/ld+json"]')
     .toArray()
-    .flatMap((element) => {
+    .flatMap((element, block) => {
       const raw = $(element).text();
       try {
         const parsed = JSON.parse(raw) as unknown;
-        return flattenJsonLd(parsed);
+        return flattenJsonLd(parsed, block);
       } catch {
         return [];
       }
@@ -114,7 +122,7 @@ function hasSuccessfulResource(statusCode: number | undefined): boolean {
 
 function localBusinessNodes($: CheerioAPI): JsonLdNode[] {
   return jsonLdNodes($).filter((node) =>
-    jsonLdTypes(node).some((type) => isLocalBusinessType(type, typeContexts.get(node)))
+    jsonLdTypes(node).some((type) => isLocalBusinessType(type, nodeScopes.get(node)?.context))
   );
 }
 
@@ -163,20 +171,45 @@ function documentBase($: CheerioAPI, snapshot: PageSnapshot): string {
   }
 }
 
-function nodeKey(id: string, base: string): string {
+// An @id as a lookup key: compact IRIs expand through the JSON-LD context and relative IRIs resolve
+// against the document base, while blank node labels such as "_:b0" stay local to their script block.
+function nodeKey(id: string, context: JsonLdTypeContext, block: number, base: string): string {
+  const expanded = expandNodeId(id, context);
+  if (expanded.startsWith("_:")) {
+    return `${block} ${expanded}`;
+  }
+
   try {
-    return new URL(id, base).href;
+    return new URL(expanded, base).href;
   } catch {
-    return id;
+    return expanded;
   }
 }
 
-// Every JSON-LD node with each @id, keyed by the absolute IRI; nodes sharing an @id describe the same thing.
+function nodeIdKey(node: JsonLdNode, base: string): string | undefined {
+  const scope = nodeScopes.get(node);
+  return scope && typeof node["@id"] === "string" ? nodeKey(node["@id"], scope.context, scope.block, base) : undefined;
+}
+
+// The key of a node reference such as {"@id": "#hours"} found in one of the owner node's properties.
+function referenceKey(reference: unknown, owner: JsonLdNode, base: string): string | undefined {
+  const scope = nodeScopes.get(owner);
+  if (!scope || !hasObjectField(reference)) {
+    return undefined;
+  }
+
+  const fields = reference as JsonLdNode;
+  return typeof fields["@id"] === "string"
+    ? nodeKey(fields["@id"], applyTypeContext(scope.nestedContext, fields["@context"]), scope.block, base)
+    : undefined;
+}
+
+// Every JSON-LD node with each @id, keyed as above; nodes sharing an @id describe the same thing.
 function jsonLdNodesById($: CheerioAPI, base: string): Map<string, JsonLdNode[]> {
   const nodesById = new Map<string, JsonLdNode[]>();
   for (const node of jsonLdNodes($)) {
-    if (typeof node["@id"] === "string") {
-      const key = nodeKey(node["@id"], base);
+    const key = nodeIdKey(node, base);
+    if (key !== undefined) {
       nodesById.set(key, [...(nodesById.get(key) ?? []), node]);
     }
   }
@@ -186,7 +219,8 @@ function jsonLdNodesById($: CheerioAPI, base: string): Map<string, JsonLdNode[]>
 
 // A node together with every other node that shares its @id.
 function nodeFragments(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>, base: string): JsonLdNode[] {
-  return typeof node["@id"] === "string" ? (nodesById.get(nodeKey(node["@id"], base)) ?? [node]) : [node];
+  const key = nodeIdKey(node, base);
+  return key === undefined ? [node] : (nodesById.get(key) ?? [node]);
 }
 
 // openingHours may be one string or a list; openingHoursSpecification is one object or a list of them,
@@ -198,8 +232,8 @@ function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNod
   return (
     stringValues(node.openingHours).length > 0 ||
     specifications.some((specification) => {
-      const reference = hasObjectField(specification) ? (specification as JsonLdNode)["@id"] : undefined;
-      const referenced = typeof reference === "string" ? (nodesById.get(nodeKey(reference, base)) ?? []) : [];
+      const reference = referenceKey(specification, node, base);
+      const referenced = reference === undefined ? [] : (nodesById.get(reference) ?? []);
       return hasOpeningHoursData(specification) || referenced.some(hasOpeningHoursData);
     })
   );
