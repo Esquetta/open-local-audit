@@ -1654,7 +1654,9 @@ const maintenanceCopy =
   /(?:^|[.!?]\s+|\b(?:our|this|the) )(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|^(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b/i;
 const parkedCopy =
   /\b(?:(?:this )?domain (?:name )?(?:may be|is) for sale|buy this domain|domain is parked|parked (?:free,? )?(?:courtesy of|by)|this domain has been registered)\b/i;
-const conditionalWords = /\b(?:if|when|whenever|unless|in case|should)\b/i;
+// "Should" is left out: as a condition it inverts the sentence ("Should our site go offline"), which the
+// notice pattern never matches, and otherwise it is advice ("You should be aware that our site is offline").
+const conditionalWords = /\b(?:if|when|whenever|unless|in case)\b/i;
 
 // The first maintenance notice whose sentence is not conditional; "If for any reason our site is offline,
 // call us" describes a fallback, not the site's state. Semicolons and line breaks between visible blocks end the clause, so
