@@ -56,9 +56,35 @@ function jsonLdTypes(node: JsonLdNode): string[] {
   return types.filter((type): type is string => typeof type === "string");
 }
 
-function flattenJsonLd(value: unknown): JsonLdNode[] {
+// Nodes whose nearest @context sets a non-schema.org vocabulary, so a bare @type such as "Restaurant" is not a schema.org term.
+const outsideSchemaOrgVocab = new WeakSet<JsonLdNode>();
+
+function isSchemaOrgVocab(value: unknown): boolean {
+  return typeof value === "string" && /^(?:https?:\/\/)?(?:www\.)?schema\.org\/?$/i.test(value.trim());
+}
+
+// Returns whether the context makes bare terms schema.org terms, or undefined when it does not set a vocabulary.
+function contextUsesSchemaOrgVocab(context: unknown): boolean | undefined {
+  if (Array.isArray(context)) {
+    return context.reduce<boolean | undefined>((current, entry) => contextUsesSchemaOrgVocab(entry) ?? current, undefined);
+  }
+
+  // A remote context on schema.org, such as https://schema.org/docs/jsonldcontext.json, is the schema.org context.
+  if (typeof context === "string") {
+    return /^(?:https?:\/\/)?(?:www\.)?schema\.org(?:\/.*)?$/i.test(context.trim());
+  }
+
+  if (context && typeof context === "object" && "@vocab" in context) {
+    return isSchemaOrgVocab((context as JsonLdNode)["@vocab"]);
+  }
+
+  return undefined;
+}
+
+// A page without any @context keeps the lenient reading that bare types are schema.org terms.
+function flattenJsonLd(value: unknown, schemaOrgVocab = true): JsonLdNode[] {
   if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenJsonLd(item));
+    return value.flatMap((item) => flattenJsonLd(item, schemaOrgVocab));
   }
 
   if (!value || typeof value !== "object") {
@@ -66,7 +92,12 @@ function flattenJsonLd(value: unknown): JsonLdNode[] {
   }
 
   const node = value as JsonLdNode;
-  const graphNodes = flattenJsonLd(node["@graph"]);
+  const nodeVocab = contextUsesSchemaOrgVocab(node["@context"]) ?? schemaOrgVocab;
+  if (!nodeVocab) {
+    outsideSchemaOrgVocab.add(node);
+  }
+
+  const graphNodes = flattenJsonLd(node["@graph"], nodeVocab);
   return [node, ...graphNodes];
 }
 
@@ -102,7 +133,9 @@ function hasSuccessfulResource(statusCode: number | undefined): boolean {
 }
 
 function localBusinessNodes($: CheerioAPI): JsonLdNode[] {
-  return jsonLdNodes($).filter((node) => jsonLdTypes(node).some(isLocalBusinessType));
+  return jsonLdNodes($).filter((node) =>
+    jsonLdTypes(node).some((type) => isLocalBusinessType(type, !outsideSchemaOrgVocab.has(node)))
+  );
 }
 
 function hasObjectField(value: unknown): boolean {
@@ -1259,7 +1292,7 @@ const rules: Rule[] = [
     severity: "medium",
     source: "JSON-LD",
     recommendation: "Add LocalBusiness schema when the page represents a local business location.",
-    check: ({ $ }) => hasJsonLdType($, isLocalBusinessType),
+    check: ({ $ }) => localBusinessNodes($).length > 0,
     evidence: () => "No LocalBusiness JSON-LD type found"
   },
   {

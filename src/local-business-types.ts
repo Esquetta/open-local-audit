@@ -156,11 +156,17 @@ const localBusinessTypes = new Set([
   "TravelAgency"
 ]);
 
-const schemaOrgTerm = /^(?:https?:\/\/(?:www\.)?schema\.org\/|schema:)?([A-Za-z]+)$/;
+const schemaOrgTerm = /^(https?:\/\/(?:www\.)?schema\.org\/|schema:)?([A-Za-z]+)$/;
 
-// Accepts bare types ("Dentist") and schema.org IRIs ("https://schema.org/Dentist", "schema:Dentist").
-// Types from other vocabularies, such as "https://example.com/Restaurant", are not schema.org terms.
-export function isLocalBusinessType(type: string): boolean {
-  const name = schemaOrgTerm.exec(type.trim())?.[1];
-  return name !== undefined && (localBusinessTypes.has(name) || name.endsWith("LocalBusiness"));
+// Accepts schema.org IRIs ("https://schema.org/Dentist", "schema:Dentist") and, when the JSON-LD context
+// makes bare terms schema.org terms, bare types ("Dentist"). Types from other vocabularies, such as
+// "https://example.com/Restaurant", are not schema.org terms.
+export function isLocalBusinessType(type: string, bareTermsAreSchemaOrg = true): boolean {
+  const match = schemaOrgTerm.exec(type.trim());
+  if (!match || (match[1] === undefined && !bareTermsAreSchemaOrg)) {
+    return false;
+  }
+
+  const name = match[2];
+  return localBusinessTypes.has(name) || name.endsWith("LocalBusiness");
 }

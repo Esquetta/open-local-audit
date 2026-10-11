@@ -236,6 +236,22 @@ describe("audit rules", () => {
     }
   );
 
+  it("reads bare types through the JSON-LD @context vocabulary", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@type": "Restaurant" })).toBe(true);
+    expect(missing({ "@context": ["https://schema.org", { "@vocab": "https://example.com/" }], "@type": "Restaurant" })).toBe(true);
+    expect(missing({ "@context": "https://example.com/context.jsonld", "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@type": "https://schema.org/Restaurant" })).toBe(false);
+    expect(missing({ "@context": { "@vocab": "http://schema.org/" }, "@type": "Restaurant" })).toBe(false);
+    expect(missing({ "@context": undefined, "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": "https://schema.org/docs/jsonldcontext.json", "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@graph": [{ "@type": "Dentist" }] })).toBe(true);
+    expect(
+      missing({ "@context": { "@vocab": "https://example.com/" }, "@graph": [{ "@context": "https://schema.org", "@type": "Dentist" }] })
+    ).toBe(false);
+  });
+
   it("checks contact fields and visible details on LocalBusiness subtypes", () => {
     expect(schemaFindings({ "@type": "Dentist", name: "Smile Dental" })).toContain("localbusiness-schema-contact-fields");
 
