@@ -281,6 +281,13 @@ describe("audit rules", () => {
       })
     ).toBe(false);
     expect(missing({ "@context": { "a": "b:", "b": "a:" }, "@type": "a:Dentist" })).toBe(true);
+    expect(
+      missing({ "@context": [{ "ex": "https://example.com/", "Clinic": "ex:Dentist" }, { "ex": "https://schema.org/" }], "@type": "Clinic" })
+    ).toBe(true);
+    expect(
+      missing({ "@context": [{ "ex": "https://schema.org/", "Clinic": "ex:Dentist" }, { "ex": "https://example.com/" }], "@type": "Clinic" })
+    ).toBe(false);
+    expect(missing({ "@context": { "Clinic": "ex:Dentist", "ex": "https://schema.org/" }, "@type": "Clinic" })).toBe(false);
     expect(missing({ "@context": { "Dentist": "Clinic", "Clinic": "Dentist" }, "@type": "Dentist" })).toBe(true);
     expect(missing({ "@context": { "root": "https://schema.org/Dent", "schema": "root" }, "@type": "schema:ist" })).toBe(true);
   });
@@ -375,6 +382,15 @@ describe("audit rules", () => {
     expect(schemaFindings({ ...base, openingHoursSpecification: { "@id": "#missing" } })).toContain(
       "localbusiness-schema-contact-fields"
     );
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@id": "#hours", opens: "09:00" },
+          { "@id": "#hours" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
     expect(schemaFindings(base)).toContain("localbusiness-schema-contact-fields");
   });
 

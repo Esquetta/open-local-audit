@@ -156,9 +156,13 @@ const localBusinessTypes = new Set([
   "TravelAgency"
 ]);
 
-// A term definition: the IRI it maps to (null when the term is explicitly unmapped), whether it
-// came from a simple string, and whether "@prefix": true marks it as a compact-IRI prefix.
-type TermDefinition = { iri: string | null; simple: boolean; prefix: boolean };
+// A term definition as written in a local context: the IRI value (null when the term is explicitly
+// unmapped), whether it is a simple string, and whether "@prefix": true marks it as a prefix.
+type RawTermDefinition = { iri: string | null; simple: boolean; prefix: boolean };
+
+// A processed term definition: its fully expanded IRI, frozen when its context was applied, and
+// whether it may be used as the prefix of a compact IRI such as "schema:Dentist".
+type TermDefinition = { iri: string | null; prefix: boolean };
 
 // The parts of a JSON-LD active context that decide which IRI a @type expands to.
 export type JsonLdTypeContext = {
@@ -175,8 +179,9 @@ const schemaOrgType = /^https?:\/\/(?:www\.)?schema\.org\/([A-Za-z]+)$/;
 // Only an absolute URL names schema.org's context; "schema.org" alone is relative to the page.
 const schemaOrgContext = /^https?:\/\/(?:www\.)?schema\.org(?:\/.*)?$/i;
 const genDelimEnd = /[:/?#[\]@]$/;
+const noLocalTerms: ReadonlyMap<string, RawTermDefinition> = new Map();
 
-function termDefinition(definition: unknown): TermDefinition | undefined {
+function rawTermDefinition(definition: unknown): RawTermDefinition | undefined {
   if (definition === null) {
     return { iri: null, simple: false, prefix: false };
   }
@@ -196,9 +201,36 @@ function termDefinition(definition: unknown): TermDefinition | undefined {
   return undefined;
 }
 
-// Expands a value that may be a term or a compact IRI using the context's terms. Terms already being
-// expanded are tracked so a cyclic definition stops instead of recursing forever.
-function expandIri(value: string, context: JsonLdTypeContext, expanding: ReadonlySet<string> = new Set()): string | undefined {
+// Resolves a term from the local context being processed, whose definitions may depend on each other,
+// or else from the active context. A term already being resolved is a cycle and is treated as undefined.
+function resolveTerm(
+  term: string,
+  context: JsonLdTypeContext,
+  local: ReadonlyMap<string, RawTermDefinition>,
+  resolving: ReadonlySet<string>
+): TermDefinition | undefined {
+  const raw = local.get(term);
+  if (!raw) {
+    return context.terms.get(term);
+  }
+
+  if (resolving.has(term)) {
+    return undefined;
+  }
+
+  const iri = raw.iri === null ? null : (expandIri(raw.iri, context, local, new Set([...resolving, term])) ?? null);
+  // Follows JSON-LD 1.1: a term is a prefix with "@prefix": true, or when it is a simple string term
+  // whose expanded IRI ends with a gen-delim character.
+  return { iri, prefix: raw.prefix || (raw.simple && iri !== null && genDelimEnd.test(iri)) };
+}
+
+// Expands a term, compact IRI, or absolute IRI.
+function expandIri(
+  value: string,
+  context: JsonLdTypeContext,
+  local: ReadonlyMap<string, RawTermDefinition> = noLocalTerms,
+  resolving: ReadonlySet<string> = new Set()
+): string | undefined {
   const trimmed = value.trim();
   const colon = trimmed.indexOf(":");
   if (colon > 0) {
@@ -208,23 +240,17 @@ function expandIri(value: string, context: JsonLdTypeContext, expanding: Readonl
       return trimmed;
     }
 
-    // Follows JSON-LD 1.1: a term is a prefix when it has "@prefix": true, or when it is a simple string
-    // term whose expanded IRI ends with a gen-delim character. Its IRI may itself be a term or compact IRI.
-    const definition = context.terms.get(prefix);
-    const base =
-      definition?.iri && !expanding.has(prefix)
-        ? expandIri(definition.iri, context, new Set([...expanding, prefix]))
-        : undefined;
-    if (base !== undefined && (definition?.prefix || (definition?.simple && genDelimEnd.test(base)))) {
-      return base + suffix;
+    const definition = resolveTerm(prefix, context, local, resolving);
+    if (definition?.prefix && definition.iri) {
+      return definition.iri + suffix;
     }
 
     return !context.declared && prefix === "schema" ? schemaOrgRoot + suffix : trimmed;
   }
 
-  if (context.terms.has(trimmed)) {
-    const iri = context.terms.get(trimmed)?.iri;
-    return iri && !expanding.has(trimmed) ? expandIri(iri, context, new Set([...expanding, trimmed])) : undefined;
+  const definition = resolveTerm(trimmed, context, local, resolving);
+  if (definition) {
+    return definition.iri ?? undefined;
   }
 
   if (!context.declared) {
@@ -256,7 +282,7 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
       ? {
           declared: true,
           vocab: schemaOrgRoot,
-          terms: new Map([...active.terms, ["schema", { iri: schemaOrgRoot, simple: false, prefix: true }]])
+          terms: new Map([...active.terms, ["schema", { iri: schemaOrgRoot, prefix: true }]])
         }
       : { declared: true, vocab: null, terms: new Map() };
   }
@@ -273,12 +299,19 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
     next.vocab = typeof vocab === "string" ? (expandIri(vocab, { ...active, declared: true }) ?? null) : null;
   }
 
+  const local = new Map<string, RawTermDefinition>();
   for (const [key, value] of Object.entries(fields)) {
-    if (!key.startsWith("@")) {
-      const definition = termDefinition(value);
-      if (definition) {
-        next.terms.set(key, definition);
-      }
+    const definition = key.startsWith("@") ? undefined : rawTermDefinition(value);
+    if (definition) {
+      local.set(key, definition);
+    }
+  }
+
+  // Each term's IRI is expanded and frozen now, so later contexts that redefine its prefix do not change it.
+  const resolved = [...local.keys()].map((term) => [term, resolveTerm(term, next, local, new Set())] as const);
+  for (const [term, definition] of resolved) {
+    if (definition) {
+      next.terms.set(term, definition);
     }
   }
 

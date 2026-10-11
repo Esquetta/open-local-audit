@@ -153,9 +153,21 @@ function hasOpeningHoursData(specification: unknown): boolean {
   });
 }
 
+// Every JSON-LD node with each @id; nodes sharing an @id describe the same thing.
+function jsonLdNodesById($: CheerioAPI): Map<string, JsonLdNode[]> {
+  const nodesById = new Map<string, JsonLdNode[]>();
+  for (const node of jsonLdNodes($)) {
+    if (typeof node["@id"] === "string") {
+      nodesById.set(node["@id"], [...(nodesById.get(node["@id"]) ?? []), node]);
+    }
+  }
+
+  return nodesById;
+}
+
 // openingHours may be one string or a list; openingHoursSpecification is one object or a list of them,
-// each with a day or time, or an {"@id": ...} reference to one elsewhere in the graph.
-function hasOpeningHoursField(node: JsonLdNode, index: JsonLdIndex): boolean {
+// each with a day or time, or an {"@id": ...} reference to nodes elsewhere in the graph that have one.
+function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>): boolean {
   const specifications = Array.isArray(node.openingHoursSpecification)
     ? node.openingHoursSpecification
     : [node.openingHoursSpecification];
@@ -163,8 +175,8 @@ function hasOpeningHoursField(node: JsonLdNode, index: JsonLdIndex): boolean {
     stringValues(node.openingHours).length > 0 ||
     specifications.some((specification) => {
       const reference = hasObjectField(specification) ? (specification as JsonLdNode)["@id"] : undefined;
-      const referenced = typeof reference === "string" ? index.get(reference) : undefined;
-      return hasOpeningHoursData(specification) || hasOpeningHoursData(referenced);
+      const referenced = typeof reference === "string" ? (nodesById.get(reference) ?? []) : [];
+      return hasOpeningHoursData(specification) || referenced.some(hasOpeningHoursData);
     })
   );
 }
@@ -175,9 +187,9 @@ function hasLocalBusinessContactFields($: CheerioAPI): boolean {
     return true;
   }
 
-  const index = jsonLdIndex($);
+  const nodesById = jsonLdNodesById($);
   return nodes.some(
-    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasOpeningHoursField(node, index)
+    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasOpeningHoursField(node, nodesById)
   );
 }
 
