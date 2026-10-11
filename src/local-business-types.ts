@@ -208,9 +208,11 @@ function expandIri(value: string, context: JsonLdTypeContext, depth = 0): string
       return trimmed;
     }
 
+    // A prefix's own IRI may be a compact IRI or term ("schema": {"@id": "s:", "@prefix": true}).
     const definition = context.terms.get(prefix);
     if (definition?.prefix && definition.iri) {
-      return definition.iri + suffix;
+      const base = depth < 3 ? expandIri(definition.iri, context, depth + 1) : undefined;
+      return base === undefined ? undefined : base + suffix;
     }
 
     return !context.declared && prefix === "schema" ? schemaOrgRoot + suffix : trimmed;

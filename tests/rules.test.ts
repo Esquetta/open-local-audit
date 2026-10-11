@@ -265,6 +265,28 @@ describe("audit rules", () => {
     expect(missing({ "@context": { "schema": { "@id": "https://schema.org/", "@prefix": false } }, "@type": "schema:Dentist" })).toBe(true);
     expect(missing({ "@context": { "schema": { "@id": "https://schema.org/" } }, "@type": "schema:Dentist" })).toBe(true);
     expect(missing({ "@context": { "schema": { "@id": "https://schema.org/", "@prefix": true } }, "@type": "schema:Dentist" })).toBe(false);
+    expect(
+      missing({ "@context": { "s": "https://schema.org/", "schema": { "@id": "s:", "@prefix": true } }, "@type": "schema:Dentist" })
+    ).toBe(false);
+    expect(
+      missing({ "@context": { "s": "https://example.com/", "schema": { "@id": "s:", "@prefix": true } }, "@type": "schema:Dentist" })
+    ).toBe(true);
+  });
+
+  it("keeps a non-propagating @context off nested graph nodes", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(
+      missing({ "@context": { "@vocab": "https://schema.org/", "@propagate": false }, "@graph": [{ "@type": "Dentist" }] })
+    ).toBe(true);
+    expect(missing({ "@context": { "@vocab": "https://schema.org/", "@propagate": false }, "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": { "@vocab": "https://schema.org/" }, "@graph": [{ "@type": "Dentist" }] })).toBe(false);
+    expect(
+      missing({
+        "@context": "https://schema.org",
+        "@graph": [{ "@context": { "@vocab": "https://example.com/", "@propagate": false }, "@graph": [{ "@type": "Dentist" }] }]
+      })
+    ).toBe(false);
   });
 
   it("expands a compact IRI used as the @vocab mapping", () => {
