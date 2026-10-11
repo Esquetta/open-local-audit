@@ -4,7 +4,7 @@ All notable changes to Open Local Audit will be documented here.
 
 ## v0.78.0 - 2026-10-11
 
-- The `localbusiness-schema-present`, `localbusiness-schema-contact-fields`, and `localbusiness-schema-nap-consistency` rules now recognise schema.org LocalBusiness subtypes such as `Dentist`, `Attorney`, `MedicalClinic`, `Restaurant`, and `Plumber`, including full `https://schema.org/` type URLs. Pages that use only a subtype no longer get a false "LocalBusiness structured data is missing" finding, and their schema telephone, address, and opening hours are now checked.
+- The `localbusiness-schema-present`, `localbusiness-schema-contact-fields`, and `localbusiness-schema-nap-consistency` rules now recognise schema.org LocalBusiness subtypes such as `Dentist`, `Attorney`, `MedicalClinic`, `Ophthalmology`, `Restaurant`, and `Plumber` (every LocalBusiness descendant in schema.org 30.1), written as bare names, `schema:` terms, or `https://schema.org/` URLs. Types from other vocabularies are not treated as schema.org types. Pages that use only a subtype no longer get a false "LocalBusiness structured data is missing" finding, and their schema telephone, address, and opening hours are now checked.
 - `localbusiness-schema-contact-fields` accepts `openingHoursSpecification` (one object or a list) and a list of `openingHours` strings as opening hours.
 - These changes can remove `localbusiness-schema-present` findings and add contact-field or NAP findings on pages with subtype schema, so `compare` against earlier reports may show them as fixed or new.
 

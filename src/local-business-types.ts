@@ -1,5 +1,6 @@
-// schema.org LocalBusiness and its subtypes (https://schema.org/LocalBusiness), so pages typed as
-// Dentist, Attorney, Restaurant, or Plumber count as local business structured data.
+// schema.org LocalBusiness and all its descendants as of schema.org 30.1, including the health-lifesci
+// MedicalBusiness specialties, so pages typed as Dentist, Attorney, Restaurant, or Plumber count as
+// local business structured data.
 const localBusinessTypes = new Set([
   "LocalBusiness",
   "AnimalShelter",
@@ -78,6 +79,7 @@ const localBusinessTypes = new Set([
   "SkiResort",
   "VacationRental",
   "MedicalBusiness",
+  "Audiology",
   "CommunityHealth",
   "Dermatology",
   "DietNutrition",
@@ -90,6 +92,7 @@ const localBusinessTypes = new Set([
   "Nursing",
   "Obstetric",
   "Oncologic",
+  "Ophthalmology",
   "Optician",
   "Optometric",
   "Otolaryngologic",
@@ -153,8 +156,11 @@ const localBusinessTypes = new Set([
   "TravelAgency"
 ]);
 
-// Accepts bare types ("Dentist") and full or prefixed IRIs ("https://schema.org/Dentist", "schema:Dentist").
+const schemaOrgTerm = /^(?:https?:\/\/(?:www\.)?schema\.org\/|schema:)?([A-Za-z]+)$/;
+
+// Accepts bare types ("Dentist") and schema.org IRIs ("https://schema.org/Dentist", "schema:Dentist").
+// Types from other vocabularies, such as "https://example.com/Restaurant", are not schema.org terms.
 export function isLocalBusinessType(type: string): boolean {
-  const name = type.trim().replace(/^.*[/:#]/, "");
-  return localBusinessTypes.has(name) || name.endsWith("LocalBusiness");
+  const name = schemaOrgTerm.exec(type.trim())?.[1];
+  return name !== undefined && (localBusinessTypes.has(name) || name.endsWith("LocalBusiness"));
 }

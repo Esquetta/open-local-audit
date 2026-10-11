@@ -207,7 +207,11 @@ describe("audit rules", () => {
     { type: "Attorney" },
     { type: "MedicalClinic" },
     { type: "Plumber" },
+    { type: "Audiology" },
+    { type: "Ophthalmology" },
     { type: "https://schema.org/Restaurant" },
+    { type: "http://www.schema.org/Restaurant" },
+    { type: "schema:Dentist" },
     { type: ["MedicalBusiness", "Dentist"] }
   ])(
     "treats the LocalBusiness subtype $type as LocalBusiness structured data",
@@ -225,9 +229,12 @@ describe("audit rules", () => {
     }
   );
 
-  it("still flags pages whose only schema type is not a local business", () => {
-    expect(schemaFindings({ "@type": "WebSite", name: "Smile Dental" })).toContain("localbusiness-schema-present");
-  });
+  it.each(["WebSite", "https://example.com/Restaurant", "ex:Dentist", "https://example.com/schema.org/Dentist"])(
+    "still flags pages whose only schema type %s is not a schema.org local business",
+    (type) => {
+      expect(schemaFindings({ "@type": type, name: "Smile Dental" })).toContain("localbusiness-schema-present");
+    }
+  );
 
   it("checks contact fields and visible details on LocalBusiness subtypes", () => {
     expect(schemaFindings({ "@type": "Dentist", name: "Smile Dental" })).toContain("localbusiness-schema-contact-fields");
