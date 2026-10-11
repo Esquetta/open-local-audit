@@ -187,6 +187,410 @@ describe("audit rules", () => {
     expect(report.findings.map((finding) => finding.id)).not.toContain("localbusiness-schema-present");
   });
 
+  function schemaFindings(schema: object, body = "<h1>Smile Dental</h1>"): string[] {
+    return auditSnapshot(
+      snapshot(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>Smile Dental</title>
+            <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", ...schema })}</script>
+          </head>
+          <body>${body}</body>
+        </html>
+      `)
+    ).findings.map((finding) => finding.id);
+  }
+
+  it.each<{ type: string | string[] }>([
+    { type: "Dentist" },
+    { type: "Attorney" },
+    { type: "MedicalClinic" },
+    { type: "Plumber" },
+    { type: "Audiology" },
+    { type: "Ophthalmology" },
+    { type: "https://schema.org/Restaurant" },
+    { type: "http://www.schema.org/Restaurant" },
+    { type: "schema:Dentist" },
+    { type: ["MedicalBusiness", "Dentist"] }
+  ])(
+    "treats the LocalBusiness subtype $type as LocalBusiness structured data",
+    ({ type }) => {
+      const findings = schemaFindings({
+        "@type": type,
+        name: "Smile Dental",
+        telephone: "+902120000000",
+        address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" },
+        openingHours: "Mo-Fr 09:00-18:00"
+      });
+
+      expect(findings).not.toContain("localbusiness-schema-present");
+      expect(findings).not.toContain("localbusiness-schema-contact-fields");
+    }
+  );
+
+  it.each(["WebSite", "https://example.com/Restaurant", "ex:Dentist", "https://example.com/schema.org/Dentist"])(
+    "still flags pages whose only schema type %s is not a schema.org local business",
+    (type) => {
+      expect(schemaFindings({ "@type": type, name: "Smile Dental" })).toContain("localbusiness-schema-present");
+    }
+  );
+
+  it("reads bare types through the JSON-LD @context vocabulary", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@type": "Restaurant" })).toBe(true);
+    expect(missing({ "@context": ["https://schema.org", { "@vocab": "https://example.com/" }], "@type": "Restaurant" })).toBe(true);
+    expect(missing({ "@context": "https://example.com/context.jsonld", "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": "schema.org", "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": "http://schema.org", "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@type": "https://schema.org/Restaurant" })).toBe(false);
+    expect(missing({ "@context": { "@vocab": "http://schema.org/" }, "@type": "Restaurant" })).toBe(false);
+    expect(missing({ "@context": undefined, "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": "https://schema.org/docs/jsonldcontext.json", "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@graph": [{ "@type": "Dentist" }] })).toBe(true);
+    expect(
+      missing({ "@context": { "@vocab": "https://example.com/" }, "@graph": [{ "@context": "https://schema.org", "@type": "Dentist" }] })
+    ).toBe(false);
+    expect(missing({ "@context": "https://schema.org", "@graph": [{ "@context": null, "@type": "Restaurant" }] })).toBe(true);
+    expect(missing({ "@context": { "Dentist": "https://example.com/Dentist" }, "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": { "Clinic": "https://schema.org/Dentist" }, "@type": "Clinic" })).toBe(false);
+    expect(
+      missing({
+        "@context": [
+          { "@vocab": "https://schema.org/", "Dentist": "https://schema.org/Dentist" },
+          { "@vocab": "https://example.com/", "Dentist": { "@type": "@id" } }
+        ],
+        "@type": "Dentist"
+      })
+    ).toBe(true);
+    expect(missing({ "@context": { "@vocab": "https://schema.org/", "Dentist": { "@type": "@id" } }, "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": { "Dentist": { "@type": "@id" } }, "@type": "Dentist" })).toBe(true);
+    expect(
+      missing({ "@context": { "schema": "https://schema.org/", "schema:Dentist": "https://example.com/Dentist" }, "@type": "schema:Dentist" })
+    ).toBe(true);
+    expect(
+      missing({ "@context": { "schema": "https://schema.org/", "schema:Dentist": { "@type": "@id" } }, "@type": "schema:Dentist" })
+    ).toBe(false);
+  });
+
+  it("expands prefixed types through the JSON-LD @context", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(missing({ "@context": { "schema": { "@id": "https://example.com/", "@prefix": true } }, "@type": "schema:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "schema": "https://schema.org/" }, "@type": "schema:Dentist" })).toBe(false);
+    expect(missing({ "@context": { "s": "http://schema.org/" }, "@type": "s:Dentist" })).toBe(false);
+    expect(missing({ "@context": undefined, "@type": "schema:Dentist" })).toBe(false);
+    expect(missing({ "@context": { "schema": { "@id": "https://schema.org/", "@prefix": false } }, "@type": "schema:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "schema": { "@id": "https://schema.org/" } }, "@type": "schema:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "schema": { "@id": "https://schema.org/", "@prefix": true } }, "@type": "schema:Dentist" })).toBe(false);
+    expect(
+      missing({ "@context": { "s": "https://schema.org/", "schema": { "@id": "s:", "@prefix": true } }, "@type": "schema:Dentist" })
+    ).toBe(false);
+    expect(
+      missing({ "@context": { "s": "https://example.com/", "schema": { "@id": "s:", "@prefix": true } }, "@type": "schema:Dentist" })
+    ).toBe(true);
+    expect(missing({ "@context": { "root": "https://schema.org/", "schema": "root" }, "@type": "schema:Dentist" })).toBe(false);
+    expect(
+      missing({
+        "@context": { "a": "https://schema.org/", "b": "a:", "c": "b:", "d": "c:", "e": "d:", "f": "e:" },
+        "@type": "f:Dentist"
+      })
+    ).toBe(false);
+    expect(missing({ "@context": { "a": "b:", "b": "a:" }, "@type": "a:Dentist" })).toBe(true);
+    expect(
+      missing({ "@context": [{ "ex": "https://example.com/", "Clinic": "ex:Dentist" }, { "ex": "https://schema.org/" }], "@type": "Clinic" })
+    ).toBe(true);
+    expect(
+      missing({ "@context": [{ "ex": "https://schema.org/", "Clinic": "ex:Dentist" }, { "ex": "https://example.com/" }], "@type": "Clinic" })
+    ).toBe(false);
+    expect(missing({ "@context": { "Clinic": "ex:Dentist", "ex": "https://schema.org/" }, "@type": "Clinic" })).toBe(false);
+    expect(missing({ "@context": { "Dentist": "Clinic", "Clinic": "Dentist" }, "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": { "root": "https://schema.org/Dent", "schema": "root" }, "@type": "schema:ist" })).toBe(true);
+  });
+
+  it("keeps a non-propagating @context off nested graph nodes", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(
+      missing({ "@context": { "@vocab": "https://schema.org/", "@propagate": false }, "@graph": [{ "@type": "Dentist" }] })
+    ).toBe(true);
+    expect(missing({ "@context": { "@vocab": "https://schema.org/", "@propagate": false }, "@type": "Dentist" })).toBe(false);
+    expect(
+      missing({
+        "@context": [
+          { "@vocab": "https://schema.org/", "@propagate": false },
+          { "schema": "https://schema.org/", "@propagate": false }
+        ],
+        "@graph": [{ "@type": "Dentist" }]
+      })
+    ).toBe(true);
+    expect(missing({ "@context": { "@vocab": "https://schema.org/" }, "@graph": [{ "@type": "Dentist" }] })).toBe(false);
+    expect(
+      missing({
+        "@context": "https://schema.org",
+        "@graph": [{ "@context": { "@vocab": "https://example.com/", "@propagate": false }, "@graph": [{ "@type": "Dentist" }] }]
+      })
+    ).toBe(false);
+  });
+
+  it("expands a compact IRI used as the @vocab mapping", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(missing({ "@context": [{ "schema": "https://schema.org/" }, { "@vocab": "schema:" }], "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": [{ "ex": "https://example.com/" }, { "@vocab": "ex:" }], "@type": "Dentist" })).toBe(true);
+  });
+
+  it("checks contact fields and visible details on LocalBusiness subtypes", () => {
+    expect(schemaFindings({ "@type": "Dentist", name: "Smile Dental" })).toContain("localbusiness-schema-contact-fields");
+
+    const mismatch = schemaFindings(
+      {
+        "@type": "Dentist",
+        name: "Smile Dental",
+        telephone: "+902129999999",
+        address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" },
+        openingHours: "Mo-Fr 09:00-18:00"
+      },
+      `<h1>Smile Dental</h1><p>Call <a href="tel:+902120000000">+90 212 000 00 00</a></p>`
+    );
+    expect(mismatch).toContain("localbusiness-schema-nap-consistency");
+  });
+
+  it("accepts openingHoursSpecification and openingHours lists as opening hours", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+    };
+    const specification = {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: ["Monday", "Tuesday"],
+      opens: "09:00",
+      closes: "18:00"
+    };
+
+    expect(schemaFindings({ ...base, openingHoursSpecification: specification })).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: [specification] })).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHours: ["Mo-Fr 09:00-18:00"] })).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: [] })).toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: {} })).toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: [{ "@type": "OpeningHoursSpecification" }] })).toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    expect(schemaFindings({ ...base, openingHoursSpecification: { dayOfWeek: "https://schema.org/Monday" } })).not.toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    expect(schemaFindings({ ...base, openingHoursSpecification: { dayOfWeek: { "@id": "https://schema.org/Monday" } } })).not.toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    for (const empty of [{ opens: {} }, { dayOfWeek: {} }, { dayOfWeek: [{}], opens: [{}, ""] }, { closes: { "@value": "" } }]) {
+      expect(schemaFindings({ ...base, openingHoursSpecification: empty })).toContain("localbusiness-schema-contact-fields");
+    }
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@id": "#hours", "@type": "OpeningHoursSpecification", opens: "09:00", closes: "18:00" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings({ ...base, openingHoursSpecification: { "@id": "#missing" } })).toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@id": "#hours", opens: "09:00" },
+          { "@id": "#hours" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(schemaFindings(base)).toContain("localbusiness-schema-contact-fields");
+  });
+
+  it("resolves relative JSON-LD @id references against the page URL", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+    };
+    const hasContactFinding = (graph: object[], html = "") =>
+      auditSnapshot(
+        snapshot(
+          `<!doctype html><html><head><title>Smile Dental</title>${html}
+          <script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", "@graph": graph })}</script>
+          </head><body><h1>Smile Dental</h1></body></html>`,
+          { url: "http://example.test", finalUrl: "https://example.test/clinic/" }
+        )
+      ).findings.some((finding) => finding.id === "localbusiness-schema-contact-fields");
+
+    expect(
+      hasContactFinding([
+        { ...base, openingHoursSpecification: { "@id": "#hours" } },
+        { "@id": "https://example.test/clinic/#hours", opens: "09:00" }
+      ])
+    ).toBe(false);
+    expect(
+      hasContactFinding([
+        { ...base, openingHoursSpecification: { "@id": "https://example.test/clinic/#hours" } },
+        { "@id": "#hours", opens: "09:00" }
+      ])
+    ).toBe(false);
+    expect(
+      hasContactFinding([
+        { ...base, openingHoursSpecification: { "@id": "#hours" } },
+        { "@id": "https://other.test/clinic/#hours", opens: "09:00" }
+      ])
+    ).toBe(true);
+    expect(
+      hasContactFinding(
+        [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@id": "https://cdn.example.test/#hours", opens: "09:00" }
+        ],
+        `<base href="https://cdn.example.test/">`
+      )
+    ).toBe(false);
+  });
+
+  it("resolves JSON-LD @id references against the context @base", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" },
+      openingHoursSpecification: { "@id": "#hours" }
+    };
+    const withBase = (contextBase: string | null, hoursId: string) =>
+      schemaFindings({
+        "@context": { "@vocab": "https://schema.org/", "@base": contextBase },
+        "@graph": [base, { "@id": hoursId, opens: "09:00" }]
+      });
+
+    expect(withBase("https://cdn.example/", "https://cdn.example/#hours")).not.toContain("localbusiness-schema-contact-fields");
+    expect(withBase("https://cdn.example/", "https://example.test/#hours")).toContain("localbusiness-schema-contact-fields");
+    expect(withBase("/clinic/", "https://example.test/clinic/#hours")).not.toContain("localbusiness-schema-contact-fields");
+    expect(withBase(null, "#hours")).not.toContain("localbusiness-schema-contact-fields");
+    expect(withBase(null, "https://example.test/#hours")).toContain("localbusiness-schema-contact-fields");
+  });
+
+  it("expands compact @id values and reads nodes from @included", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+    };
+    const context = { "@vocab": "https://schema.org/", "h": "https://example.test/hours/" };
+
+    expect(
+      schemaFindings({
+        "@context": context,
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "h:weekly" } },
+          { "@id": "https://example.test/hours/weekly", opens: "09:00" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@context": context,
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "https://example.test/hours/weekly" } },
+          { "@id": "h:weekly", opens: "09:00" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@context": { ...context, "h": "https://example.test/other/" },
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "h:weekly" } },
+          { "@id": "https://example.test/hours/weekly", opens: "09:00" }
+        ]
+      })
+    ).toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({ ...base, openingHoursSpecification: { "@id": "#hours" }, "@included": [{ "@id": "#hours", opens: "09:00" }] })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@type": "WebPage", mainEntity: { "@type": "OpeningHoursSpecification", "@id": "#hours", opens: "09:00" } }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { ...base, openingHoursSpecification: { "@id": "#hours" } },
+          { "@type": "WebPage", hasPart: { "@list": [{ "@id": "#hours", closes: "18:00" }] } }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+
+    const nonPropagating = (reference: object) =>
+      schemaFindings({
+        "@context": { ...context, "@propagate": false },
+        ...base,
+        openingHoursSpecification: reference,
+        "@included": [{ "@id": "https://example.test/hours/weekly", opens: "09:00" }]
+      });
+    expect(nonPropagating({ "@id": "h:weekly" })).not.toContain("localbusiness-schema-contact-fields");
+    expect(nonPropagating({ "@id": "h:weekly", "@type": "OpeningHoursSpecification" })).toContain(
+      "localbusiness-schema-contact-fields"
+    );
+  });
+
+  it("keeps blank node labels local to their JSON-LD block", () => {
+    const address = { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" };
+    const business = { "@id": "_:business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" };
+    const details = { "@id": "_:business", address, openingHours: "Mo-Fr 09:00-18:00" };
+    const block = (schema: object) =>
+      `<script type="application/ld+json">${JSON.stringify({ "@context": "https://schema.org", ...schema })}</script>`;
+    const hasContactFinding = (scripts: string) =>
+      auditSnapshot(
+        snapshot(`<!doctype html><html><head><title>Smile Dental</title>${scripts}</head><body><h1>Smile Dental</h1></body></html>`)
+      ).findings.some((finding) => finding.id === "localbusiness-schema-contact-fields");
+
+    expect(hasContactFinding(block(business) + block(details))).toBe(true);
+    expect(hasContactFinding(block({ "@graph": [business, details] }))).toBe(false);
+  });
+
+  it("combines LocalBusiness fields split across nodes that share an @id", () => {
+    const address = { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" };
+
+    expect(
+      schemaFindings({
+        "@graph": [
+          { "@id": "#business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" },
+          { "@id": "https://example.test/#business", address, openingHours: "Mo-Fr 09:00-18:00" }
+        ]
+      })
+    ).not.toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { "@id": "#business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" },
+          { "@id": "#business", address }
+        ]
+      })
+    ).toContain("localbusiness-schema-contact-fields");
+    expect(
+      schemaFindings({
+        "@graph": [
+          { "@id": "#business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" },
+          { "@id": "#other", address, openingHours: "Mo-Fr 09:00-18:00" }
+        ]
+      })
+    ).toContain("localbusiness-schema-contact-fields");
+  });
+
   it("flags weak structured data and local-business conversion signals", () => {
     const report = auditSnapshot(
       snapshot(`

@@ -1,6 +1,14 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
+import {
+  applyTypeContext,
+  contextBase,
+  expandNodeId,
+  isLocalBusinessType,
+  noTypeContext,
+  type JsonLdTypeContext
+} from "./local-business-types.js";
 import type { Finding, FindingCategory, PageSnapshot, Severity } from "./types.js";
 
 type Rule = {
@@ -55,9 +63,16 @@ function jsonLdTypes(node: JsonLdNode): string[] {
   return types.filter((type): type is string => typeof type === "string");
 }
 
-function flattenJsonLd(value: unknown): JsonLdNode[] {
+// Where each flattened node was found: the active JSON-LD context that expands its @type and @id, the
+// context its nested node objects use, and the script block it came from, which scopes blank node labels.
+type JsonLdNodeScope = { context: JsonLdTypeContext; nestedContext: JsonLdTypeContext; block: number };
+const nodeScopes = new WeakMap<JsonLdNode, JsonLdNodeScope>();
+
+// Flattens top-level and @graph or @included node objects; with embedded set, also node objects nested
+// as property values, such as an address or a mainEntity.
+function flattenJsonLd(value: unknown, block: number, context: JsonLdTypeContext = noTypeContext, embedded = false): JsonLdNode[] {
   if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenJsonLd(item));
+    return value.flatMap((item) => flattenJsonLd(item, block, context, embedded));
   }
 
   if (!value || typeof value !== "object") {
@@ -65,18 +80,29 @@ function flattenJsonLd(value: unknown): JsonLdNode[] {
   }
 
   const node = value as JsonLdNode;
-  const graphNodes = flattenJsonLd(node["@graph"]);
-  return [node, ...graphNodes];
+  const localContext = node["@context"];
+  const nodeContext = applyTypeContext(context, localContext);
+  // A context with "@propagate": false, alone or in a context array, applies to this node only; nested
+  // nodes return to the previous context, which no longer gets the lenient no-context reading.
+  const localContexts = Array.isArray(localContext) ? localContext : [localContext];
+  const propagates = !localContexts.some((entry) => hasObjectField(entry) && (entry as JsonLdNode)["@propagate"] === false);
+  const childContext = propagates ? nodeContext : { ...context, declared: true };
+  nodeScopes.set(node, { context: nodeContext, nestedContext: childContext, block });
+  // @graph and @included both hold further node objects of the same document.
+  const nestedKeys = embedded
+    ? Object.keys(node).filter((key) => !key.startsWith("@") || ["@graph", "@included", "@list", "@set"].includes(key))
+    : ["@graph", "@included"];
+  return [node, ...nestedKeys.flatMap((key) => flattenJsonLd(node[key], block, childContext, embedded))];
 }
 
-function jsonLdNodes($: CheerioAPI): JsonLdNode[] {
+function jsonLdNodes($: CheerioAPI, embedded = false): JsonLdNode[] {
   return $('script[type="application/ld+json"]')
     .toArray()
-    .flatMap((element) => {
+    .flatMap((element, block) => {
       const raw = $(element).text();
       try {
         const parsed = JSON.parse(raw) as unknown;
-        return flattenJsonLd(parsed);
+        return flattenJsonLd(parsed, block, noTypeContext, embedded);
       } catch {
         return [];
       }
@@ -102,7 +128,7 @@ function hasSuccessfulResource(statusCode: number | undefined): boolean {
 
 function localBusinessNodes($: CheerioAPI): JsonLdNode[] {
   return jsonLdNodes($).filter((node) =>
-    jsonLdTypes(node).some((type) => type.endsWith("LocalBusiness") || type === "LocalBusiness")
+    jsonLdTypes(node).some((type) => isLocalBusinessType(type, nodeScopes.get(node)?.context))
   );
 }
 
@@ -114,15 +140,132 @@ function hasStringField(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function hasLocalBusinessContactFields($: CheerioAPI): boolean {
+// A day or time is a non-empty string, or a JSON-LD value or node object carrying one, such as
+// {"@id": "https://schema.org/Monday"} or {"@value": "09:00"}.
+function hasOpeningHoursValue(value: unknown): boolean {
+  if (hasStringField(value)) {
+    return true;
+  }
+
+  if (!hasObjectField(value)) {
+    return false;
+  }
+
+  const fields = value as JsonLdNode;
+  return ["@id", "@value", "name"].some((key) => hasStringField(fields[key]));
+}
+
+function hasOpeningHoursData(specification: unknown): boolean {
+  if (!hasObjectField(specification)) {
+    return false;
+  }
+
+  const fields = specification as JsonLdNode;
+  return ["dayOfWeek", "opens", "closes"].some((field) => {
+    const values = Array.isArray(fields[field]) ? (fields[field] as unknown[]) : [fields[field]];
+    return values.some(hasOpeningHoursValue);
+  });
+}
+
+// JSON-LD @id values are IRIs relative to the document base: the page URL, or its <base href>.
+function documentBase($: CheerioAPI, snapshot: PageSnapshot): string {
+  const pageUrl = snapshot.finalUrl || snapshot.url;
+  try {
+    return new URL($("base[href]").first().attr("href") ?? "", pageUrl).href;
+  } catch {
+    return pageUrl;
+  }
+}
+
+// An @id as a lookup key: compact IRIs expand through the JSON-LD context and relative IRIs resolve
+// against the context's @base or the document base, while blank node labels such as "_:b0" stay local
+// to their script block.
+function nodeKey(id: string, context: JsonLdTypeContext, block: number, documentBaseIri: string): string {
+  const expanded = expandNodeId(id, context);
+  if (expanded.startsWith("_:")) {
+    return `${block} ${expanded}`;
+  }
+
+  try {
+    return new URL(expanded, contextBase(documentBaseIri, context) ?? undefined).href;
+  } catch {
+    return expanded;
+  }
+}
+
+function nodeIdKey(node: JsonLdNode, base: string): string | undefined {
+  const scope = nodeScopes.get(node);
+  return scope && typeof node["@id"] === "string" ? nodeKey(node["@id"], scope.context, scope.block, base) : undefined;
+}
+
+// The key of a node reference such as {"@id": "#hours"} found in one of the owner node's properties.
+// As in JSON-LD expansion, an object holding only @id keeps the owner's context even when that context
+// does not propagate; any other nested object returns to the previous context.
+function referenceKey(reference: unknown, owner: JsonLdNode, base: string): string | undefined {
+  const scope = nodeScopes.get(owner);
+  if (!scope || !hasObjectField(reference)) {
+    return undefined;
+  }
+
+  const fields = reference as JsonLdNode;
+  const idOnly = Object.keys(fields).length === 1;
+  const context = idOnly ? scope.context : applyTypeContext(scope.nestedContext, fields["@context"]);
+  return typeof fields["@id"] === "string" ? nodeKey(fields["@id"], context, scope.block, base) : undefined;
+}
+
+// Every JSON-LD node with each @id, embedded ones included, keyed as above; nodes sharing an @id
+// describe the same thing.
+function jsonLdNodesById($: CheerioAPI, base: string): Map<string, JsonLdNode[]> {
+  const nodesById = new Map<string, JsonLdNode[]>();
+  for (const node of jsonLdNodes($, true)) {
+    const key = nodeIdKey(node, base);
+    if (key !== undefined) {
+      nodesById.set(key, [...(nodesById.get(key) ?? []), node]);
+    }
+  }
+
+  return nodesById;
+}
+
+// A node together with every other node that shares its @id.
+function nodeFragments(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>, base: string): JsonLdNode[] {
+  const key = nodeIdKey(node, base);
+  return key === undefined ? [node] : (nodesById.get(key) ?? [node]);
+}
+
+// openingHours may be one string or a list; openingHoursSpecification is one object or a list of them,
+// each with a day or time, or an {"@id": ...} reference to nodes elsewhere in the graph that have one.
+function hasOpeningHoursField(node: JsonLdNode, nodesById: Map<string, JsonLdNode[]>, base: string): boolean {
+  const specifications = Array.isArray(node.openingHoursSpecification)
+    ? node.openingHoursSpecification
+    : [node.openingHoursSpecification];
+  return (
+    stringValues(node.openingHours).length > 0 ||
+    specifications.some((specification) => {
+      const reference = referenceKey(specification, node, base);
+      const referenced = reference === undefined ? [] : (nodesById.get(reference) ?? []);
+      return hasOpeningHoursData(specification) || referenced.some(hasOpeningHoursData);
+    })
+  );
+}
+
+// The business's fields may be split across nodes that share its @id.
+function hasLocalBusinessContactFields($: CheerioAPI, snapshot: PageSnapshot): boolean {
   const nodes = localBusinessNodes($);
   if (nodes.length === 0) {
     return true;
   }
 
-  return nodes.some(
-    (node) => hasStringField(node.telephone) && hasObjectField(node.address) && hasStringField(node.openingHours)
-  );
+  const base = documentBase($, snapshot);
+  const nodesById = jsonLdNodesById($, base);
+  return nodes.some((node) => {
+    const fragments = nodeFragments(node, nodesById, base);
+    return (
+      fragments.some((fragment) => hasStringField(fragment.telephone)) &&
+      fragments.some((fragment) => hasObjectField(fragment.address)) &&
+      fragments.some((fragment) => hasOpeningHoursField(fragment, nodesById, base))
+    );
+  });
 }
 
 function stringValues(value: unknown): string[] {
@@ -1252,7 +1395,7 @@ const rules: Rule[] = [
     severity: "medium",
     source: "JSON-LD",
     recommendation: "Add LocalBusiness schema when the page represents a local business location.",
-    check: ({ $ }) => hasJsonLdType($, (type) => type.endsWith("LocalBusiness") || type === "LocalBusiness"),
+    check: ({ $ }) => localBusinessNodes($).length > 0,
     evidence: () => "No LocalBusiness JSON-LD type found"
   },
   {
@@ -1261,9 +1404,9 @@ const rules: Rule[] = [
     category: "search-basics",
     severity: "medium",
     source: "JSON-LD",
-    recommendation: "Add telephone, address, and openingHours fields to LocalBusiness schema.",
-    check: ({ $ }) => hasLocalBusinessContactFields($),
-    evidence: () => "LocalBusiness schema is missing telephone, address, or openingHours"
+    recommendation: "Add telephone, address, and openingHours or openingHoursSpecification fields to LocalBusiness schema.",
+    check: ({ $, snapshot }) => hasLocalBusinessContactFields($, snapshot),
+    evidence: () => "LocalBusiness schema is missing telephone, address, or opening hours"
   },
   {
     id: "localbusiness-schema-nap-consistency",
