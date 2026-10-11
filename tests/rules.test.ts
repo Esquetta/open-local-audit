@@ -242,6 +242,8 @@ describe("audit rules", () => {
     expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@type": "Restaurant" })).toBe(true);
     expect(missing({ "@context": ["https://schema.org", { "@vocab": "https://example.com/" }], "@type": "Restaurant" })).toBe(true);
     expect(missing({ "@context": "https://example.com/context.jsonld", "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": "schema.org", "@type": "Dentist" })).toBe(true);
+    expect(missing({ "@context": "http://schema.org", "@type": "Dentist" })).toBe(false);
     expect(missing({ "@context": { "@vocab": "https://example.com/" }, "@type": "https://schema.org/Restaurant" })).toBe(false);
     expect(missing({ "@context": { "@vocab": "http://schema.org/" }, "@type": "Restaurant" })).toBe(false);
     expect(missing({ "@context": undefined, "@type": "Dentist" })).toBe(false);
@@ -272,6 +274,14 @@ describe("audit rules", () => {
       missing({ "@context": { "s": "https://example.com/", "schema": { "@id": "s:", "@prefix": true } }, "@type": "schema:Dentist" })
     ).toBe(true);
     expect(missing({ "@context": { "root": "https://schema.org/", "schema": "root" }, "@type": "schema:Dentist" })).toBe(false);
+    expect(
+      missing({
+        "@context": { "a": "https://schema.org/", "b": "a:", "c": "b:", "d": "c:", "e": "d:", "f": "e:" },
+        "@type": "f:Dentist"
+      })
+    ).toBe(false);
+    expect(missing({ "@context": { "a": "b:", "b": "a:" }, "@type": "a:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "Dentist": "Clinic", "Clinic": "Dentist" }, "@type": "Dentist" })).toBe(true);
     expect(missing({ "@context": { "root": "https://schema.org/Dent", "schema": "root" }, "@type": "schema:ist" })).toBe(true);
   });
 

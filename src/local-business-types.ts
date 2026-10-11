@@ -172,7 +172,8 @@ export const noTypeContext: JsonLdTypeContext = { declared: false, vocab: null, 
 
 const schemaOrgRoot = "https://schema.org/";
 const schemaOrgType = /^https?:\/\/(?:www\.)?schema\.org\/([A-Za-z]+)$/;
-const schemaOrgContext = /^(?:https?:\/\/)?(?:www\.)?schema\.org(?:\/.*)?$/i;
+// Only an absolute URL names schema.org's context; "schema.org" alone is relative to the page.
+const schemaOrgContext = /^https?:\/\/(?:www\.)?schema\.org(?:\/.*)?$/i;
 const genDelimEnd = /[:/?#[\]@]$/;
 
 function termDefinition(definition: unknown): TermDefinition | undefined {
@@ -195,8 +196,9 @@ function termDefinition(definition: unknown): TermDefinition | undefined {
   return undefined;
 }
 
-// Expands a value that may be a term or a compact IRI using the context's terms.
-function expandIri(value: string, context: JsonLdTypeContext, depth = 0): string | undefined {
+// Expands a value that may be a term or a compact IRI using the context's terms. Terms already being
+// expanded are tracked so a cyclic definition stops instead of recursing forever.
+function expandIri(value: string, context: JsonLdTypeContext, expanding: ReadonlySet<string> = new Set()): string | undefined {
   const trimmed = value.trim();
   const colon = trimmed.indexOf(":");
   if (colon > 0) {
@@ -209,7 +211,10 @@ function expandIri(value: string, context: JsonLdTypeContext, depth = 0): string
     // Follows JSON-LD 1.1: a term is a prefix when it has "@prefix": true, or when it is a simple string
     // term whose expanded IRI ends with a gen-delim character. Its IRI may itself be a term or compact IRI.
     const definition = context.terms.get(prefix);
-    const base = definition?.iri && depth < 3 ? expandIri(definition.iri, context, depth + 1) : undefined;
+    const base =
+      definition?.iri && !expanding.has(prefix)
+        ? expandIri(definition.iri, context, new Set([...expanding, prefix]))
+        : undefined;
     if (base !== undefined && (definition?.prefix || (definition?.simple && genDelimEnd.test(base)))) {
       return base + suffix;
     }
@@ -219,7 +224,7 @@ function expandIri(value: string, context: JsonLdTypeContext, depth = 0): string
 
   if (context.terms.has(trimmed)) {
     const iri = context.terms.get(trimmed)?.iri;
-    return iri && depth < 3 ? expandIri(iri, context, depth + 1) : undefined;
+    return iri && !expanding.has(trimmed) ? expandIri(iri, context, new Set([...expanding, trimmed])) : undefined;
   }
 
   if (!context.declared) {
