@@ -262,6 +262,16 @@ describe("audit rules", () => {
     expect(missing({ "@context": { "schema": "https://schema.org/" }, "@type": "schema:Dentist" })).toBe(false);
     expect(missing({ "@context": { "s": "http://schema.org/" }, "@type": "s:Dentist" })).toBe(false);
     expect(missing({ "@context": undefined, "@type": "schema:Dentist" })).toBe(false);
+    expect(missing({ "@context": { "schema": { "@id": "https://schema.org/", "@prefix": false } }, "@type": "schema:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "schema": { "@id": "https://schema.org/" } }, "@type": "schema:Dentist" })).toBe(true);
+    expect(missing({ "@context": { "schema": { "@id": "https://schema.org/", "@prefix": true } }, "@type": "schema:Dentist" })).toBe(false);
+  });
+
+  it("expands a compact IRI used as the @vocab mapping", () => {
+    const missing = (schema: object) => schemaFindings(schema).includes("localbusiness-schema-present");
+
+    expect(missing({ "@context": [{ "schema": "https://schema.org/" }, { "@vocab": "schema:" }], "@type": "Dentist" })).toBe(false);
+    expect(missing({ "@context": [{ "ex": "https://example.com/" }, { "@vocab": "ex:" }], "@type": "Dentist" })).toBe(true);
   });
 
   it("checks contact fields and visible details on LocalBusiness subtypes", () => {
@@ -305,6 +315,12 @@ describe("audit rules", () => {
     expect(schemaFindings({ ...base, openingHoursSpecification: { dayOfWeek: "https://schema.org/Monday" } })).not.toContain(
       "localbusiness-schema-contact-fields"
     );
+    expect(schemaFindings({ ...base, openingHoursSpecification: { dayOfWeek: { "@id": "https://schema.org/Monday" } } })).not.toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    for (const empty of [{ opens: {} }, { dayOfWeek: {} }, { dayOfWeek: [{}], opens: [{}, ""] }, { closes: { "@value": "" } }]) {
+      expect(schemaFindings({ ...base, openingHoursSpecification: empty })).toContain("localbusiness-schema-contact-fields");
+    }
     expect(
       schemaFindings({
         "@graph": [

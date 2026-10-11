@@ -120,6 +120,21 @@ function hasStringField(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+// A day or time is a non-empty string, or a JSON-LD value or node object carrying one, such as
+// {"@id": "https://schema.org/Monday"} or {"@value": "09:00"}.
+function hasOpeningHoursValue(value: unknown): boolean {
+  if (hasStringField(value)) {
+    return true;
+  }
+
+  if (!hasObjectField(value)) {
+    return false;
+  }
+
+  const fields = value as JsonLdNode;
+  return ["@id", "@value", "name"].some((key) => hasStringField(fields[key]));
+}
+
 function hasOpeningHoursData(specification: unknown): boolean {
   if (!hasObjectField(specification)) {
     return false;
@@ -128,7 +143,7 @@ function hasOpeningHoursData(specification: unknown): boolean {
   const fields = specification as JsonLdNode;
   return ["dayOfWeek", "opens", "closes"].some((field) => {
     const values = Array.isArray(fields[field]) ? (fields[field] as unknown[]) : [fields[field]];
-    return values.some((value) => hasStringField(value) || hasObjectField(value));
+    return values.some(hasOpeningHoursValue);
   });
 }
 
