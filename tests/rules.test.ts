@@ -271,6 +271,8 @@ describe("audit rules", () => {
     expect(
       missing({ "@context": { "s": "https://example.com/", "schema": { "@id": "s:", "@prefix": true } }, "@type": "schema:Dentist" })
     ).toBe(true);
+    expect(missing({ "@context": { "root": "https://schema.org/", "schema": "root" }, "@type": "schema:Dentist" })).toBe(false);
+    expect(missing({ "@context": { "root": "https://schema.org/Dent", "schema": "root" }, "@type": "schema:ist" })).toBe(true);
   });
 
   it("keeps a non-propagating @context off nested graph nodes", () => {
@@ -280,6 +282,15 @@ describe("audit rules", () => {
       missing({ "@context": { "@vocab": "https://schema.org/", "@propagate": false }, "@graph": [{ "@type": "Dentist" }] })
     ).toBe(true);
     expect(missing({ "@context": { "@vocab": "https://schema.org/", "@propagate": false }, "@type": "Dentist" })).toBe(false);
+    expect(
+      missing({
+        "@context": [
+          { "@vocab": "https://schema.org/", "@propagate": false },
+          { "schema": "https://schema.org/", "@propagate": false }
+        ],
+        "@graph": [{ "@type": "Dentist" }]
+      })
+    ).toBe(true);
     expect(missing({ "@context": { "@vocab": "https://schema.org/" }, "@graph": [{ "@type": "Dentist" }] })).toBe(false);
     expect(
       missing({

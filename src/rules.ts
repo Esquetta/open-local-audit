@@ -72,9 +72,10 @@ function flattenJsonLd(value: unknown, context: JsonLdTypeContext = noTypeContex
   const localContext = node["@context"];
   const nodeContext = applyTypeContext(context, localContext);
   typeContexts.set(node, nodeContext);
-  // A context object with "@propagate": false applies to this node only; nested nodes return to the
-  // previous context, which no longer gets the lenient no-context reading once the page declared one.
-  const propagates = !(hasObjectField(localContext) && (localContext as JsonLdNode)["@propagate"] === false);
+  // A context with "@propagate": false, alone or in a context array, applies to this node only; nested
+  // nodes return to the previous context, which no longer gets the lenient no-context reading.
+  const localContexts = Array.isArray(localContext) ? localContext : [localContext];
+  const propagates = !localContexts.some((entry) => hasObjectField(entry) && (entry as JsonLdNode)["@propagate"] === false);
   const childContext = propagates ? nodeContext : { ...context, declared: true };
   const graphNodes = flattenJsonLd(node["@graph"], childContext);
   return [node, ...graphNodes];

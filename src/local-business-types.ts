@@ -156,9 +156,9 @@ const localBusinessTypes = new Set([
   "TravelAgency"
 ]);
 
-// A term definition: the IRI it maps to (null when the term is explicitly unmapped) and whether
-// it may be used as the prefix of a compact IRI such as "schema:Dentist".
-type TermDefinition = { iri: string | null; prefix: boolean };
+// A term definition: the IRI it maps to (null when the term is explicitly unmapped), whether it
+// came from a simple string, and whether "@prefix": true marks it as a compact-IRI prefix.
+type TermDefinition = { iri: string | null; simple: boolean; prefix: boolean };
 
 // The parts of a JSON-LD active context that decide which IRI a @type expands to.
 export type JsonLdTypeContext = {
@@ -175,22 +175,20 @@ const schemaOrgType = /^https?:\/\/(?:www\.)?schema\.org\/([A-Za-z]+)$/;
 const schemaOrgContext = /^(?:https?:\/\/)?(?:www\.)?schema\.org(?:\/.*)?$/i;
 const genDelimEnd = /[:/?#[\]@]$/;
 
-// Follows JSON-LD 1.1: a simple string term is a prefix when its IRI ends with a gen-delim
-// character; an expanded definition is a prefix only with "@prefix": true.
 function termDefinition(definition: unknown): TermDefinition | undefined {
   if (definition === null) {
-    return { iri: null, prefix: false };
+    return { iri: null, simple: false, prefix: false };
   }
 
   if (typeof definition === "string") {
-    return { iri: definition, prefix: genDelimEnd.test(definition) };
+    return { iri: definition, simple: true, prefix: false };
   }
 
   if (definition && typeof definition === "object" && !Array.isArray(definition)) {
     const fields = definition as Record<string, unknown>;
     const id = fields["@id"];
     if (id === null || typeof id === "string") {
-      return { iri: id, prefix: fields["@prefix"] === true };
+      return { iri: id, simple: false, prefix: fields["@prefix"] === true };
     }
   }
 
@@ -208,11 +206,12 @@ function expandIri(value: string, context: JsonLdTypeContext, depth = 0): string
       return trimmed;
     }
 
-    // A prefix's own IRI may be a compact IRI or term ("schema": {"@id": "s:", "@prefix": true}).
+    // Follows JSON-LD 1.1: a term is a prefix when it has "@prefix": true, or when it is a simple string
+    // term whose expanded IRI ends with a gen-delim character. Its IRI may itself be a term or compact IRI.
     const definition = context.terms.get(prefix);
-    if (definition?.prefix && definition.iri) {
-      const base = depth < 3 ? expandIri(definition.iri, context, depth + 1) : undefined;
-      return base === undefined ? undefined : base + suffix;
+    const base = definition?.iri && depth < 3 ? expandIri(definition.iri, context, depth + 1) : undefined;
+    if (base !== undefined && (definition?.prefix || (definition?.simple && genDelimEnd.test(base)))) {
+      return base + suffix;
     }
 
     return !context.declared && prefix === "schema" ? schemaOrgRoot + suffix : trimmed;
@@ -252,7 +251,7 @@ export function applyTypeContext(active: JsonLdTypeContext, context: unknown): J
       ? {
           declared: true,
           vocab: schemaOrgRoot,
-          terms: new Map([...active.terms, ["schema", { iri: schemaOrgRoot, prefix: true }]])
+          terms: new Map([...active.terms, ["schema", { iri: schemaOrgRoot, simple: false, prefix: true }]])
         }
       : { declared: true, vocab: null, terms: new Map() };
   }
