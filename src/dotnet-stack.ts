@@ -11,7 +11,7 @@ function lowerCaseHeaders(headers: Record<string, string>): Record<string, strin
 }
 
 // Set-Cookie values may be joined by newlines or commas; only the cookie names are kept.
-function cookieNames(setCookie: string | undefined): string[] {
+export function cookieNames(setCookie: string | undefined): string[] {
   if (!setCookie) {
     return [];
   }

@@ -44,6 +44,8 @@ const pitchReasons: Array<[RegExp, string]> = [
   [/^primary-cta-present$|-cta$/, "There is no clear booking or contact button, so ready-to-buy visitors have to hunt for the next step."],
   [/^contact-form-present$/, "Visitors who do not want to call have no way to send an enquiry."],
   [/^broken-internal-links$/, "Some links on the site lead to dead pages."],
+  [/^cookie-consent-present$/, "The site loads analytics or advertising tags and no cookie consent banner was found; UK and EU cookie rules generally expect consent before non-essential tracking."],
+  [/^privacy-policy-link-present$/, "There is no privacy policy link, which data protection rules expect from sites that take enquiries or use analytics."],
   [/^title-present$/, "The page has no title, so Google and browser tabs show a generic label."],
   [/^meta-description-present$/, "Without a meta description, Google writes its own snippet for the search result."],
   [/^single-h1$/, "The page has no clear main heading telling visitors and Google what the business does."],

@@ -18,6 +18,8 @@
 - Page has title.
 - Page has meta description.
 - Page has viewport tag.
+- Page declares its language.
+  - Rule `html-lang-present` flags an `<html>` element without a `lang` attribute or with a value that is not a language code, such as `lang="english"`.
 - Page has one clear H1.
 - robots.txt exists.
 - sitemap.xml exists.
@@ -32,6 +34,8 @@
 - Map or directions link exists.
 - Opening hours are visible.
 - Primary call to action is clear on mobile.
+- Form fields have labels.
+  - Rule `form-labels-present` flags visible inputs, selects, and text areas with no `<label>`, `aria-label`, `aria-labelledby` reference to text, `title`, or `placeholder`. Hidden fields, fields under `aria-hidden` (such as the Mailchimp spam trap), and buttons are ignored. Like Lighthouse, it accepts a placeholder as a name, although a visible label is better.
 
 ## Local trust
 
@@ -40,6 +44,14 @@
 - Team, owner, or business proof is visible where relevant.
 - Reviews/testimonials are not misleading.
 - Social links work.
+
+## Privacy and consent
+
+- A privacy policy is linked from the page.
+  - Rule `privacy-policy-link-present` looks for a same-site link whose text or path mentions the privacy policy in English, Turkish (including KVKK), German, French, Spanish, or Dutch, a `rel="privacy-policy"` link, or a policy hosted by iubenda, Termly, PrivacyPolicies.com, or FreePrivacyPolicy. Links to another company's policy, such as Google's reCAPTCHA notice, do not count. The evidence says when the page has an enquiry form or loads trackers.
+- Pages that load trackers have a cookie consent tool.
+  - Rule `cookie-consent-present` flags pages that load the Google tag (Google Analytics or Ads), Google Tag Manager, Meta Pixel, Hotjar, Microsoft Clarity, the LinkedIn Insight Tag, the TikTok Pixel, or Microsoft Advertising, or whose response sets tracking cookies such as `_ga` or `_fbp`, when the page shows no sign of a consent tool. Any known consent platform (for example Cookiebot, OneTrust, CookieYes, Complianz, iubenda, Civic Cookie Control, Finsweet, HubSpot, Google Funding Choices), IAB TCF, a Google consent mode default, a website builder's consent code (Wix, Squarespace, Shopify), or cookie banner markup counts, so the rule does not check that the banner is switched on or actually blocks the tags. Tags held back as `type="text/plain"` scripts, as consent tools do until visitors accept, do not count as loaded.
+  - Static audits only see the HTML the server sends. A banner or privacy link that a tag manager adds later is only visible to rendered audits (`--render`), so re-check these findings on the live site before raising them with a business.
 
 ## Structured data
 
@@ -57,6 +69,8 @@
 - Important services have enough detail.
 - No obvious outdated dates.
 - No broken or placeholder text.
+- Links say where they go.
+  - Rule `link-text-descriptive` flags visible links whose only text, image alt text, or `aria-label` is generic, such as "Read more", "Click here", "Learn more", "Devamını oku", or "Mehr erfahren". Fragment and `javascript:` links are skipped.
 
 ## Report severity guidance
 

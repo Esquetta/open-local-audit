@@ -99,6 +99,24 @@ describe("pitch briefs", () => {
     expect(brief.reasons).toEqual(["Audit score is below 60", "Top finding: Meta description is missing"]);
   });
 
+  it("pitches cookie consent and privacy gaps after broken links and before search basics", () => {
+    const brief = buildPitchBrief(
+      lead(),
+      report([
+        finding("title-present"),
+        finding("privacy-policy-link-present"),
+        finding("cookie-consent-present"),
+        finding("form-labels-present", "low"),
+        finding("link-text-descriptive", "low"),
+        finding("html-lang-present", "low")
+      ]),
+      "found"
+    );
+
+    expect(brief.points.map((point) => point.findingId)).toEqual(["cookie-consent-present", "privacy-policy-link-present", "title-present"]);
+    expect(brief.morePoints).toBe(0);
+  });
+
   it("chooses the offer from the site state", () => {
     expect(buildPitchBrief(lead(), report([finding("website-placeholder", "high"), finding("title-present")]), "found").offer).toBe(
       "Starter website: the business has no working site to fix."

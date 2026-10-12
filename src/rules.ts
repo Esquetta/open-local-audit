@@ -1,6 +1,7 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
+import { cookieNames } from "./dotnet-stack.js";
 import {
   applyTypeContext,
   contextBase,
@@ -1215,6 +1216,228 @@ function tlsCertificateEvidence(tls: NonNullable<PageSnapshot["tls"]>): string {
   return tls.issuer ? `${status}; issuer ${tls.issuer}` : status;
 }
 
+const languageCode = /^[a-z]{2,3}(?:-[a-z0-9]{1,8})*$/i;
+
+function htmlLangEvidence($: CheerioAPI): string | undefined {
+  const attribute = $("html").attr("lang");
+  const lang = (attribute ?? "").trim();
+  if (!lang) {
+    return attribute === undefined ? "No lang attribute on the <html> element" : "The lang attribute on the <html> element is empty";
+  }
+  return languageCode.test(lang) ? undefined : `lang="${lang}" is not a valid language code`;
+}
+
+const unlabelledInputTypes = new Set(["hidden", "submit", "button", "reset", "image"]);
+
+function textOf($: CheerioAPI, element: Parameters<CheerioAPI>[0]): string {
+  const copy = $(element).clone();
+  copy.find("input, select, textarea").remove();
+  return copy.text().replace(/\s+/g, " ").trim();
+}
+
+function hasAccessibleName($: CheerioAPI, element: Parameters<CheerioAPI>[0]): boolean {
+  const control = $(element);
+  const ids = (control.attr("aria-labelledby") ?? "").split(/\s+/).filter(Boolean);
+  if (ids.some((id) => $("[id]").toArray().some((target) => $(target).attr("id") === id && textOf($, target)))) {
+    return true;
+  }
+  if (["aria-label", "title", "placeholder"].some((name) => (control.attr(name) ?? "").trim())) {
+    return true;
+  }
+  const id = control.attr("id");
+  const labels = [
+    ...control.closest("label").toArray(),
+    ...(id ? $("label[for]").toArray().filter((label) => $(label).attr("for") === id) : [])
+  ];
+  return labels.some((label) => textOf($, label));
+}
+
+function describeControl($: CheerioAPI, element: Parameters<CheerioAPI>[0]): string {
+  const control = $(element);
+  const tag = (element as { tagName?: string }).tagName?.toLowerCase() ?? "input";
+  const type = control.attr("type");
+  const name = control.attr("name");
+  const id = control.attr("id");
+  return `${tag}${type ? `[type=${type}]` : ""}${name ? `[name=${name}]` : id ? `#${id}` : ""}`;
+}
+
+function formFields($: CheerioAPI): { total: number; unlabelled: string[] } {
+  const fields = visibleBody($)
+    .find("input, select, textarea")
+    .toArray()
+    // Fields under aria-hidden, such as the off-screen Mailchimp spam trap, are not exposed to assistive technology.
+    .filter(
+      (element) =>
+        !unlabelledInputTypes.has(($(element).attr("type") ?? "").trim().toLowerCase()) && $(element).closest('[aria-hidden="true"]').length === 0
+    );
+  const unlabelled = fields.filter((element) => !hasAccessibleName($, element)).map((element) => describeControl($, element));
+  return { total: fields.length, unlabelled };
+}
+
+// Lighthouse's English list of non-descriptive link text, plus "continue reading", "find out more", and common Turkish and German equivalents.
+const genericLinkText = new Set([
+  "click here",
+  "click this",
+  "go",
+  "here",
+  "information",
+  "learn more",
+  "more",
+  "more info",
+  "more information",
+  "right here",
+  "read more",
+  "see more",
+  "start",
+  "this",
+  "continue reading",
+  "find out more",
+  "buraya tıklayın",
+  "buraya tıkla",
+  "tıklayın",
+  "tıkla",
+  "devamı",
+  "devamını oku",
+  "daha fazla",
+  "detaylar",
+  "ayrıntılar",
+  "hier",
+  "hier klicken",
+  "mehr",
+  "mehr erfahren",
+  "mehr lesen",
+  "weiterlesen"
+]);
+
+function genericLinks($: CheerioAPI): string[] {
+  return visibleBody($)
+    .find("a[href]")
+    .toArray()
+    .flatMap((element) => {
+      const link = $(element);
+      const href = (link.attr("href") ?? "").trim();
+      if (!href || href.startsWith("#") || /^javascript:/i.test(href) || link.attr("aria-labelledby")) {
+        return [];
+      }
+      const label = (link.attr("aria-label") ?? "").trim() ||
+        [link.text(), ...link.find("img[alt]").toArray().map((image) => $(image).attr("alt") ?? "")].join(" ");
+      const shown = label.replace(/\s+/g, " ").trim();
+      const key = shown.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+      return genericLinkText.has(key) ? [`"${shown}" (${href})`] : [];
+    });
+}
+
+function firstFive(items: string[]): string {
+  return [...items.slice(0, 5), ...(items.length > 5 ? [`and ${items.length - 5} more`] : [])].join("; ");
+}
+
+const trackers: Array<[string, RegExp]> = [
+  [
+    "Google Analytics or Ads",
+    /googletagmanager\.com\/gtag\/js|google-analytics\.com\/(?:analytics|ga|urchin)\.js|\bgtag\(\s*['"]config['"]|\bga\(\s*['"]create['"]/i
+  ],
+  ["Google Tag Manager", /googletagmanager\.com\/gtm\.js/i],
+  ["Meta Pixel", /connect\.facebook\.net\/[\w-]+\/fbevents\.js|\bfbq\(\s*['"]init['"]/i],
+  ["Hotjar", /static\.hotjar\.com|\b_hjSettings\b/i],
+  ["Microsoft Clarity", /clarity\.ms\/tag/i],
+  ["LinkedIn Insight Tag", /snap\.licdn\.com\/li\.lms-analytics|\b_linkedin_partner_id\b/i],
+  ["TikTok Pixel", /analytics\.tiktok\.com/i],
+  ["Microsoft Advertising", /bat\.bing\.com\/bat\.js/i]
+];
+
+const trackingCookie = /^(?:_ga(?:_\w+)?|_gid|_gat(?:_\w+)?|_gcl_\w+|_fbp|_fbc|_hj\w+|_clck|_clsk|_uetsid|_uetvid|_ttp|li_fat_id)$/;
+
+// Consent platforms, IAB TCF, Google consent mode defaults, website-builder banners, and common cookie banner markup.
+// Matching is deliberately broad: a page that shows any sign of a consent step is not flagged.
+const consentTool =
+  /cookiebot|cookielaw\.org|onetrust|optanon|cookieyes|cookie-law-info|termly\.io|iubenda|complianz|cmplz|osano|usercentrics|cmp\.quantcast\.com|__tcfapi|didomi|cookiefirst|cookie-script\.com|civiccomputing|cookiecontrol|borlabs|klaro|real-cookie-banner|moove[_-]gdpr|cookie[_-]?(?:notice|consent|banner|bar|law)|consent[_-]?(?:banner|manager)|cookiehub|axeptio|tarteaucitron|trustarc|consentmanager|gdpr[_-]?cookie|cc-window|cc-banner|sqs-cookie-banner|\bfs-cc\b|fundingchoicesmessages\.google\.com|hs-banner|hs-eu-cookie|consentPolicy|customerPrivacy|\bgtag\(\s*['"]consent['"]\s*,\s*['"]default['"]/i;
+
+// Consent tools hold tags back as type="text/plain" until visitors accept, so only executable scripts count.
+const executableScriptTypes = new Set(["", "text/javascript", "application/javascript", "module"]);
+
+function loadedTrackers($: CheerioAPI): string[] {
+  const scripts = $("script")
+    .toArray()
+    .filter((element) => executableScriptTypes.has(($(element).attr("type") ?? "").trim().toLowerCase()))
+    .map((element) => `${$(element).attr("src") ?? ""} ${$(element).text()}`)
+    .join("\n");
+  return trackers.filter(([, pattern]) => pattern.test(scripts)).map(([name]) => name);
+}
+
+function serverTrackingCookies(snapshot: PageSnapshot): string[] {
+  return Array.from(new Set(cookieNames(snapshot.headers["set-cookie"]).filter((name) => trackingCookie.test(name))));
+}
+
+function hasConsentTool(snapshot: PageSnapshot): boolean {
+  return consentTool.test(snapshot.html);
+}
+
+function consentEvidence($: CheerioAPI, snapshot: PageSnapshot): string {
+  const names = loadedTrackers($);
+  const cookies = serverTrackingCookies(snapshot);
+  const scripts = names.length > 0 ? `${names.join(", ")} ${names.length === 1 ? "loads" : "load"} with no consent tool found` : "No consent tool found";
+  return cookies.length > 0 ? `${scripts}; tracking cookies set by the server: ${cookies.join(", ")}` : scripts;
+}
+
+const privacyLinkText =
+  /privacy|privacidad|privacit|gizlilik|kvkk|kişisel veri|datenschutz|confidentialit|données personnelles|protección de datos|data protection|gdpr|privacybeleid|privacyverklaring/i;
+const privacyLinkPath = /privacy|privacidad|gizlilik|kvkk|aydinlatma|datenschutz|confidentialit|gdpr|data-protection/i;
+const privacyPolicyHosts = ["iubenda.com", "termly.io", "privacypolicies.com", "freeprivacypolicy.com"];
+
+function bareHost(host: string): string {
+  return host.toLowerCase().replace(/^www\./, "");
+}
+
+function onHost(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+// The URL parser keeps percent sequences that do not decode, such as "/20%-off", so fall back to the raw path.
+function decodedPath(url: URL): string {
+  try {
+    return decodeURIComponent(url.pathname);
+  } catch {
+    return url.pathname;
+  }
+}
+
+function hasPrivacyPolicyLink($: CheerioAPI, snapshot: PageSnapshot): boolean {
+  if ($("[rel~='privacy-policy'][href]").length > 0) {
+    return true;
+  }
+  let pageHost: string | undefined;
+  try {
+    pageHost = bareHost(new URL(snapshot.finalUrl).hostname);
+  } catch {
+    pageHost = undefined;
+  }
+  return $("a[href]")
+    .toArray()
+    .some((element) => {
+      let url: URL;
+      try {
+        url = new URL(($(element).attr("href") ?? "").trim(), snapshot.finalUrl);
+      } catch {
+        return false;
+      }
+      const host = bareHost(url.hostname);
+      const ownSite = pageHost !== undefined && (onHost(host, pageHost) || onHost(pageHost, host));
+      if (!/^https?:$/.test(url.protocol) || !(ownSite || privacyPolicyHosts.some((domain) => onHost(host, domain)))) {
+        return false;
+      }
+      return privacyLinkText.test($(element).text()) || privacyLinkPath.test(decodedPath(url));
+    });
+}
+
+function privacyEvidence($: CheerioAPI, snapshot: PageSnapshot): string {
+  const names = loadedTrackers($);
+  const context = [
+    ...(detectPageForms($, snapshot.finalUrl).enquiryForm ? ["has an enquiry form"] : []),
+    ...(names.length > 0 ? [`loads ${names.join(", ")}`] : [])
+  ];
+  return `No privacy policy link found${context.length > 0 ? `; the page ${context.join(" and ")}` : ""}`;
+}
+
 function hasPlaceholderSocialLinks($: CheerioAPI): boolean {
   return $("a")
     .toArray()
@@ -1492,6 +1715,29 @@ const rules: Rule[] = [
       `No enquiry form, contact page link, or email link${detectPageForms($, snapshot.finalUrl).newsletterForm ? "; only a newsletter signup form" : ""}`
   },
   {
+    id: "privacy-policy-link-present",
+    title: "Privacy policy link is missing",
+    category: "trust-contact",
+    severity: "medium",
+    source: "Privacy links",
+    recommendation:
+      "Link to a privacy policy from every page, usually in the footer, explaining what personal data the site collects through forms, analytics, and cookies and how visitors can contact you about it.",
+    check: ({ $, snapshot }) => hasPrivacyPolicyLink($, snapshot),
+    evidence: ({ $, snapshot }) => privacyEvidence($, snapshot)
+  },
+  {
+    id: "cookie-consent-present",
+    title: "Tracking loads without a cookie consent tool",
+    category: "trust-contact",
+    severity: "medium",
+    source: "Tracking and consent",
+    recommendation:
+      "Add a cookie consent banner that holds advertising and non-essential analytics tags until visitors accept, as UK and EU cookie rules (PECR and the ePrivacy Directive) generally expect, or remove trackers you do not use.",
+    check: ({ $, snapshot }) =>
+      (loadedTrackers($).length === 0 && serverTrackingCookies(snapshot).length === 0) || hasConsentTool(snapshot),
+    evidence: ({ $, snapshot }) => consentEvidence($, snapshot)
+  },
+  {
     id: "placeholder-copy-absent",
     title: "Placeholder copy is still visible",
     category: "search-basics",
@@ -1628,6 +1874,42 @@ const rules: Rule[] = [
         .filter((element) => $(element).attr("alt") === undefined).length;
 
       return `${missing} of ${images} images missing alt attributes`;
+    }
+  },
+  {
+    id: "html-lang-present",
+    title: "Page language is not declared",
+    category: "mobile-usability",
+    severity: "low",
+    source: "HTML lang",
+    recommendation: 'Set the page language on the <html> element, such as lang="en-GB", so screen readers pronounce the text correctly and browsers offer the right translation.',
+    check: ({ $ }) => htmlLangEvidence($) === undefined,
+    evidence: ({ $ }) => htmlLangEvidence($) ?? ""
+  },
+  {
+    id: "form-labels-present",
+    title: "Some form fields have no label",
+    category: "mobile-usability",
+    severity: "low",
+    source: "Form labels",
+    recommendation: "Give every form field a visible label, or at least an aria-label, so screen reader users and people using voice control know what to enter.",
+    check: ({ $ }) => formFields($).unlabelled.length === 0,
+    evidence: ({ $ }) => {
+      const { total, unlabelled } = formFields($);
+      return `${unlabelled.length} of ${total} form field${total === 1 ? "" : "s"} ${unlabelled.length === 1 ? "has" : "have"} no label: ${firstFive(unlabelled)}`;
+    }
+  },
+  {
+    id: "link-text-descriptive",
+    title: "Some links use generic text",
+    category: "search-basics",
+    severity: "low",
+    source: "Link text",
+    recommendation: 'Replace link text such as "Read more" or "Click here" with words that say where the link goes, such as "Dental implant prices".',
+    check: ({ $ }) => genericLinks($).length === 0,
+    evidence: ({ $ }) => {
+      const links = genericLinks($);
+      return `${links.length} link${links.length === 1 ? " uses" : "s use"} generic text: ${firstFive(links)}`;
     }
   }
 ];
