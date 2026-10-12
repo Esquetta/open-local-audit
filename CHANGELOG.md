@@ -9,6 +9,9 @@ All notable changes to Open Local Audit will be documented here.
 - Added the `html-lang-present` (mobile-usability, low), `form-labels-present` (mobile-usability, low), and `link-text-descriptive` (search-basics, low) audit rules. They flag an `<html>` element without a valid `lang` code, visible form fields with no label, `aria-label`, `aria-labelledby` text, `title`, or `placeholder` (fields under `aria-hidden`, such as the Mailchimp spam trap, are skipped), and visible links whose only text is generic, such as "Read more", "Click here", "Devamını oku", or "Mehr erfahren", listing up to five fields or links as evidence.
 - Pitch briefs (`shortlist --pitch-brief`) now explain cookie consent and privacy policy findings in plain language, ranked after broken links and before search basics such as a missing title.
 - The new rules can lower trust-contact, mobile-usability, and search-basics scores, so `compare` shows them as new issues against reports from earlier versions.
+- `localbusiness-schema-contact-fields` applies the `@context` scoped to the `openingHoursSpecification` term when it resolves an hours reference such as `{"@id": "h:weekly"}`, so a business whose hours prefix is defined there no longer gets a false missing-fields finding.
+- `localbusiness-schema-nap-consistency` reads the telephone and street address from every JSON-LD node that shares the business's `@id`, as the contact-fields rule does, so a mismatching phone or address on a separate fragment is now reported.
+- `website-placeholder` matches the page title and visible text separately, so "Site is temporarily offline." after an unpunctuated title is detected, and it ignores conditional copy such as "If our site is offline, call us".
 
 ## v0.78.0 - 2026-10-11
 

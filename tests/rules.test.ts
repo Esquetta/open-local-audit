@@ -547,6 +547,29 @@ describe("audit rules", () => {
     );
   });
 
+  it("applies the openingHoursSpecification term's scoped @context to hours references", () => {
+    const base = {
+      "@type": "Dentist",
+      name: "Smile Dental",
+      telephone: "+902120000000",
+      address: { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" }
+    };
+    const scoped = (hoursPrefix: string, reference: object) =>
+      schemaFindings({
+        "@context": {
+          "@vocab": "https://schema.org/",
+          openingHoursSpecification: { "@id": "https://schema.org/openingHoursSpecification", "@context": { h: hoursPrefix } }
+        },
+        "@graph": [{ ...base, openingHoursSpecification: reference }, { "@id": "https://example.test/hours/weekly", opens: "09:00" }]
+      });
+
+    expect(scoped("https://example.test/hours/", { "@id": "h:weekly" })).not.toContain("localbusiness-schema-contact-fields");
+    expect(scoped("https://example.test/hours/", { "@id": "h:weekly", "@type": "OpeningHoursSpecification" })).not.toContain(
+      "localbusiness-schema-contact-fields"
+    );
+    expect(scoped("https://example.test/other/", { "@id": "h:weekly" })).toContain("localbusiness-schema-contact-fields");
+  });
+
   it("keeps blank node labels local to their JSON-LD block", () => {
     const address = { "@type": "PostalAddress", streetAddress: "Example Street 12", addressLocality: "Istanbul" };
     const business = { "@id": "_:business", "@type": "Dentist", name: "Smile Dental", telephone: "+902120000000" };
@@ -783,6 +806,27 @@ describe("LocalBusiness NAP consistency rule", () => {
     `);
 
     expect(napFinding(page)).toBeUndefined();
+  });
+
+  it("checks telephone and address on every node sharing the business @id", () => {
+    const fragments = (telephone: string, streetAddress: string) =>
+      napPage(
+        {
+          "@graph": [
+            { "@id": "#clinic", "@type": "Dentist", name: "Smile Dental" },
+            { "@id": "#clinic", telephone, address: { "@type": "PostalAddress", streetAddress, addressCountry: "TR" } }
+          ]
+        },
+        `<p>Address: Example Street 12, Istanbul</p><a href="tel:+902120000000">Call us</a>`
+      );
+
+    expect(napFinding(fragments("+90 212 000 00 00", "Example Street 12"))).toBeUndefined();
+    expect(napFinding(fragments("+90 212 555 00 00", "Example Street 12"))?.evidence[0]?.value).toBe(
+      "Schema telephone +90 212 555 00 00 not found among visible phone numbers: +90 212 000 00 00"
+    );
+    expect(napFinding(fragments("+90 212 000 00 00", "Other Avenue 99"))?.evidence[0]?.value).toBe(
+      'Schema streetAddress "Other Avenue 99" not found in visible page text'
+    );
   });
 
   it("flags a schema telephone that differs from every visible phone number", () => {
