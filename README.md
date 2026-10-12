@@ -484,6 +484,8 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - Clear owner-readable recommendations.
 - Structured-data quality, address, opening-hours, service-location, CTA, and placeholder-copy checks.
 - Trust and conversion checks for current date signals, review cues, service detail depth, brand icons, and placeholder social links.
+- Privacy and consent checks for a privacy policy link and for trackers that load without a cookie consent tool.
+- Accessibility checks for the page language, form field labels, and descriptive link text.
 
 Example target command:
 
