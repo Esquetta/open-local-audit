@@ -127,6 +127,15 @@ export interface PageSnapshot {
     authorized: boolean;
     error?: string;
   };
+  domain?: {
+    name: string;
+    expiresAt: string;
+    // Whole days from the lookup time to expiresAt, negative once expired, so rules do not read the clock.
+    daysRemaining: number;
+    // RDAP status values such as "active", "redemption period", or "pending delete".
+    status: string[];
+    registrar?: string;
+  };
 }
 
 export interface AuditOptions {
@@ -138,6 +147,8 @@ export interface AuditOptions {
   render: boolean;
   screenshot: boolean;
   lighthouse: boolean;
+  checkDomain?: boolean;
+  probeDomain?: (url: string, timeoutMs: number) => Promise<PageSnapshot["domain"]>;
   screenshotPath?: string;
   screenshotReportPath?: string;
   runLighthouse?: LighthouseRunner;

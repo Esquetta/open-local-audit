@@ -13,6 +13,8 @@ Open Local Audit audits public websites supplied by the operator or found in an 
 - Extract contact channels that are visibly published in the audited website HTML.
 - Generate local JSON and Markdown reports.
 - Run limited internal link checks when explicitly requested.
+- Look up a site's domain registration expiry over RDAP when `--check-domain` is passed and by default in `monitor` (`--no-check-domain` turns it off). The lookup downloads IANA's RDAP bootstrap file, then sends only the site's host name, and its parent names down to two labels, to that domain's registry over HTTPS. It follows no redirects and stores nothing beyond the audit finding.
+- Keep monitoring history for the sites the operator lists in `monitor`: each run's reports and comparisons are written to the operator's `--out-dir`, and nothing is uploaded.
 - Import operator-prepared business CSVs for local `manual-csv` discovery triage.
 - Audit website URLs supplied by the operator or resolved from the local CSV.
 - Use the official Google Places Text Search API when the operator explicitly selects `--provider google-places`.
@@ -45,9 +47,9 @@ Operators should use `--suppression-list` to avoid repeatedly auditing or review
 ## Data minimization
 
 Default behavior:
-- Do not store scan history.
+- Do not store scan history, except the run folders that `monitor` writes to the operator's `--out-dir`.
 - Write reports only when the operator passes an output path.
-- Do not send scan data to maintainers or third-party services.
+- Do not send scan data to maintainers or third-party services. Domain lookups send the domain name only to its registry's RDAP service.
 - Neutralize formula-like CSV cells before export.
 - Keep discovery review and suppression state in operator-managed local CSV files.
 

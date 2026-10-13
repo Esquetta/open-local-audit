@@ -77,6 +77,7 @@ export const cliOptionsSchema = z.object({
   render: z.boolean().default(false),
   screenshot: z.boolean().default(false),
   lighthouse: z.boolean().default(false),
+  checkDomain: z.boolean().default(false),
   failOn: failOnSchema.default("none"),
   pretty: z.boolean().default(false)
 });
