@@ -1205,6 +1205,25 @@ function mixedContentUrls($: CheerioAPI, snapshot: PageSnapshot): string[] {
 // Let's Encrypt and most automated issuers renew at 30 days left, so fewer than 14 means automatic renewal is failing.
 const certificateWarningDays = 14;
 
+// A month's notice leaves time to fix a failed renewal; healthy domains that renew in their final weeks can show here too.
+const domainWarningDays = 30;
+const lapsingDomainStatus = /^(?:redemption ?period|pending ?delete)$/i;
+
+function domainRiskStatus(domain: NonNullable<PageSnapshot["domain"]>): string | undefined {
+  return domain.status.find((status) => lapsingDomainStatus.test(status.trim())) ??
+    (domain.daysRemaining < domainWarningDays ? "expiring" : undefined);
+}
+
+function domainEvidence(domain: NonNullable<PageSnapshot["domain"]>): string {
+  const date = domain.expiresAt.slice(0, 10);
+  const days = domain.daysRemaining;
+  const expiry = days < 0 ? `${domain.name} expired ${date}` : `${domain.name} expires ${date} (${days} day${days === 1 ? "" : "s"})`;
+  const risk = domainRiskStatus(domain);
+  return [expiry, ...(risk && risk !== "expiring" ? [`status: ${risk}`] : []), ...(domain.registrar ? [`registrar ${domain.registrar}`] : [])].join(
+    "; "
+  );
+}
+
 function tlsCertificateEvidence(tls: NonNullable<PageSnapshot["tls"]>): string {
   const date = tls.validTo.slice(0, 10);
   const status =
@@ -1352,13 +1371,16 @@ const trackingCookie = /^(?:_ga(?:_\w+)?|_gid|_gat(?:_\w+)?|_gcl_\w+|_fbp|_fbc|_
 const consentTool =
   /cookiebot|cookielaw\.org|onetrust|optanon|cookieyes|cookie-law-info|termly\.io|iubenda|complianz|cmplz|osano|usercentrics|cmp\.quantcast\.com|__tcfapi|didomi|cookiefirst|cookie-script\.com|civiccomputing|cookiecontrol|borlabs|klaro|real-cookie-banner|moove[_-]gdpr|cookie[_-]?(?:notice|consent|banner|bar|law)|consent[_-]?(?:banner|manager)|cookiehub|axeptio|tarteaucitron|trustarc|consentmanager|gdpr[_-]?cookie|cc-window|cc-banner|sqs-cookie-banner|\bfs-cc\b|fundingchoicesmessages\.google\.com|hs-banner|hs-eu-cookie|consentPolicy|customerPrivacy|\bgtag\(\s*['"]consent['"]\s*,\s*['"]default['"]/i;
 
-// Consent tools hold tags back as type="text/plain" until visitors accept, so only executable scripts count.
-const executableScriptTypes = new Set(["", "text/javascript", "application/javascript", "module"]);
+// Consent tools hold tags back as type="text/plain" until visitors accept, and data or template blocks never run.
+// Any other type counts, including the types that optimisers such as Rocket Loader ("<hash>-text/javascript"),
+// LiteSpeed ("litespeed/javascript"), WP Rocket ("rocketlazyloadscript"), and Partytown use for scripts they run later.
+const inertScriptType = /^text\/plain$|json|importmap|speculationrules|template|^text\/html$|handlebars|mustache/;
 
 function loadedTrackers($: CheerioAPI): string[] {
   const scripts = $("script")
     .toArray()
-    .filter((element) => executableScriptTypes.has(($(element).attr("type") ?? "").trim().toLowerCase()))
+    // Only the MIME type counts, so "text/plain; charset=utf-8" is inert too.
+    .filter((element) => !inertScriptType.test(($(element).attr("type") ?? "").split(";")[0].trim().toLowerCase()))
     .map((element) => `${$(element).attr("src") ?? ""} ${$(element).text()}`)
     .join("\n");
   return trackers.filter(([, pattern]) => pattern.test(scripts)).map(([name]) => name);
@@ -1476,6 +1498,17 @@ const rules: Rule[] = [
     check: ({ snapshot }) =>
       !snapshot.tls || (snapshot.tls.authorized && snapshot.tls.daysRemaining >= certificateWarningDays),
     evidence: ({ snapshot }) => (snapshot.tls ? tlsCertificateEvidence(snapshot.tls) : "")
+  },
+  {
+    id: "domain-expiry",
+    title: "Domain registration expires soon",
+    category: "technical-health",
+    severity: "medium",
+    source: "Domain registration",
+    recommendation:
+      "Check with your domain registrar that the domain renews automatically and the payment details on file are current; if the domain lapses, the website and email stop working.",
+    check: ({ snapshot }) => !snapshot.domain || domainRiskStatus(snapshot.domain) === undefined,
+    evidence: ({ snapshot }) => (snapshot.domain ? domainEvidence(snapshot.domain) : "")
   },
   {
     id: "page-indexable",

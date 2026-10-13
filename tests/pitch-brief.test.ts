@@ -117,6 +117,12 @@ describe("pitch briefs", () => {
     expect(brief.morePoints).toBe(0);
   });
 
+  it("pitches a lapsing domain right after certificate problems", () => {
+    const brief = buildPitchBrief(lead(), report([finding("https-enabled"), finding("domain-expiry"), finding("tls-certificate-valid", "high")]), "found");
+
+    expect(brief.points.map((point) => point.findingId)).toEqual(["tls-certificate-valid", "domain-expiry", "https-enabled"]);
+  });
+
   it("chooses the offer from the site state", () => {
     expect(buildPitchBrief(lead(), report([finding("website-placeholder", "high"), finding("title-present")]), "found").offer).toBe(
       "Starter website: the business has no working site to fix."

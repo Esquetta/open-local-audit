@@ -130,6 +130,25 @@ describe("cookie consent checks", () => {
       '<script type="text/plain" src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script>';
 
     expect(finding("cookie-consent-present", snapshot(blocked, "<p>Hello</p>"))).toBeUndefined();
+    expect(finding("cookie-consent-present", snapshot(blocked.replace('"text/plain"', '"Text/Plain; charset=utf-8"'), "<p>Hello</p>"))).toBeUndefined();
+  });
+
+  it("ignores tracker text inside JSON, import map, and template blocks", () => {
+    for (const type of ["application/ld+json", "application/json", "importmap", "text/template", "text/x-handlebars-template"]) {
+      const block = `<script type="${type}">{"url": "https://www.googletagmanager.com/gtag/js?id=G-ABC123"}</script>`;
+
+      expect(finding("cookie-consent-present", snapshot(block, "<p>Hello</p>")), type).toBeUndefined();
+    }
+  });
+
+  it("counts trackers that script optimisers load later under their own types", () => {
+    for (const type of ["a1b2c3d4e5-text/javascript", "litespeed/javascript", "rocketlazyloadscript", "text/partytown", "application/x-javascript"]) {
+      const delayed = `<script type="${type}" src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script>`;
+
+      expect(finding("cookie-consent-present", snapshot(delayed, "<p>Hello</p>"))?.evidence[0]?.value, type).toBe(
+        "Google Analytics or Ads loads with no consent tool found"
+      );
+    }
   });
 
   it("accepts website builder consent code", () => {

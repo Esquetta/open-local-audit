@@ -493,6 +493,51 @@ const compareProgram = program
     }
   });
 
+const monitorProgram = program
+  .command("monitor")
+  .description("Re-audit client sites, compare each with its previous run, and write a monitoring summary.")
+  .requiredOption("--input <path>", "read sites from a URL list or a CSV with url, label, and profile columns")
+  .requiredOption("--out-dir <path>", "keep monitoring runs in this directory; reuse it every run")
+  .option("--profile <profile>", "industry profile for sites without a profile column")
+  .option("--brand-config <path>", "read report branding from a JSON file")
+  .option("--timeout <ms>", "request timeout in milliseconds", "10000")
+  .option("--no-check-domain", "skip the domain registration expiry lookup")
+  .option("--fail-on-alerts", "exit with code 1 when any site needs attention", false)
+  .action(async () => {
+    try {
+      const raw = monitorProgram.opts() as Record<string, unknown>;
+      const options = cliOptionsSchema
+        .pick({ profile: true, timeout: true, checkDomain: true })
+        .parse({ profile: raw.profile, timeout: raw.timeout, checkDomain: raw.checkDomain });
+      const brand = raw.brandConfig ? await readBrandConfig(String(raw.brandConfig)) : undefined;
+      const [{ auditUrl }, { readBatchInput }, { runMonitor }] = await Promise.all([
+        import("./audit.js"),
+        import("./batch.js"),
+        import("./monitor.js")
+      ]);
+      const summary = await runMonitor(await readBatchInput(String(raw.input)), {
+        outDir: String(raw.outDir),
+        profile: options.profile,
+        brand,
+        audit: (url, profile) => auditUrl(url, { timeoutMs: options.timeout, profile, checkDomain: options.checkDomain })
+      });
+
+      const attention = summary.sites.filter((site) => site.alerts.length > 0);
+      process.stdout.write(
+        `Monitored ${summary.sites.length} site${summary.sites.length === 1 ? "" : "s"}: ${attention.length} need${attention.length === 1 ? "s" : ""} attention\n`
+      );
+      process.stdout.write(`Summary: ${summary.summaryPaths.markdown}\n`);
+      if (raw.failOnAlerts && attention.length > 0) {
+        process.stderr.write("open-local-audit: sites need attention (--fail-on-alerts)\n");
+        process.exitCode = 1;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
 const shortlistProgram = program
   .command("shortlist")
   .description("Rank a local discovery or CRM CSV export into a lead shortlist report.")
@@ -784,6 +829,7 @@ program
   .option("--render", "use Playwright-rendered HTML instead of the static response", false)
   .option("--screenshot", "capture a rendered homepage screenshot into the report output directory", false)
   .option("--lighthouse", "run Lighthouse performance, accessibility, best-practices, and SEO checks", false)
+  .option("--check-domain", "look up the domain's registration expiry date over RDAP", false)
   .option("--fail-on <severity>", "exit with code 1 when findings meet severity: none, high, medium, or low", "none")
   .option("--pretty", "pretty-print JSON output", false)
   .action(async (rawUrl: string | undefined, rawOptions: unknown) => {
@@ -798,7 +844,8 @@ program
         profile: options.profile,
         render: options.render || options.screenshot,
         screenshot: options.screenshot,
-        lighthouse: options.lighthouse
+        lighthouse: options.lighthouse,
+        checkDomain: options.checkDomain
       };
 
       if (options.input) {

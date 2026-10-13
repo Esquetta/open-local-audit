@@ -37,6 +37,7 @@ const pitchReasons: Array<[RegExp, string]> = [
   [/^website-placeholder$/, "People who find the business online land on a placeholder instead of a website."],
   [/^http-status-ok$/, "The page returns an error, so visitors and Google may not see it at all."],
   [/^tls-certificate-valid$/, "Browsers show, or will soon show, a security warning instead of the site."],
+  [/^domain-expiry$/, "The domain registration runs out soon; if it lapses, the website and email stop working."],
   [/^page-indexable$/, "The page tells Google not to list it, so it cannot appear in search results."],
   [/^https-enabled$/, "Browsers mark the site as \"Not secure\"."],
   [/^viewport-present$/, "The page does not adapt to phones, where most local searches happen."],

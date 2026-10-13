@@ -6,6 +6,7 @@ import { renderPageSnapshot } from "./render.js";
 import { runLighthouseAudit } from "./lighthouse.js";
 import { extractPublicContact } from "./contact.js";
 import { detectDotnetStack } from "./dotnet-stack.js";
+import { probeDomainExpiry } from "./domain-probe.js";
 import { probeTlsCertificate } from "./tls-probe.js";
 
 export { probeTlsCertificate };
@@ -277,6 +278,10 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
 
   if (snapshot.finalUrl.startsWith("https://")) {
     snapshot.tls = await probeTlsCertificate(snapshot.finalUrl, effectiveOptions.timeoutMs);
+  }
+
+  if (effectiveOptions.checkDomain) {
+    snapshot.domain = await (effectiveOptions.probeDomain ?? probeDomainExpiry)(snapshot.finalUrl, effectiveOptions.timeoutMs);
   }
 
   const report = auditSnapshot(snapshot, new Date().toISOString(), {
