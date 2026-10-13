@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import { safeReportSlug, type BatchInputEntry } from "./batch.js";
+import type { BatchInputEntry } from "./batch.js";
 import { compareReports, readComparisonReport, renderComparisonHtml, renderComparisonMarkdown } from "./compare.js";
 import { writeReportOutputs } from "./output.js";
 import { escapeCell, overallScore } from "./reporters.js";
@@ -45,6 +46,21 @@ export interface MonitorSummary {
 
 // Run folders are named by UTC time, so sorting their names sorts them by date.
 const runIdPattern = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
+
+// A site is its host (without "www.") plus any port, path, and query; the scheme does not matter. Host names are
+// already safe folder names, so different hosts never share a folder, and a path or query adds a short hash of
+// itself so that "/a/b" and "/a-b" stay apart. The folder is the same on every run, which keeps the history together.
+export function monitorSiteFolder(rawUrl: string): { identity: string; folder: string } {
+  const url = new URL(rawUrl);
+  const host = url.hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  const rest = `${url.pathname.replace(/\/+$/, "")}${url.search}`;
+  const identity = `${host}${url.port ? `:${url.port}` : ""}${rest}`;
+  const readable = rest.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  const folder = `${host.replace(/[^a-z0-9.-]/g, "-")}${url.port ? `-${url.port}` : ""}${
+    rest ? `_${readable ? `${readable}-` : ""}${createHash("sha256").update(rest).digest("hex").slice(0, 8)}` : ""
+  }`;
+  return { identity, folder };
+}
 
 export function monitorRunId(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/:/g, "-");
@@ -143,14 +159,15 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
 // Re-audits every site, compares each one with its latest earlier run in the same output folder, and writes a summary.
 // Nothing is sent: the summary and reports stay on disk for the operator.
 export async function runMonitor(entries: BatchInputEntry[], options: MonitorOptions): Promise<MonitorSummary> {
-  const slugs = entries.map((entry) => safeReportSlug(entry.url));
-  const seen = new Map<string, string>();
-  slugs.forEach((slug, index) => {
-    const earlier = seen.get(slug);
+  const sitesByIdentity = new Map<string, string>();
+  const slugs = entries.map((entry) => {
+    const site = monitorSiteFolder(entry.url);
+    const earlier = sitesByIdentity.get(site.identity);
     if (earlier) {
-      throw new Error(`Monitor input lists the same site twice: ${earlier} and ${entries[index].url}`);
+      throw new Error(`Monitor input lists the same site twice: ${earlier} and ${entry.url}`);
     }
-    seen.set(slug, entries[index].url);
+    sitesByIdentity.set(site.identity, entry.url);
+    return site.folder;
   });
 
   const runId = monitorRunId(options.now ?? new Date());

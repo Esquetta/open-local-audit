@@ -1379,7 +1379,8 @@ const inertScriptType = /^text\/plain$|json|importmap|speculationrules|template|
 function loadedTrackers($: CheerioAPI): string[] {
   const scripts = $("script")
     .toArray()
-    .filter((element) => !inertScriptType.test(($(element).attr("type") ?? "").trim().toLowerCase()))
+    // Only the MIME type counts, so "text/plain; charset=utf-8" is inert too.
+    .filter((element) => !inertScriptType.test(($(element).attr("type") ?? "").split(";")[0].trim().toLowerCase()))
     .map((element) => `${$(element).attr("src") ?? ""} ${$(element).text()}`)
     .join("\n");
   return trackers.filter(([, pattern]) => pattern.test(scripts)).map(([name]) => name);

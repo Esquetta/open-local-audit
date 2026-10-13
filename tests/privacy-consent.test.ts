@@ -130,6 +130,7 @@ describe("cookie consent checks", () => {
       '<script type="text/plain" src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script>';
 
     expect(finding("cookie-consent-present", snapshot(blocked, "<p>Hello</p>"))).toBeUndefined();
+    expect(finding("cookie-consent-present", snapshot(blocked.replace('"text/plain"', '"Text/Plain; charset=utf-8"'), "<p>Hello</p>"))).toBeUndefined();
   });
 
   it("ignores tracker text inside JSON, import map, and template blocks", () => {

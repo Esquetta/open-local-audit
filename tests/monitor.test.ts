@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { auditSnapshot } from "../src/audit.js";
-import { monitorRunId, runMonitor } from "../src/monitor.js";
+import { monitorRunId, monitorSiteFolder, runMonitor } from "../src/monitor.js";
 import type { AuditProfile, AuditReport, PageSnapshot } from "../src/types.js";
 
 const tempDirs: string[] = [];
@@ -47,8 +47,8 @@ describe("monitor runs", () => {
       audit: async (url) => report(url, "2026-09-13T08:00:00.000Z")
     });
     expect(first.sites[0]).toMatchObject({ status: "baseline", note: "First run: baseline recorded", alerts: [] });
-    expect(existsSync(join(outDir, "clinic-test", "2026-09-13T08-00-00Z", "open-local-audit-report.json"))).toBe(true);
-    expect(existsSync(join(outDir, "clinic-test", "2026-09-13T08-00-00Z", "open-local-audit-report.html"))).toBe(true);
+    expect(existsSync(join(outDir, "clinic.test", "2026-09-13T08-00-00Z", "open-local-audit-report.json"))).toBe(true);
+    expect(existsSync(join(outDir, "clinic.test", "2026-09-13T08-00-00Z", "open-local-audit-report.html"))).toBe(true);
 
     const second = await runMonitor(entries, {
       outDir,
@@ -59,18 +59,18 @@ describe("monitor runs", () => {
     expect(site).toMatchObject({ status: "compared", previousRunId: "2026-09-13T08-00-00Z", newFindings: 1, fixedFindings: 0 });
     expect(site.alerts).toEqual([{ kind: "new-high", message: "New high issue: Page does not return a successful HTTP status" }]);
     expect(site.scoreChange).toBeLessThan(0);
-    expect(readFileSync(join(outDir, "clinic-test", "2026-10-13T08-00-00Z", "comparison.md"), "utf8")).toContain("Page does not return a successful HTTP status");
-    expect(existsSync(join(outDir, "clinic-test", "2026-10-13T08-00-00Z", "comparison.html"))).toBe(true);
+    expect(readFileSync(join(outDir, "clinic.test", "2026-10-13T08-00-00Z", "comparison.md"), "utf8")).toContain("Page does not return a successful HTTP status");
+    expect(existsSync(join(outDir, "clinic.test", "2026-10-13T08-00-00Z", "comparison.html"))).toBe(true);
 
     const markdown = readFileSync(second.summaryPaths.markdown, "utf8");
     expect(second.summaryPaths.markdown).toBe(join(outDir, "monitor-summary-2026-10-13T08-00-00Z.md"));
     expect(markdown).toContain("Run 2026-10-13T08-00-00Z: 1 site, 1 compared, 0 baseline, 0 failed. 1 site needs attention.");
     expect(markdown).toContain("- **Clinic (https://clinic.test/)**: New high issue: Page does not return a successful HTTP status");
     expect(markdown).toContain("| Compared with 2026-09-13T08-00-00Z |");
-    expect(markdown).toContain("clinic-test/2026-10-13T08-00-00Z/comparison.html");
+    expect(markdown).toContain("clinic.test/2026-10-13T08-00-00Z/comparison.html");
 
     const json = JSON.parse(readFileSync(second.summaryPaths.json, "utf8"));
-    expect(json.sites[0].comparisonPath).toBe("clinic-test/2026-10-13T08-00-00Z/comparison.html");
+    expect(json.sites[0].comparisonPath).toBe("clinic.test/2026-10-13T08-00-00Z/comparison.html");
   });
 
   it("alerts on certificate and domain findings on every run and keeps going after a failed audit", async () => {
@@ -92,7 +92,7 @@ describe("monitor runs", () => {
     expect(summary.sites[0].alerts.map((alert) => alert.kind)).toEqual(["certificate", "domain"]);
     expect(summary.sites[0].alerts[1].message).toBe("Domain: clinic.test expires 2026-11-01 (19 days)");
     expect(summary.sites[1]).toMatchObject({ status: "failed", alerts: [{ kind: "failed", message: "Audit failed: fetch failed" }] });
-    expect(existsSync(join(outDir, "down-test"))).toBe(false);
+    expect(existsSync(join(outDir, "down.test"))).toBe(false);
     expect(readFileSync(summary.summaryPaths.markdown, "utf8")).toContain("0 compared, 1 baseline, 1 failed. 2 sites need attention.");
   });
 
@@ -101,7 +101,7 @@ describe("monitor runs", () => {
     const entries = [{ url: "https://clinic.test/" }];
     await runMonitor(entries, { outDir, now: new Date("2026-08-13T08:00:00Z"), audit: async (url) => report(url, "2026-08-13T08:00:00.000Z") });
     await runMonitor(entries, { outDir, now: new Date("2026-09-13T08:00:00Z"), audit: async (url) => report(url, "2026-09-13T08:00:00.000Z") });
-    rmSync(join(outDir, "clinic-test", "2026-09-13T08-00-00Z", "open-local-audit-report.json"));
+    rmSync(join(outDir, "clinic.test", "2026-09-13T08-00-00Z", "open-local-audit-report.json"));
 
     const summary = await runMonitor(entries, {
       outDir,
@@ -114,7 +114,7 @@ describe("monitor runs", () => {
 
   it("keeps monitoring other sites when one site's run cannot be saved", async () => {
     const outDir = tempDir();
-    writeFileSync(join(outDir, "blocked-test"), "not a folder");
+    writeFileSync(join(outDir, "blocked.test"), "not a folder");
 
     const summary = await runMonitor([{ url: "https://blocked.test/" }, { url: "https://clinic.test/" }], {
       outDir,
@@ -144,6 +144,32 @@ describe("monitor runs", () => {
     expect(summary.sites[0].note).toBe(
       "Not compared with 2026-09-13T08-00-00Z: Reports use different profiles: generic and dental; new baseline recorded"
     );
+  });
+
+  it("keeps sites with similar names in separate folders that stay the same across runs", () => {
+    expect(monitorSiteFolder("https://a-b.com/").folder).toBe("a-b.com");
+    expect(monitorSiteFolder("https://www.a.b.com").folder).toBe("a.b.com");
+    expect(monitorSiteFolder("http://clinic.test:8080/").folder).toBe("clinic.test-8080");
+
+    const nested = monitorSiteFolder("https://clinic.test/a/b");
+    const dashed = monitorSiteFolder("https://clinic.test/a-b/");
+    expect(nested.folder).toMatch(/^clinic\.test_a-b-[0-9a-f]{8}$/);
+    expect(dashed.folder).toMatch(/^clinic\.test_a-b-[0-9a-f]{8}$/);
+    expect(nested.folder).not.toBe(dashed.folder);
+    expect(monitorSiteFolder("https://clinic.test/a/b").folder).toBe(nested.folder);
+  });
+
+  it("monitors different sites whose names differ only in punctuation", async () => {
+    const summary = await runMonitor([{ url: "https://a-b.com/" }, { url: "https://a.b.com/" }], {
+      outDir: tempDir(),
+      now: new Date("2026-10-13T08:00:00Z"),
+      audit: async (url) => report(url, "2026-10-13T08:00:00.000Z")
+    });
+
+    expect(summary.sites.map((site) => [site.slug, site.status])).toEqual([
+      ["a-b.com", "baseline"],
+      ["a.b.com", "baseline"]
+    ]);
   });
 
   it("rejects input that lists the same site twice", async () => {
