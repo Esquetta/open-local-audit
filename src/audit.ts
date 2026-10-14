@@ -89,7 +89,9 @@ async function fetchWithRedirects(url: string, options: AuditOptions): Promise<P
   throw new Error(`Exceeded redirect limit of ${options.maxRedirects}`);
 }
 
-async function fetchResource(url: string, options: AuditOptions): Promise<PageResource> {
+const robotsTxtLimit = 500 * 1024;
+
+async function fetchResource(url: string, options: AuditOptions, keepContent = false): Promise<PageResource> {
   try {
     const snapshot = await fetchWithRedirects(url, {
       ...options,
@@ -99,7 +101,8 @@ async function fetchResource(url: string, options: AuditOptions): Promise<PageRe
     return {
       url,
       finalUrl: snapshot.finalUrl,
-      statusCode: snapshot.statusCode
+      statusCode: snapshot.statusCode,
+      ...(keepContent && snapshot.statusCode >= 200 && snapshot.statusCode < 300 ? { content: snapshot.html.slice(0, robotsTxtLimit) } : {})
     };
   } catch {
     return {
@@ -266,7 +269,7 @@ export async function auditUrl(url: string, options: Partial<AuditOptions> = {})
   const origin = new URL(snapshot.finalUrl).origin;
 
   snapshot.resources = {
-    robotsTxt: await fetchResource(new URL("/robots.txt", origin).toString(), effectiveOptions),
+    robotsTxt: await fetchResource(new URL("/robots.txt", origin).toString(), effectiveOptions, true),
     sitemapXml: await fetchResource(new URL("/sitemap.xml", origin).toString(), effectiveOptions)
   };
 

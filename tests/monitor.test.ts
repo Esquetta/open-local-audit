@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,7 +34,58 @@ function report(url: string, scannedAt: string, overrides: Partial<PageSnapshot>
 
 describe("monitor runs", () => {
   it("names runs by UTC time without separators that Windows rejects", () => {
-    expect(monitorRunId(new Date("2026-10-13T08:40:12.345Z"))).toBe("2026-10-13T08-40-12Z");
+    expect(monitorRunId(new Date("2026-10-13T08:40:12.345Z"))).toBe("2026-10-13T08-40-12-345Z");
+  });
+
+  it("keeps runs from the same second apart and still compares with v0.80.0 run folders", async () => {
+    const outDir = tempDir();
+    const entries = [{ url: "https://clinic.test/" }];
+    const audit = async (url: string) => report(url, "2026-10-13T08:00:00.000Z");
+    const legacy = join(outDir, "clinic.test", "2026-09-13T08-00-00Z");
+    mkdirSync(legacy, { recursive: true });
+    writeFileSync(join(legacy, "open-local-audit-report.json"), JSON.stringify(report("https://clinic.test/", "2026-09-13T08:00:00.000Z")));
+
+    const first = await runMonitor(entries, { outDir, now: new Date("2026-10-13T08:00:00.100Z"), audit });
+    const retry = await runMonitor(entries, { outDir, now: new Date("2026-10-13T08:00:00.900Z"), audit });
+
+    expect(first.sites[0]).toMatchObject({ status: "compared", previousRunId: "2026-09-13T08-00-00Z" });
+    expect(retry.sites[0]).toMatchObject({ status: "compared", previousRunId: "2026-10-13T08-00-00-100Z" });
+    expect(first.summaryPaths.markdown).not.toBe(retry.summaryPaths.markdown);
+  });
+
+  it("writes a branded client PDF: the comparison after a comparison, the report on a first run", async () => {
+    const outDir = tempDir();
+    const entries = [{ url: "https://clinic.test/" }];
+    const brand = { name: "Torut Web Care" };
+    const first = await runMonitor(entries, { outDir, brand, now: new Date("2026-09-13T08:00:00Z"), audit: async (url) => report(url, "2026-09-13T08:00:00.000Z") });
+    const second = await runMonitor(entries, { outDir, brand, now: new Date("2026-10-13T08:00:00Z"), audit: async (url) => report(url, "2026-10-13T08:00:00.000Z") });
+
+    expect(first.sites[0].pdfPath).toBe(join(outDir, "clinic.test", "2026-09-13T08-00-00-000Z", "open-local-audit-report.pdf"));
+    expect(second.sites[0].pdfPath).toBe(join(outDir, "clinic.test", "2026-10-13T08-00-00-000Z", "comparison.pdf"));
+    for (const path of [first.sites[0].pdfPath, second.sites[0].pdfPath]) {
+      expect(readFileSync(path ?? "").subarray(0, 5).toString()).toBe("%PDF-");
+    }
+    expect(existsSync(join(outDir, "clinic.test", "2026-10-13T08-00-00-000Z", "open-local-audit-report.pdf"))).toBe(true);
+    expect(readFileSync(second.summaryPaths.markdown, "utf8")).toContain("| clinic.test/2026-10-13T08-00-00-000Z/comparison.pdf |");
+    expect(JSON.parse(readFileSync(second.summaryPaths.json, "utf8")).sites[0].pdfPath).toBe("clinic.test/2026-10-13T08-00-00-000Z/comparison.pdf");
+  });
+
+  it("raises one alert, not two, when the certificate starts failing", async () => {
+    const outDir = tempDir();
+    const entries = [{ url: "https://clinic.test/" }];
+    await runMonitor(entries, { outDir, now: new Date("2026-09-13T08:00:00Z"), audit: async (url) => report(url, "2026-09-13T08:00:00.000Z") });
+
+    const summary = await runMonitor(entries, {
+      outDir,
+      now: new Date("2026-10-13T08:00:00Z"),
+      audit: async (url) =>
+        report(url, "2026-10-13T08:00:00.000Z", {
+          tls: { validFrom: "2026-07-01T00:00:00.000Z", validTo: "2026-10-20T00:00:00.000Z", daysRemaining: 7, authorized: true }
+        })
+    });
+
+    expect(summary.sites[0].newFindings).toBe(1);
+    expect(summary.sites[0].alerts.map((alert) => alert.kind)).toEqual(["certificate"]);
   });
 
   it("records a baseline first, then compares with the latest earlier run and alerts on new high issues", async () => {
@@ -47,8 +98,8 @@ describe("monitor runs", () => {
       audit: async (url) => report(url, "2026-09-13T08:00:00.000Z")
     });
     expect(first.sites[0]).toMatchObject({ status: "baseline", note: "First run: baseline recorded", alerts: [] });
-    expect(existsSync(join(outDir, "clinic.test", "2026-09-13T08-00-00Z", "open-local-audit-report.json"))).toBe(true);
-    expect(existsSync(join(outDir, "clinic.test", "2026-09-13T08-00-00Z", "open-local-audit-report.html"))).toBe(true);
+    expect(existsSync(join(outDir, "clinic.test", "2026-09-13T08-00-00-000Z", "open-local-audit-report.json"))).toBe(true);
+    expect(existsSync(join(outDir, "clinic.test", "2026-09-13T08-00-00-000Z", "open-local-audit-report.html"))).toBe(true);
 
     const second = await runMonitor(entries, {
       outDir,
@@ -56,21 +107,21 @@ describe("monitor runs", () => {
       audit: async (url) => report(url, "2026-10-13T08:00:00.000Z", { statusCode: 500 })
     });
     const site = second.sites[0];
-    expect(site).toMatchObject({ status: "compared", previousRunId: "2026-09-13T08-00-00Z", newFindings: 1, fixedFindings: 0 });
+    expect(site).toMatchObject({ status: "compared", previousRunId: "2026-09-13T08-00-00-000Z", newFindings: 1, fixedFindings: 0 });
     expect(site.alerts).toEqual([{ kind: "new-high", message: "New high issue: Page does not return a successful HTTP status" }]);
     expect(site.scoreChange).toBeLessThan(0);
-    expect(readFileSync(join(outDir, "clinic.test", "2026-10-13T08-00-00Z", "comparison.md"), "utf8")).toContain("Page does not return a successful HTTP status");
-    expect(existsSync(join(outDir, "clinic.test", "2026-10-13T08-00-00Z", "comparison.html"))).toBe(true);
+    expect(readFileSync(join(outDir, "clinic.test", "2026-10-13T08-00-00-000Z", "comparison.md"), "utf8")).toContain("Page does not return a successful HTTP status");
+    expect(existsSync(join(outDir, "clinic.test", "2026-10-13T08-00-00-000Z", "comparison.html"))).toBe(true);
 
     const markdown = readFileSync(second.summaryPaths.markdown, "utf8");
-    expect(second.summaryPaths.markdown).toBe(join(outDir, "monitor-summary-2026-10-13T08-00-00Z.md"));
-    expect(markdown).toContain("Run 2026-10-13T08-00-00Z: 1 site, 1 compared, 0 baseline, 0 failed. 1 site needs attention.");
+    expect(second.summaryPaths.markdown).toBe(join(outDir, "monitor-summary-2026-10-13T08-00-00-000Z.md"));
+    expect(markdown).toContain("Run 2026-10-13T08-00-00-000Z: 1 site, 1 compared, 0 baseline, 0 failed. 1 site needs attention.");
     expect(markdown).toContain("- **Clinic (https://clinic.test/)**: New high issue: Page does not return a successful HTTP status");
-    expect(markdown).toContain("| Compared with 2026-09-13T08-00-00Z |");
-    expect(markdown).toContain("clinic.test/2026-10-13T08-00-00Z/comparison.html");
+    expect(markdown).toContain("| Compared with 2026-09-13T08-00-00-000Z |");
+    expect(markdown).toContain("clinic.test/2026-10-13T08-00-00-000Z/comparison.html");
 
     const json = JSON.parse(readFileSync(second.summaryPaths.json, "utf8"));
-    expect(json.sites[0].comparisonPath).toBe("clinic.test/2026-10-13T08-00-00Z/comparison.html");
+    expect(json.sites[0].comparisonPath).toBe("clinic.test/2026-10-13T08-00-00-000Z/comparison.html");
   });
 
   it("alerts on certificate and domain findings on every run and keeps going after a failed audit", async () => {
@@ -101,7 +152,7 @@ describe("monitor runs", () => {
     const entries = [{ url: "https://clinic.test/" }];
     await runMonitor(entries, { outDir, now: new Date("2026-08-13T08:00:00Z"), audit: async (url) => report(url, "2026-08-13T08:00:00.000Z") });
     await runMonitor(entries, { outDir, now: new Date("2026-09-13T08:00:00Z"), audit: async (url) => report(url, "2026-09-13T08:00:00.000Z") });
-    rmSync(join(outDir, "clinic.test", "2026-09-13T08-00-00Z", "open-local-audit-report.json"));
+    rmSync(join(outDir, "clinic.test", "2026-09-13T08-00-00-000Z", "open-local-audit-report.json"));
 
     const summary = await runMonitor(entries, {
       outDir,
@@ -109,7 +160,7 @@ describe("monitor runs", () => {
       audit: async (url) => report(url, "2026-10-13T08:00:00.000Z")
     });
 
-    expect(summary.sites[0]).toMatchObject({ status: "compared", previousRunId: "2026-08-13T08-00-00Z" });
+    expect(summary.sites[0]).toMatchObject({ status: "compared", previousRunId: "2026-08-13T08-00-00-000Z" });
   });
 
   it("keeps monitoring other sites when one site's run cannot be saved", async () => {
@@ -142,7 +193,7 @@ describe("monitor runs", () => {
 
     expect(summary.sites[0].status).toBe("baseline");
     expect(summary.sites[0].note).toBe(
-      "Not compared with 2026-09-13T08-00-00Z: Reports use different profiles: generic and dental; new baseline recorded"
+      "Not compared with 2026-09-13T08-00-00-000Z: Reports use different profiles: generic and dental; new baseline recorded"
     );
   });
 

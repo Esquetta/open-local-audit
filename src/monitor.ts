@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { BatchInputEntry } from "./batch.js";
-import { compareReports, readComparisonReport, renderComparisonHtml, renderComparisonMarkdown } from "./compare.js";
+import { compareReports, readComparisonReport, renderComparisonHtml, renderComparisonMarkdown, renderComparisonPdf } from "./compare.js";
 import { writeReportOutputs } from "./output.js";
 import { escapeCell, overallScore } from "./reporters.js";
 import type { AuditProfile, AuditReport, ReportBrandConfig } from "./types.js";
@@ -27,6 +27,8 @@ export interface MonitorSiteResult {
   status: "compared" | "baseline" | "failed";
   reportDir?: string;
   comparisonPath?: string;
+  // The file to send the client: comparison.pdf after a comparison, otherwise the run's report PDF.
+  pdfPath?: string;
   previousRunId?: string;
   score?: number;
   previousScore?: number;
@@ -45,7 +47,8 @@ export interface MonitorSummary {
 }
 
 // Run folders are named by UTC time, so sorting their names sorts them by date.
-const runIdPattern = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
+// v0.80.0 named runs to the second; later versions add milliseconds so that a retried run never reuses a folder.
+const runIdPattern = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:-\d{3})?Z$/;
 
 // A site is its host (without "www.") plus any port, path, and query; the scheme does not matter. Host names are
 // already safe folder names, so different hosts never share a folder, and a path or query adds a short hash of
@@ -63,7 +66,7 @@ export function monitorSiteFolder(rawUrl: string): { identity: string; folder: s
 }
 
 export function monitorRunId(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, "Z").replace(/:/g, "-");
+  return date.toISOString().replace(/[:.]/g, "-");
 }
 
 async function previousRunIds(siteDir: string, runId: string): Promise<string[]> {
@@ -119,12 +122,14 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
     return { ...base, status: "failed", alerts: [{ kind: "failed", message: `Audit failed: ${message(error)}` }] };
   }
   await writeReportOutputs(report, { format: "all", outDir: reportDir, brand: options.brand });
+  const [reportPdf] = await writeReportOutputs(report, { format: "pdf", outDir: reportDir, brand: options.brand });
+  const reportPdfPath = reportPdf.path;
 
   const score = overallScore(report);
   const alerts = currentAlerts(report);
   const previous = await previousReport(siteDir, runId);
   if (!previous) {
-    return { ...base, status: "baseline", reportDir, score, alerts, note: "First run: baseline recorded" };
+    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, score, alerts, note: "First run: baseline recorded" };
   }
 
   const previousRunId = previous.runId;
@@ -132,20 +137,24 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
   try {
     comparison = compareReports(previous.report, report);
   } catch (error) {
-    return { ...base, status: "baseline", reportDir, score, alerts, note: `Not compared with ${previousRunId}: ${message(error)}; new baseline recorded` };
+    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, score, alerts, note: `Not compared with ${previousRunId}: ${message(error)}; new baseline recorded` };
   }
 
   const comparisonPath = join(reportDir, "comparison.html");
   await writeFile(join(reportDir, "comparison.md"), renderComparisonMarkdown(comparison, { brand: options.brand }));
   await writeFile(comparisonPath, renderComparisonHtml(comparison, { brand: options.brand }));
+  const pdfPath = join(reportDir, "comparison.pdf");
+  await writeFile(pdfPath, await renderComparisonPdf(comparison, { brand: options.brand }));
+  // Certificate and domain problems already have their own alert on every run.
   const newHigh = comparison.introduced
-    .filter((finding) => finding.severity === "high")
+    .filter((finding) => finding.severity === "high" && !["tls-certificate-valid", "domain-expiry"].includes(finding.id))
     .map((finding) => ({ kind: "new-high" as const, message: `New high issue: ${finding.title}` }));
   return {
     ...base,
     status: "compared",
     reportDir,
     comparisonPath,
+    pdfPath,
     previousRunId,
     score,
     previousScore: comparison.overall.before,
@@ -212,7 +221,8 @@ export function renderMonitorJson(summary: MonitorSummary): string {
   const sites = summary.sites.map((site) => ({
     ...site,
     reportDir: site.reportDir ? relativePath(summary, site.reportDir) : undefined,
-    comparisonPath: site.comparisonPath ? relativePath(summary, site.comparisonPath) : undefined
+    comparisonPath: site.comparisonPath ? relativePath(summary, site.comparisonPath) : undefined,
+    pdfPath: site.pdfPath ? relativePath(summary, site.pdfPath) : undefined
   }));
   return `${JSON.stringify({ runId: summary.runId, sites }, null, 2)}\n`;
 }
@@ -229,7 +239,8 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
     site.scoreChange === undefined ? "" : signed(site.scoreChange),
     site.status === "compared" ? `${site.newFindings}` : "",
     site.status === "compared" ? `${site.fixedFindings}` : "",
-    relativePath(summary, site.comparisonPath ?? (site.reportDir ? join(site.reportDir, "open-local-audit-report.html") : undefined))
+    relativePath(summary, site.comparisonPath ?? (site.reportDir ? join(site.reportDir, "open-local-audit-report.html") : undefined)),
+    relativePath(summary, site.pdfPath)
   ]);
 
   return [
@@ -247,8 +258,8 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
     "",
     "## Sites",
     "",
-    "| Site | Status | Score | Change | New | Fixed | Report |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
+    "| Site | Status | Score | Change | New | Fixed | Report | Client PDF |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ...rows.map((row) => `| ${row.map(escapeCell).join(" | ")} |`),
     "",
     "Reports and comparisons stay on this computer; nothing has been sent.",
