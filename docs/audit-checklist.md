@@ -16,7 +16,7 @@
   - Rule `redirect-chain-short` flags pages reached through more than one redirect and lists every hop with its status code. One redirect, such as HTTP to HTTPS, is accepted. Rendered audits (`--render`, `--screenshot`) do not record redirect hops, so the rule is skipped there.
 - Final URL is stable.
 - Page can be indexed by search engines.
-  - Rule `page-indexable` flags a `noindex` or `none` directive in a `robots` or `googlebot` meta tag or in the `X-Robots-Tag` response header. Directives aimed only at other crawlers are ignored, and `robots.txt` rules are not evaluated.
+  - Rule `page-indexable` flags a `noindex` or `none` directive in a `robots` or `googlebot` meta tag or in the `X-Robots-Tag` response header. Directives aimed only at other crawlers are ignored; `robots.txt` rules are checked by `robots-txt-allows-page`.
 - Page has title.
 - Page has meta description.
 - Page has viewport tag.
@@ -24,6 +24,8 @@
   - Rule `html-lang-present` flags an `<html>` element without a `lang` attribute or with a value that is not a language code, such as `lang="english"`.
 - Page has one clear H1.
 - robots.txt exists.
+- robots.txt lets search engines crawl the page.
+  - Rule `robots-txt-allows-page` reads the site's `robots.txt` (up to the 500 KiB that Google reads) and flags the audited page when the group for Googlebot, or the `*` group when there is none, disallows it. The evidence quotes the matching line, such as `Disallow: /`. Missing or unavailable robots.txt files are left to `robots-txt-present`.
 - sitemap.xml exists.
 
 ## Local conversion

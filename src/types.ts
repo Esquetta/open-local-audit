@@ -167,6 +167,8 @@ export interface PageResource {
   url: string;
   finalUrl: string;
   statusCode: number;
+  // Kept only for robots.txt, up to the 500 KiB that Google reads.
+  content?: string;
 }
 
 export interface VisualEvidence {

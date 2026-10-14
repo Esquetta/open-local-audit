@@ -1,5 +1,6 @@
 ﻿import { load, type CheerioAPI } from "cheerio";
 import { findPhoneNumbersInText, getCountries, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/max";
+import { createRequire } from "node:module";
 import { detectPageForms, hasContactOrBookingLink } from "./contact.js";
 import { cookieNames } from "./dotnet-stack.js";
 import {
@@ -1153,6 +1154,28 @@ function robotsHeaderBlocksIndexing(value: string): boolean {
   });
 }
 
+type RobotsPolicy = {
+  isAllowed: (url: string, userAgent: string) => boolean | undefined;
+  getMatchingLineNumber: (url: string, userAgent: string) => number;
+};
+const robotsParser = createRequire(import.meta.url)("robots-parser") as (url: string, contents: string) => RobotsPolicy;
+
+// Googlebot follows the group that names it, or the "*" group when there is none, as robots-parser does.
+function robotsTxtBlock(snapshot: PageSnapshot): string | undefined {
+  const robots = snapshot.resources?.robotsTxt;
+  if (!robots?.content || !hasSuccessfulResource(robots.statusCode)) {
+    return undefined;
+  }
+  const policy = robotsParser(new URL("/robots.txt", snapshot.finalUrl).toString(), robots.content);
+  if (policy.isAllowed(snapshot.finalUrl, "Googlebot") !== false) {
+    return undefined;
+  }
+  const lineNumber = policy.getMatchingLineNumber(snapshot.finalUrl, "Googlebot");
+  // Split lines the way robots-parser numbers them, including bare CR line endings.
+  const line = robots.content.split(/\r\n|\r|\n/)[lineNumber - 1]?.trim();
+  return `robots.txt blocks Googlebot from ${snapshot.finalUrl}${line ? ` (line ${lineNumber}: ${line})` : ""}`;
+}
+
 function noindexSignals($: CheerioAPI, snapshot: PageSnapshot): string[] {
   const signals = $("meta[name][content]")
     .toArray()
@@ -1501,7 +1524,7 @@ const rules: Rule[] = [
   },
   {
     id: "domain-expiry",
-    title: "Domain registration expires soon",
+    title: "Domain registration is expiring or has lapsed",
     category: "technical-health",
     severity: "medium",
     source: "Domain registration",
@@ -1519,6 +1542,17 @@ const rules: Rule[] = [
     recommendation: "Remove the noindex directive from the page and its X-Robots-Tag header so the page can appear in search results.",
     check: ({ $, snapshot }) => noindexSignals($, snapshot).length === 0,
     evidence: ({ $, snapshot }) => noindexSignals($, snapshot).join("; ")
+  },
+  {
+    id: "robots-txt-allows-page",
+    title: "robots.txt blocks search engines from this page",
+    category: "search-basics",
+    severity: "high",
+    source: "robots.txt",
+    recommendation:
+      "Remove or narrow the robots.txt Disallow rule that matches this page so Google can crawl it and keep it in search results.",
+    check: ({ snapshot }) => robotsTxtBlock(snapshot) === undefined,
+    evidence: ({ snapshot }) => robotsTxtBlock(snapshot) ?? ""
   },
   {
     id: "mixed-content-absent",

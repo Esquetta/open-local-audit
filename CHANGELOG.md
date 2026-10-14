@@ -2,6 +2,14 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.81.0 - 2026-10-14
+
+- `monitor` now writes PDFs to send clients: `comparison.pdf` next to the Markdown and HTML comparison, and `open-local-audit-report.pdf` in every run folder, both branded with `--brand-config`. The summary gains a "Client PDF" column and the JSON summary a `pdfPath` field, pointing to the comparison PDF, or to the report PDF on a first run.
+- `monitor` run folders are now named to the millisecond, such as `2026-10-14T08-00-00-123Z`, so a retried run in the same second no longer overwrites the earlier run or records a second baseline. Run folders written by v0.80.0 are still read and compared.
+- When a certificate starts failing, the monitoring summary now shows one alert for it instead of a "New high issue" line as well.
+- Added the `robots-txt-allows-page` audit rule (search-basics, high). It reads the site's `robots.txt`, keeping the first 500 KiB (counted in characters), and flags the audited page when the Googlebot group, or the `*` group when there is none, disallows it, quoting the matching line, for example "robots.txt blocks Googlebot from https://clinic.test/ (line 2: Disallow: /)". Pitch briefs explain it right after `page-indexable`. The rule can add a high finding to sites whose robots.txt blocks the page, so `compare` shows it as new against earlier reports.
+- The `domain-expiry` finding title is now "Domain registration is expiring or has lapsed", and its pitch brief reason says the same, since the rule also covers expired domains and domains being deleted.
+
 ## v0.80.0 - 2026-10-13
 
 - Added the `monitor` command for monthly client monitoring. It reads a URL list or a CSV with `url`, `label`, and `profile` columns, audits each site, and keeps each run under `<out-dir>/<site>/<run time>/` with JSON, Markdown, and HTML reports. Site folders are named after the host, such as `clinic.co.uk`, with a short hash added for a path or query, and the same site listed twice is rejected. When a site has an earlier run in the same `--out-dir`, it writes `comparison.md` and `comparison.html` against the latest one that still has a readable report; a first run, or a changed profile or final host, records a new baseline. `monitor-summary-<run time>.md` and `.json` list each site's score, score change, and new and fixed findings, and flag sites with new high-severity findings, a failing HTTPS certificate or domain registration, or a failed audit. `--fail-on-alerts` exits with code 1 when any site needs attention. A site that fails to audit or save does not stop the run, and nothing is sent.
