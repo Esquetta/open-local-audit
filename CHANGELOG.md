@@ -2,6 +2,14 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.82.0 - 2026-10-15
+
+- `monitor` writes `client-email.md` in every run folder: a plain-text draft for the client with a subject line, the overall score and its change since the last check, fixed and new issues, HTTPS certificate and domain registration findings, the top three next steps from the report, the PDF to attach, and a sign-off from `--brand-config` `name` and `contact`. Dates use the computer's local time. It contains only facts from the audit, says when monitoring restarted from a new baseline, starts with an HTML comment saying it is a draft, and is never sent. The summary gains an "Email draft" column and the JSON summary an `emailPath` field.
+- Added `monitor --lighthouse`. It runs Lighthouse for each site after its audit and adds the scores to the reports. The summary gains a Speed column with the performance score and its change since the previous run (`performance` and `previousPerformance` in JSON), and the email draft reports the page speed. If Lighthouse fails, the site is still monitored and its summary note says why.
+- Added `monitor --print-schedule`. Instead of monitoring, it writes a run script into `--out-dir` that repeats the given options with absolute paths and the installed version pinned, and prints the command that schedules it for the 1st of every month at 09:00 with output appended to `monitor.log`. On Windows it writes `run-monitor.ps1`, which the task starts with PowerShell so that paths with spaces, `&`, `%`, apostrophes, or non-English letters work, and prints `schtasks` lines for Command Prompt and PowerShell, with a warning when the task command would pass Task Scheduler's 261-character limit. If `npx` is not on the task's PATH, the script logs that and exits with code 1. Elsewhere it writes `run-monitor.sh` and prints a `crontab` line. It does not create the scheduled task.
+- A compared site's summary status now also shows its note, such as a Lighthouse failure.
+- Exported `renderClientEmail` and the `ClientEmailInput` type from the public API.
+
 ## v0.81.0 - 2026-10-14
 
 - `monitor` now writes PDFs to send clients: `comparison.pdf` next to the Markdown and HTML comparison, and `open-local-audit-report.pdf` in every run folder, both branded with `--brand-config`. The summary gains a "Client PDF" column and the JSON summary a `pdfPath` field, pointing to the comparison PDF, or to the report PDF on a first run.

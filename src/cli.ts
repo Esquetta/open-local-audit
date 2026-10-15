@@ -2,7 +2,8 @@
 import { Command } from "commander";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import { readBrandConfig } from "./brand.js";
 import {
   compareReports,
@@ -502,7 +503,9 @@ const monitorProgram = program
   .option("--brand-config <path>", "read report branding from a JSON file")
   .option("--timeout <ms>", "request timeout in milliseconds", "10000")
   .option("--no-check-domain", "skip the domain registration expiry lookup")
+  .option("--lighthouse", "also record Lighthouse scores, including page speed, for each site", false)
   .option("--fail-on-alerts", "exit with code 1 when any site needs attention", false)
+  .option("--print-schedule", "write a run script for these options and print how to schedule it monthly, without monitoring", false)
   .action(async () => {
     try {
       const raw = monitorProgram.opts() as Record<string, unknown>;
@@ -510,16 +513,48 @@ const monitorProgram = program
         .pick({ profile: true, timeout: true, checkDomain: true })
         .parse({ profile: raw.profile, timeout: raw.timeout, checkDomain: raw.checkDomain });
       const brand = raw.brandConfig ? await readBrandConfig(String(raw.brandConfig)) : undefined;
+
+      if (raw.printSchedule) {
+        if (!existsSync(String(raw.input))) {
+          throw new Error(`${String(raw.input)} was not found; the scheduled run would fail every month`);
+        }
+        const { buildMonitorSchedule, writeMonitorSchedule } = await import("./monitor-schedule.js");
+        const outDir = resolve(String(raw.outDir));
+        const schedule = buildMonitorSchedule({
+          platform: process.platform,
+          cwd: process.cwd(),
+          outDir,
+          version: (createRequire(import.meta.url)("../package.json") as { version: string }).version,
+          args: [
+            "--input",
+            resolve(String(raw.input)),
+            "--out-dir",
+            outDir,
+            ...(raw.profile && options.profile ? ["--profile", options.profile] : []),
+            ...(raw.brandConfig ? ["--brand-config", resolve(String(raw.brandConfig))] : []),
+            ...(options.timeout !== 10000 ? ["--timeout", String(options.timeout)] : []),
+            ...(options.checkDomain ? [] : ["--no-check-domain"]),
+            ...(raw.lighthouse ? ["--lighthouse"] : []),
+            ...(raw.failOnAlerts ? ["--fail-on-alerts"] : [])
+          ]
+        });
+        await writeMonitorSchedule(schedule, outDir);
+        process.stdout.write(`${schedule.instructions}\n`);
+        return;
+      }
+
       const [{ auditUrl }, { readBatchInput }, { runMonitor }] = await Promise.all([
         import("./audit.js"),
         import("./batch.js"),
         import("./monitor.js")
       ]);
+      const { runLighthouseAudit } = raw.lighthouse ? await import("./lighthouse.js") : { runLighthouseAudit: undefined };
       const summary = await runMonitor(await readBatchInput(String(raw.input)), {
         outDir: String(raw.outDir),
         profile: options.profile,
         brand,
-        audit: (url, profile) => auditUrl(url, { timeoutMs: options.timeout, profile, checkDomain: options.checkDomain })
+        audit: (url, profile) => auditUrl(url, { timeoutMs: options.timeout, profile, checkDomain: options.checkDomain }),
+        ...(runLighthouseAudit ? { lighthouse: (url: string) => runLighthouseAudit(url, { timeoutMs: options.timeout }) } : {})
       });
 
       const attention = summary.sites.filter((site) => site.alerts.length > 0);

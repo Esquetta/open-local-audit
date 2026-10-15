@@ -11,8 +11,8 @@ export {
   renderComparisonPdf
 } from "./compare.js";
 export type { AuditComparison, ComparisonRenderOptions, ComparisonScreenshot, ScoreChange } from "./compare.js";
-export { monitorRunId, renderMonitorJson, renderMonitorMarkdown, runMonitor } from "./monitor.js";
-export type { MonitorAlert, MonitorOptions, MonitorSiteResult, MonitorSummary } from "./monitor.js";
+export { monitorRunId, renderClientEmail, renderMonitorJson, renderMonitorMarkdown, runMonitor } from "./monitor.js";
+export type { ClientEmailInput, MonitorAlert, MonitorOptions, MonitorSiteResult, MonitorSummary } from "./monitor.js";
 export { extractPublicContact } from "./contact.js";
 export { detectDotnetStack } from "./dotnet-stack.js";
 export { fetchOvertureCandidates } from "./overture.js";
