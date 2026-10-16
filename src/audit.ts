@@ -46,6 +46,7 @@ function normalizeHeaders(headers: Headers): Record<string, string> {
 async function fetchWithRedirects(url: string, options: AuditOptions): Promise<PageSnapshot> {
   let currentUrl = url;
   const redirects: RedirectHop[] = [];
+  const started = performance.now();
 
   for (let redirectCount = 0; redirectCount <= options.maxRedirects; redirectCount += 1) {
     const controller = new AbortController();
@@ -67,13 +68,16 @@ async function fetchWithRedirects(url: string, options: AuditOptions): Promise<P
         continue;
       }
 
+      const html = await response.text();
       return {
         url,
         finalUrl: response.url || currentUrl,
         statusCode: response.status,
         headers: normalizeHeaders(response.headers),
-        html: await response.text(),
-        redirects
+        html,
+        redirects,
+        // From the first request to the last byte of the final page, including redirects.
+        responseTimeMs: Math.round(performance.now() - started)
       };
     } catch (error) {
       const code = (error as { cause?: { code?: unknown } }).cause?.code;
@@ -239,6 +243,11 @@ export function auditSnapshot(
 
   if (snapshot.visualEvidence && snapshot.visualEvidence.length > 0) {
     report.visualEvidence = snapshot.visualEvidence;
+  }
+
+  if (snapshot.responseTimeMs !== undefined) {
+    report.responseTimeMs = snapshot.responseTimeMs;
+    report.evidence.push({ label: "Response time", value: `${snapshot.responseTimeMs} ms` });
   }
 
   return report;

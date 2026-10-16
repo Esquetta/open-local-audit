@@ -65,6 +65,8 @@ export interface AuditReport {
   contact?: PublicContact;
   businessIdentity?: BusinessIdentityResult;
   dotnetStack?: DotnetStack;
+  // Time to fetch the page HTML in a static audit, including redirects; rendered audits leave it out.
+  responseTimeMs?: number;
 }
 
 export interface DotnetStackEvidence {
@@ -118,6 +120,7 @@ export interface PageSnapshot {
   };
   internalLinks?: PageResource[];
   visualEvidence?: VisualEvidence[];
+  responseTimeMs?: number;
   tls?: {
     validFrom: string;
     validTo: string;
