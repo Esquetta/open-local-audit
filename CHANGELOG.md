@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.83.0 - 2026-10-16
+
+- `monitor` writes `history.html` in each site folder on every run: a branded, self-contained page that charts the overall score, and the Lighthouse performance score when runs have one, across every readable run in the output folder, with a table of each check's score, speed, response time, open issues by severity, fixed and new issues, and HTTPS certificate and domain registration problems. Runs that could not be compared with the one before them, such as after a profile or host change, are marked "New baseline", using the same rules as the monitoring comparison; older run files without a summary or Lighthouse categories are still read. The chart has a hover readout, a light and dark theme, and scrolls sideways on narrow screens. The summary gains a "History" column and the JSON summary a `historyPath` field. If the page cannot be written, the run still counts and the summary note says why.
+- Static audits now record how long the page HTML took to load, from the first request to the last byte of the final page including redirects, as `responseTimeMs` in the JSON report and a "Response time" evidence row. Rendered audits leave it out. The monitoring summary shows it in a Response column with the change since the last run (`responseTimeMs` and `previousResponseTimeMs` in JSON); it does not raise alerts, because one measurement can vary.
+- Exported `renderSiteHistory` and the `SiteHistoryRun` and `SiteHistoryOptions` types from the public API.
+
 ## v0.82.0 - 2026-10-15
 
 - `monitor` writes `client-email.md` in every run folder: a plain-text draft for the client with a subject line, the overall score and its change since the last check, fixed and new issues, HTTPS certificate and domain registration findings, the top three next steps from the report, the PDF to attach, and a sign-off from `--brand-config` `name` and `contact`. Dates use the computer's local time. It contains only facts from the audit, says when monitoring restarted from a new baseline, starts with an HTML comment saying it is a draft, and is never sent. The summary gains an "Email draft" column and the JSON summary an `emailPath` field.

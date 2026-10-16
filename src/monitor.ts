@@ -3,6 +3,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import type { BatchInputEntry } from "./batch.js";
 import { compareReports, readComparisonReport, renderComparisonHtml, renderComparisonMarkdown, renderComparisonPdf } from "./compare.js";
+import { renderSiteHistory, type SiteHistoryRun } from "./monitor-history.js";
 import { writeReportOutputs } from "./output.js";
 import { escapeCell, overallScore, severityRank } from "./reporters.js";
 import type { AuditComparison } from "./compare.js";
@@ -34,6 +35,8 @@ export interface MonitorSiteResult {
   pdfPath?: string;
   // A ready-to-edit monthly email for the client; it is never sent.
   emailPath?: string;
+  // The site's history page across every run in the output folder.
+  historyPath?: string;
   previousRunId?: string;
   score?: number;
   previousScore?: number;
@@ -41,6 +44,9 @@ export interface MonitorSiteResult {
   // Lighthouse performance score when `lighthouse` is set, with the previous run's score when it had one.
   performance?: number;
   previousPerformance?: number;
+  // Time to fetch the page HTML, with the previous run's time when it had one.
+  responseTimeMs?: number;
+  previousResponseTimeMs?: number;
   newFindings: number;
   fixedFindings: number;
   alerts: MonitorAlert[];
@@ -196,6 +202,22 @@ export function renderClientEmail(input: ClientEmailInput): string {
   ].join("\n");
 }
 
+// Rebuilds the site's history page from every readable run, including the one just written.
+async function writeSiteHistory(siteDir: string, name: string, brand: ReportBrandConfig | undefined): Promise<string> {
+  const runs: SiteHistoryRun[] = [];
+  // "~" sorts after every run id, so this lists them all.
+  for (const runId of (await previousRunIds(siteDir, "~")).reverse()) {
+    try {
+      runs.push({ runId, report: await readComparisonReport(join(siteDir, runId)) });
+    } catch {
+      continue;
+    }
+  }
+  const path = join(siteDir, "history.html");
+  await writeFile(path, renderSiteHistory(runs, { name, brand }));
+  return path;
+}
+
 async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, options: MonitorOptions): Promise<MonitorSiteResult> {
   const base = { url: entry.url, ...(entry.label ? { label: entry.label } : {}), slug, newFindings: 0, fixedFindings: 0 };
   const profile = entry.profile ?? options.profile ?? "generic";
@@ -240,11 +262,25 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
   }
   const previousPerformance = comparison ? previous?.report.lighthouse?.categories.performance : undefined;
   const speed = { ...(performance === undefined ? {} : { performance }), ...(previousPerformance === undefined ? {} : { previousPerformance }) };
+  const previousResponseTimeMs = comparison ? previous?.report.responseTimeMs : undefined;
+  const response = {
+    ...(report.responseTimeMs === undefined ? {} : { responseTimeMs: report.responseTimeMs }),
+    ...(previousResponseTimeMs === undefined ? {} : { previousResponseTimeMs })
+  };
+  // The history page is extra: if it cannot be written, the run still counts and the summary note says why.
+  const history = async (): Promise<{ historyPath?: string; historyNote?: string }> => {
+    try {
+      return { historyPath: await writeSiteHistory(siteDir, entry.label ?? new URL(report.finalUrl).hostname.replace(/^www\./, ""), options.brand) };
+    } catch (error) {
+      return { historyNote: `History page not updated: ${message(error)}` };
+    }
+  };
 
   if (!comparison || !previous) {
     await writeFile(emailPath, renderClientEmail({ entry, report, runDate, pdfFile: basename(reportPdfPath ?? "open-local-audit-report.pdf"), brand: options.brand, newBaseline: Boolean(previous) }));
-    const note = [baselineNote, lighthouseNote].filter(Boolean).join("; ");
-    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, emailPath, score, ...speed, alerts, note };
+    const { historyPath, historyNote } = await history();
+    const note = [baselineNote, lighthouseNote, historyNote].filter(Boolean).join("; ");
+    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, emailPath, ...(historyPath ? { historyPath } : {}), score, ...speed, ...response, alerts, note };
   }
 
   const comparisonPath = join(reportDir, "comparison.html");
@@ -256,6 +292,8 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
     emailPath,
     renderClientEmail({ entry, report, runDate, pdfFile: "comparison.pdf", brand: options.brand, comparison, previousPerformance })
   );
+  const { historyPath, historyNote } = await history();
+  const comparedNote = [lighthouseNote, historyNote].filter(Boolean).join("; ");
   // Certificate and domain problems already have their own alert on every run.
   const newHigh = comparison.introduced
     .filter((finding) => finding.severity === "high" && !["tls-certificate-valid", "domain-expiry"].includes(finding.id))
@@ -267,15 +305,17 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
     comparisonPath,
     pdfPath,
     emailPath,
+    ...(historyPath ? { historyPath } : {}),
     previousRunId: previous.runId,
     score,
     previousScore: comparison.overall.before,
     scoreChange: comparison.overall.change,
     ...speed,
+    ...response,
     newFindings: comparison.introduced.length,
     fixedFindings: comparison.fixed.length,
     alerts: [...newHigh, ...alerts],
-    ...(lighthouseNote ? { note: lighthouseNote } : {})
+    ...(comparedNote ? { note: comparedNote } : {})
   };
 }
 
@@ -337,7 +377,8 @@ export function renderMonitorJson(summary: MonitorSummary): string {
     reportDir: site.reportDir ? relativePath(summary, site.reportDir) : undefined,
     comparisonPath: site.comparisonPath ? relativePath(summary, site.comparisonPath) : undefined,
     pdfPath: site.pdfPath ? relativePath(summary, site.pdfPath) : undefined,
-    emailPath: site.emailPath ? relativePath(summary, site.emailPath) : undefined
+    emailPath: site.emailPath ? relativePath(summary, site.emailPath) : undefined,
+    historyPath: site.historyPath ? relativePath(summary, site.historyPath) : undefined
   }));
   return `${JSON.stringify({ runId: summary.runId, sites }, null, 2)}\n`;
 }
@@ -349,6 +390,11 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
   const signed = (value: number) => (value > 0 ? `+${value}` : `${value}`);
   // The speed column appears only when the run used Lighthouse.
   const showSpeed = summary.sites.some((site) => site.performance !== undefined);
+  const showResponse = summary.sites.some((site) => site.responseTimeMs !== undefined);
+  const responseTime = (site: MonitorSiteResult) =>
+    site.responseTimeMs === undefined
+      ? ""
+      : `${site.responseTimeMs} ms${site.previousResponseTimeMs === undefined ? "" : ` (${signed(site.responseTimeMs - site.previousResponseTimeMs)})`}`;
   const speed = (site: MonitorSiteResult) =>
     site.performance === undefined
       ? ""
@@ -363,13 +409,15 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
     site.score === undefined ? "" : `${site.score}/100`,
     site.scoreChange === undefined ? "" : signed(site.scoreChange),
     ...(showSpeed ? [speed(site)] : []),
+    ...(showResponse ? [responseTime(site)] : []),
     site.status === "compared" ? `${site.newFindings}` : "",
     site.status === "compared" ? `${site.fixedFindings}` : "",
     relativePath(summary, site.comparisonPath ?? (site.reportDir ? join(site.reportDir, "open-local-audit-report.html") : undefined)),
     relativePath(summary, site.pdfPath),
-    relativePath(summary, site.emailPath)
+    relativePath(summary, site.emailPath),
+    relativePath(summary, site.historyPath)
   ]);
-  const header = ["Site", "Status", "Score", "Change", ...(showSpeed ? ["Speed"] : []), "New", "Fixed", "Report", "Client PDF", "Email draft"];
+  const header = ["Site", "Status", "Score", "Change", ...(showSpeed ? ["Speed"] : []), ...(showResponse ? ["Response"] : []), "New", "Fixed", "Report", "Client PDF", "Email draft", "History"];
 
   return [
     "# Website Monitoring Summary",
