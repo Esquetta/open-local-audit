@@ -70,6 +70,7 @@
 
 - Copy explains what the business does.
 - Service area or location is clear.
+  - Rule `service-location-copy-present` needs a service word, such as dentist, clinic, solicitor, plumber, gym, hotel, salon, physio, Zahnarzt, or klinik, and a location. A location is a service named before "in", "near", "serving", "across", "around", or "covering" and a capitalized place ("Family dentist in Leeds"), or a visible UK postcode, US state and ZIP code, five-digit postal code before a town ("80331 München"), street address, LocalBusiness `addressLocality` that the page also shows, Turkish city, or phrases such as "service area" and "located in". Capitalized words that are not places, such as "Get in Touch", "Near Me", or month names, do not count.
 - Important services have enough detail.
 - No obvious outdated dates.
 - No broken or placeholder text.

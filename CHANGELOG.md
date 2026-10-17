@@ -2,6 +2,10 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.83.1 - 2026-10-17
+
+- `service-location-copy-present` no longer flags local business pages outside Turkey. It used to know only a few Turkish cities, so pages such as "Family dentist in Leeds" were reported as "Service and location copy is unclear". It now also accepts a service named next to a capitalized place ("in Leeds", "near Austin", "serving Greater Manchester"), a visible UK postcode, US state and ZIP code, five-digit postal code before a town ("80331 München"), street address, or LocalBusiness `addressLocality` that the page shows, and it recognizes more services, such as dentist, solicitor, lawyer, plumber, gym, hotel, hair, beauty, physio, Zahnarzt, and klinik. Pages that only say "Near Me", "Get in Touch", or name a schema town that is not visible are still flagged. The finding can disappear for many non-Turkish sites, so `compare` against reports from earlier versions shows it as fixed even though the page did not change.
+
 ## v0.83.0 - 2026-10-16
 
 - `monitor` writes `history.html` in each site folder on every run: a branded, self-contained page that charts the overall score, and the Lighthouse performance score when runs have one, across every readable run in the output folder, with a table of each check's score, speed, response time, open issues by severity, fixed and new issues, and HTTPS certificate and domain registration problems. Runs that could not be compared with the one before them, such as after a profile or host change, are marked "New baseline", using the same rules as the monitoring comparison; older run files without a summary or Lighthouse categories are still read. The chart has a hover readout, a light and dark theme, and scrolls sideways on narrow screens. The summary gains a "History" column and the JSON summary a `historyPath` field. If the page cannot be written, the run still counts and the summary note says why.

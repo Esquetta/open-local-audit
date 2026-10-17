@@ -1004,15 +1004,68 @@ function hasOpeningHours(text: string): boolean {
   );
 }
 
-function hasServiceLocationCopy(text: string): boolean {
-  const hasService = /\b(service|services|clinic|dental|salon|restaurant|repair|legal|appointment|booking|consultation)\b/i.test(
-    text
-  );
-  const hasLocation = /\b(istanbul|ankara|izmir|bursa|antalya|kadikoy|nearby|neighborhood|service area|located in|serves)\b/i.test(
-    text
-  );
+const serviceWord = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])(?:services?|clinic|dental|dentists?|dentistry|orthodontists?|salon|restaurant|repairs?|legal|appointments?|booking|consultations?|gym|fitness|hotels?|solicitors?|lawyers?|attorneys?|law\s+firm|plumbers?|plumbing|electricians?|hair\p{L}*|barbers?|beauty|physio\p{L}*|massage|spa|caf[eé]|bakery|vets?|veterinary|accountants?|accountancy|cleaning|builders?|roofing|garage|mechanics?|opticians?|pharmacy|zahnarzt\p{L}*|praxis|friseur\p{L}*|\p{L}*anwalt\p{L}*|kanzlei|klini[kğ]\p{L}*|diş|kuaför|avukat\p{L}*|hizmet\p{L}*)(?![\p{L}\p{N}])`,
+  "iu"
+);
+const locationWord =
+  /(?<![\p{L}\p{N}])(?:[iİ]stanbul|ankara|[iİ]zmir|bursa|antalya|kad[iı]k[oö]y|nearby|neighbou?rhood|service area|located in|serves)(?![\p{L}\p{N}])/iu;
+// "Family dentist in Leeds", "Plumbers serving Greater Manchester". The place is read case-sensitively below,
+// because \p{Lu} also matches lowercase letters under the i flag.
+const placePhrase = /(?<![\p{L}\p{N}])(?:in|near|serving|across|around|covering)\s+(?:the\s+)?([\p{L}'’-]+)/giu;
+// Capitalized words after "in" or "near" that are not places ("Get in Touch", "Dentist Near Me", "Zahnarzt in Ihrer Nähe").
+const notPlaces = new Set(
+  (
+    "me you us touch person stock store our your their my this that these those all every each one english turkish german " +
+    "french spanish ihrer ihrem ihren ihre unserer unserem minutes hours days weeks time advance addition case order " +
+    "january february march april may june july august september october november december " +
+    "monday tuesday wednesday thursday friday saturday sunday"
+  ).split(" ")
+);
+const ukPostcode = /(?<![\p{L}\p{N}])[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}(?![\p{L}\p{N}])/u;
+const usZipCode =
+  /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?(?![\p{L}\p{N}])/u;
+// Five-digit postal code before the town, as in Germany, France, Spain, Italy and Turkey ("80331 München").
+const postcodeTown = /(?<![\p{L}\p{N}])\d{5}\s+\p{Lu}\p{Ll}/u;
 
-  return hasService && hasLocation;
+function hasServiceNearPlace(text: string): boolean {
+  return Array.from(text.matchAll(placePhrase)).some((match) => {
+    const place = match[1];
+    const before = text.slice(0, match.index).split(/\s+/).slice(-6).join(" ");
+    return /^\p{Lu}/u.test(place) && !notPlaces.has(place.toLowerCase()) && serviceWord.test(before);
+  });
+}
+
+function hasVisibleSchemaLocality($: CheerioAPI, text: string): boolean {
+  const index = jsonLdIndex($);
+  return localBusinessNodes($)
+    .flatMap((node) => schemaAddresses(node, index))
+    .filter(hasObjectField)
+    .flatMap((address) => stringValues((address as JsonLdNode).addressLocality))
+    .some((locality) =>
+      new RegExp(String.raw`(?<![\p{L}\p{N}])${locality.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\p{L}\p{N}])`, "iu").test(text)
+    );
+}
+
+function hasServiceLocationCopy($: CheerioAPI, text: string): boolean {
+  if (serviceWord.test(text) && locationWord.test(text)) {
+    return true;
+  }
+
+  // Any country: a service named next to a place, or a service with a visible postcode, street address, or LocalBusiness town.
+  // Visible text keeps block boundaries, which body text joins ("Kliniğiİzmir").
+  const body = visibleBody($);
+  const visibleText = collapsedText(body);
+  return (
+    hasServiceNearPlace(visibleText) ||
+    (serviceWord.test(visibleText) &&
+      (locationWord.test(visibleText) ||
+        ukPostcode.test(visibleText) ||
+        usZipCode.test(visibleText) ||
+        postcodeTown.test(visibleText) ||
+        hasVisibleSchemaLocality($, visibleText) ||
+        visibleAddressRegions($, body).length > 0))
+  );
 }
 
 function hasPrimaryCta($: CheerioAPI): boolean {
@@ -1753,7 +1806,7 @@ const rules: Rule[] = [
     severity: "medium",
     source: "Page text",
     recommendation: "Describe the main service and location or service area in plain language.",
-    check: ({ text }) => hasServiceLocationCopy(text),
+    check: ({ $, text }) => hasServiceLocationCopy($, text),
     evidence: () => "No clear service-plus-location phrase found"
   },
   {
