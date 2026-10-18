@@ -10,6 +10,40 @@ export interface MonitorScheduleOptions {
   args: string[];
   // The installed version, pinned so that monthly comparisons use the same rules until you choose to upgrade.
   version: string;
+  // "monthly" runs the full monitor on the 1st at 09:00; "daily" runs the quick check every day at 08:00.
+  frequency?: "monthly" | "daily";
+}
+
+interface ScheduleNames {
+  file: string;
+  log: string;
+  task: string;
+  when: string;
+  missed: string;
+  schtasks: string;
+  cron: string;
+}
+
+function scheduleNames(frequency: "monthly" | "daily"): ScheduleNames {
+  return frequency === "daily"
+    ? {
+        file: "run-monitor-quick",
+        log: "quick.log",
+        task: "Open Local Audit quick check",
+        when: "every day at 08:00",
+        missed: "the next day",
+        schtasks: "/SC DAILY /ST 08:00",
+        cron: "0 8 * * *"
+      }
+    : {
+        file: "run-monitor",
+        log: "monitor.log",
+        task: "Open Local Audit monitor",
+        when: "on the 1st of every month at 09:00",
+        missed: "the next month",
+        schtasks: "/SC MONTHLY /D 1 /ST 09:00",
+        cron: "0 9 1 * *"
+      };
 }
 
 export interface MonitorScheduleFile {
@@ -45,9 +79,10 @@ function shQuote(value: string): string {
 // and the .ps1 passes every path to npx as a separate argument.
 export function buildMonitorSchedule(options: MonitorScheduleOptions): MonitorSchedule {
   const packageSpec = `open-local-audit@${options.version}`;
+  const names = scheduleNames(options.frequency ?? "monthly");
   if (options.platform === "win32") {
-    const scriptPath = win32.join(options.outDir, "run-monitor.ps1");
-    const log = win32.join(options.outDir, "monitor.log");
+    const scriptPath = win32.join(options.outDir, `${names.file}.ps1`);
+    const log = win32.join(options.outDir, names.log);
     const ps1 = [
       "# Written by open-local-audit monitor --print-schedule. Regenerate it after changing options or upgrading.",
       "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
@@ -67,7 +102,7 @@ export function buildMonitorSchedule(options: MonitorScheduleOptions): MonitorSc
     // schtasks needs the script path quoted inside the /TR value. In `"... \"path\""` the path sits outside cmd's own
     // quotes, so cmd's special characters in it are escaped with ^. PowerShell 7 rewrites the inner quotes, even
     // after --%, so PowerShell users hand the whole line to cmd as one single-quoted string.
-    const task = `schtasks /Create /SC MONTHLY /D 1 /ST 09:00 /TN "Open Local Audit monitor" /TR "${run.replace(/"/g, '\\"').replace(/[&|<>^]/g, "^$&")}"`;
+    const task = `schtasks /Create ${names.schtasks} /TN "${names.task}" /TR "${run.replace(/"/g, '\\"').replace(/[&|<>^]/g, "^$&")}"`;
     return {
       scriptPath,
       // Windows PowerShell 5.1 reads a script without a byte order mark in the ANSI code page.
@@ -77,19 +112,19 @@ export function buildMonitorSchedule(options: MonitorScheduleOptions): MonitorSc
         ...(run.length > taskCommandLimit
           ? [`Warning: Task Scheduler accepts at most ${taskCommandLimit} characters for the task command, and this one has ${run.length}. Use a shorter --out-dir path.`]
           : []),
-        "Schedule it on the 1st of every month at 09:00 by running one of these once.",
+        `Schedule it ${names.when} by running one of these once.`,
         "In Command Prompt:",
         task,
         "In PowerShell:",
         `cmd /c '${psEscape(task)}'`,
-        `Each run appends its output to ${log}. The task runs while you are signed in to Windows and opens a console window; if the computer is off or you are signed out at that time, the run waits until the next month, or start one by hand with: schtasks /Run /TN "Open Local Audit monitor"`,
-        `Remove the task with: schtasks /Delete /TN "Open Local Audit monitor"`
+        `Each run appends its output to ${log}. The task runs while you are signed in to Windows and opens a console window; if the computer is off or you are signed out at that time, the run waits until ${names.missed}, or start one by hand with: schtasks /Run /TN "${names.task}"`,
+        `Remove the task with: schtasks /Delete /TN "${names.task}"`
       ].join("\n")
     };
   }
 
-  const scriptPath = posix.join(options.outDir, "run-monitor.sh");
-  const log = posix.join(options.outDir, "monitor.log");
+  const scriptPath = posix.join(options.outDir, `${names.file}.sh`);
+  const log = posix.join(options.outDir, names.log);
   const command = ["npx", "--yes", packageSpec, "monitor", ...options.args];
   return {
     scriptPath,
@@ -101,9 +136,9 @@ export function buildMonitorSchedule(options: MonitorScheduleOptions): MonitorSc
     ],
     instructions: [
       `Wrote ${scriptPath}`,
-      "Schedule it on the 1st of every month at 09:00 by adding this line with crontab -e:",
+      `Schedule it ${names.when} by adding this line with crontab -e:`,
       // cron reads an unescaped % as a newline.
-      `0 9 1 * * ${shQuote(scriptPath).replace(/%/g, "\\%")}`,
+      `${names.cron} ${shQuote(scriptPath).replace(/%/g, "\\%")}`,
       `cron starts with a short PATH; if npx is not found there, add your Node.js directory to PATH at the top of the script. Each run appends its output to ${log}.`
     ].join("\n")
   };

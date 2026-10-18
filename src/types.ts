@@ -101,6 +101,8 @@ export interface ReportBrandConfig {
   accentColor?: string;
   footerText?: string;
   contact?: string;
+  // Closing lines for client emails, used as written instead of the generated sign-off.
+  signature?: string;
 }
 
 export interface ReportRenderOptions {

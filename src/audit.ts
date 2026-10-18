@@ -253,6 +253,22 @@ export function auditSnapshot(
   return report;
 }
 
+// A light daily check: fetches only the page itself (no robots.txt, sitemap, link checks, or Lighthouse), then reads
+// the certificate and, with checkDomain, the domain registration. Use its status, response time, certificate,
+// domain, and placeholder results; its other findings and its scores are not meaningful, because robots.txt and
+// sitemap.xml are not fetched and so show as missing.
+export async function quickCheckUrl(url: string, options: Partial<AuditOptions> = {}): Promise<AuditReport> {
+  const effectiveOptions = { ...defaultOptions, ...options };
+  const snapshot = await fetchWithRedirects(url, effectiveOptions);
+  if (snapshot.finalUrl.startsWith("https://")) {
+    snapshot.tls = await probeTlsCertificate(snapshot.finalUrl, effectiveOptions.timeoutMs);
+  }
+  if (effectiveOptions.checkDomain) {
+    snapshot.domain = await (effectiveOptions.probeDomain ?? probeDomainExpiry)(snapshot.finalUrl, effectiveOptions.timeoutMs);
+  }
+  return auditSnapshot(snapshot, new Date().toISOString(), { profile: effectiveOptions.profile });
+}
+
 export async function auditUrl(url: string, options: Partial<AuditOptions> = {}): Promise<AuditReport> {
   const effectiveOptions = {
     ...defaultOptions,

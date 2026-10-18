@@ -45,6 +45,17 @@ function signed(value: number): string {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
+// Report readers see dates like "1 September 2026"; two checks on the same day also show their times.
+export function comparisonDates(comparison: Pick<AuditComparison, "beforeScannedAt" | "afterScannedAt">): { before: string; after: string } {
+  const before = new Date(comparison.beforeScannedAt);
+  const after = new Date(comparison.afterScannedAt);
+  const day = (date: Date) => date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const time = (date: Date) => date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return day(before) === day(after)
+    ? { before: `${day(before)}, ${time(before)}`, after: `${day(after)}, ${time(after)}` }
+    : { before: day(before), after: day(after) };
+}
+
 export async function readComparisonReport(path: string): Promise<AuditReport> {
   let reportPath = path;
   let content: string;
@@ -201,8 +212,8 @@ export function renderComparisonMarkdown(comparison: AuditComparison, options: R
     `# ${brandName(options.brand)} Progress Report`,
     "",
     `- Site: ${comparison.url}`,
-    `- Before: ${comparison.beforeScannedAt}`,
-    `- After: ${comparison.afterScannedAt}`,
+    `- Before: ${comparisonDates(comparison).before}`,
+    `- After: ${comparisonDates(comparison).after}`,
     `- Profile: ${comparison.profile}`,
     "",
     "## Summary",
@@ -287,7 +298,7 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
     options.screenshots?.before || options.screenshots?.after
       ? `    <section>
     <h2>Before and After</h2>
-    <div class="shots">${figure("Before", comparison.beforeScannedAt, options.screenshots.before)}${figure("After", comparison.afterScannedAt, options.screenshots.after)}</div>
+    <div class="shots">${figure("Before", comparisonDates(comparison).before, options.screenshots.before)}${figure("After", comparisonDates(comparison).after, options.screenshots.after)}</div>
     </section>
 `
       : "";
@@ -326,7 +337,7 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
     <header class="hero">
       <div class="eyebrow">${escapeHtml(name)}</div>
       <h1>${escapeHtml(name)} Progress Report</h1>
-      <p class="meta">Site: ${escapeHtml(comparison.url)}<br>Before: ${escapeHtml(comparison.beforeScannedAt)}<br>After: ${escapeHtml(comparison.afterScannedAt)}<br>Profile: ${escapeHtml(comparison.profile)}</p>
+      <p class="meta">Site: ${escapeHtml(comparison.url)}<br>Before: ${escapeHtml(comparisonDates(comparison).before)}<br>After: ${escapeHtml(comparisonDates(comparison).after)}<br>Profile: ${escapeHtml(comparison.profile)}</p>
       <div class="score-grid">
         <div class="score-card"><span>Overall Health</span><strong>${comparison.overall.before} &rarr; ${comparison.overall.after}</strong><span>${signed(comparison.overall.change)} points</span></div>
         <div class="score-card"><span>Fixed Issues</span><strong class="fixed">${comparison.fixed.length}</strong></div>
@@ -394,8 +405,8 @@ export async function renderComparisonPdf(comparison: AuditComparison, options: 
   doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(22).text(`${name} Progress Report`, 48, 32);
   doc.font("Helvetica").fontSize(10).text(comparison.url, 48, 60);
   doc.fillColor("#172026").fontSize(10).text("", 48, 118);
-  doc.text(`Before: ${comparison.beforeScannedAt}`);
-  doc.text(`After: ${comparison.afterScannedAt}`);
+  doc.text(`Before: ${comparisonDates(comparison).before}`);
+  doc.text(`After: ${comparisonDates(comparison).after}`);
   doc.text(`Profile: ${comparison.profile}`);
   doc.moveDown(0.8);
   doc
@@ -421,8 +432,8 @@ export async function renderComparisonPdf(comparison: AuditComparison, options: 
   findingList(comparison.introduced, "No new issues were found.", true);
 
   const shots = [
-    ["Before", comparison.beforeScannedAt, options.screenshots?.before],
-    ["After", comparison.afterScannedAt, options.screenshots?.after]
+    ["Before", comparisonDates(comparison).before, options.screenshots?.before],
+    ["After", comparisonDates(comparison).after, options.screenshots?.after]
   ] as const;
   if (shots.some(([, , shot]) => shot)) {
     doc.addPage();
