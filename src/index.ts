@@ -1,4 +1,4 @@
-export { auditUrl, auditSnapshot } from "./audit.js";
+export { auditUrl, auditSnapshot, quickCheckUrl } from "./audit.js";
 export { readBatchInput, readInputUrls, runBatchReports, safeReportSlug } from "./batch.js";
 export { readBrandConfig } from "./brand.js";
 export {
@@ -8,13 +8,16 @@ export {
   renderComparisonHtml,
   renderComparisonJson,
   renderComparisonMarkdown,
-  renderComparisonPdf
+  renderComparisonPdf,
+  comparisonDates
 } from "./compare.js";
 export type { AuditComparison, ComparisonRenderOptions, ComparisonScreenshot, ScoreChange } from "./compare.js";
 export { monitorRunId, renderClientEmail, renderMonitorJson, renderMonitorMarkdown, runMonitor } from "./monitor.js";
 export type { ClientEmailInput, MonitorAlert, MonitorOptions, MonitorSiteResult, MonitorSummary } from "./monitor.js";
 export { renderSiteHistory } from "./monitor-history.js";
 export type { SiteHistoryOptions, SiteHistoryRun } from "./monitor-history.js";
+export { renderQuickCheck, runQuickCheck } from "./monitor-quick.js";
+export type { QuickCheckOptions, QuickCheckSite, QuickCheckSummary } from "./monitor-quick.js";
 export { extractPublicContact } from "./contact.js";
 export { detectDotnetStack } from "./dotnet-stack.js";
 export { fetchOvertureCandidates } from "./overture.js";

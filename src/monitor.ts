@@ -20,7 +20,7 @@ export interface MonitorOptions {
 }
 
 export interface MonitorAlert {
-  kind: "new-high" | "certificate" | "domain" | "failed";
+  kind: "new-high" | "certificate" | "domain" | "failed" | "down";
   message: string;
 }
 
@@ -100,7 +100,7 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
-function currentAlerts(report: AuditReport): MonitorAlert[] {
+export function currentAlerts(report: AuditReport): MonitorAlert[] {
   const alerts: Array<[MonitorAlert["kind"], string, string]> = [
     ["certificate", "tls-certificate-valid", "HTTPS certificate"],
     ["domain", "domain-expiry", "Domain"]
@@ -195,9 +195,9 @@ export function renderClientEmail(input: ClientEmailInput): string {
     "",
     `The full report is attached (${input.pdfFile}).`,
     "",
-    "Best regards,",
-    ...(input.brand?.name ? [input.brand.name] : []),
-    ...(input.brand?.contact ? [input.brand.contact] : []),
+    ...(input.brand?.signature
+      ? [input.brand.signature]
+      : ["Best regards,", ...(input.brand?.name ? [input.brand.name] : []), ...(input.brand?.contact ? [input.brand.contact] : [])]),
     ""
   ].join("\n");
 }

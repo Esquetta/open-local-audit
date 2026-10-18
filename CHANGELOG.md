@@ -2,6 +2,14 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.84.0 - 2026-10-18
+
+- Added `monitor --quick`, a daily check between monthly runs. It fetches only each homepage (no robots.txt, sitemap, link checks, or Lighthouse), reads the HTTPS certificate and, unless `--no-check-domain` is set, the domain registration, and prints one line per site: `OK` with the HTTP status and response time, or `ALERT` when the site does not load, returns a non-2xx status, shows a maintenance, parked, or for-sale page, or fails the certificate or domain checks. It writes no reports or history. The new alerts use a new `down` kind in `MonitorAlert`. `--fail-on-alerts` exits with code 1 when any site needs attention. `--lighthouse` cannot be combined with it.
+- `monitor --quick --print-schedule` writes `run-monitor-quick.ps1` or `run-monitor-quick.sh` and prints a daily task ("Open Local Audit quick check", every day at 08:00) that logs to `quick.log`. Monthly schedules are unchanged.
+- Brand configs accept an optional `signature`. When it is set, `monitor` ends each `client-email.md` draft with it, trimmed and with Windows line endings normalized, instead of the brand name and contact.
+- Comparison reports (Markdown, HTML, PDF, and the monthly `comparison` files) show readable dates such as "1 September 2026" instead of timestamps, with times added when both checks fall on the same day. JSON output still uses ISO timestamps.
+- Exported `quickCheckUrl`, `runQuickCheck`, `renderQuickCheck`, `comparisonDates`, and the `QuickCheckOptions`, `QuickCheckSite`, and `QuickCheckSummary` types from the public API.
+
 ## v0.83.1 - 2026-10-17
 
 - `service-location-copy-present` no longer flags local business pages outside Turkey. It used to know only a few Turkish cities, so pages such as "Family dentist in Leeds" were reported as "Service and location copy is unclear". It now also accepts a service named next to a capitalized place ("in Leeds", "near Austin", "serving Greater Manchester"), a visible UK postcode, US state and ZIP code, five-digit postal code before a town ("80331 München"), street address, or LocalBusiness `addressLocality` that the page shows, and it recognizes more services, such as dentist, solicitor, lawyer, plumber, gym, hotel, hair, beauty, physio, Zahnarzt, and klinik. Pages that only say "Near Me", "Get in Touch", or name a schema town that is not visible are still flagged. The finding can disappear for many non-Turkish sites, so `compare` against reports from earlier versions shows it as fixed even though the page did not change.

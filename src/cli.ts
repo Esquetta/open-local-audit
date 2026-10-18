@@ -505,7 +505,8 @@ const monitorProgram = program
   .option("--no-check-domain", "skip the domain registration expiry lookup")
   .option("--lighthouse", "also record Lighthouse scores, including page speed, for each site", false)
   .option("--fail-on-alerts", "exit with code 1 when any site needs attention", false)
-  .option("--print-schedule", "write a run script for these options and print how to schedule it monthly, without monitoring", false)
+  .option("--quick", "only check that each site loads and its certificate and domain, without reports or history", false)
+  .option("--print-schedule", "write a run script for these options and print how to schedule it (daily with --quick, otherwise monthly), without monitoring", false)
   .action(async () => {
     try {
       const raw = monitorProgram.opts() as Record<string, unknown>;
@@ -514,13 +515,18 @@ const monitorProgram = program
         .parse({ profile: raw.profile, timeout: raw.timeout, checkDomain: raw.checkDomain });
       const brand = raw.brandConfig ? await readBrandConfig(String(raw.brandConfig)) : undefined;
 
+      if (raw.quick && raw.lighthouse) {
+        throw new Error("--lighthouse is not used with --quick");
+      }
+
       if (raw.printSchedule) {
         if (!existsSync(String(raw.input))) {
-          throw new Error(`${String(raw.input)} was not found; the scheduled run would fail every month`);
+          throw new Error(`${String(raw.input)} was not found; every scheduled run would fail`);
         }
         const { buildMonitorSchedule, writeMonitorSchedule } = await import("./monitor-schedule.js");
         const outDir = resolve(String(raw.outDir));
         const schedule = buildMonitorSchedule({
+          frequency: raw.quick ? "daily" : "monthly",
           platform: process.platform,
           cwd: process.cwd(),
           outDir,
@@ -535,11 +541,29 @@ const monitorProgram = program
             ...(options.timeout !== 10000 ? ["--timeout", String(options.timeout)] : []),
             ...(options.checkDomain ? [] : ["--no-check-domain"]),
             ...(raw.lighthouse ? ["--lighthouse"] : []),
+            ...(raw.quick ? ["--quick"] : []),
             ...(raw.failOnAlerts ? ["--fail-on-alerts"] : [])
           ]
         });
         await writeMonitorSchedule(schedule, outDir);
         process.stdout.write(`${schedule.instructions}\n`);
+        return;
+      }
+
+      if (raw.quick) {
+        const [{ quickCheckUrl }, { readBatchInput }, { renderQuickCheck, runQuickCheck }] = await Promise.all([
+          import("./audit.js"),
+          import("./batch.js"),
+          import("./monitor-quick.js")
+        ]);
+        const quick = await runQuickCheck(await readBatchInput(String(raw.input)), {
+          check: (url) => quickCheckUrl(url, { timeoutMs: options.timeout, checkDomain: options.checkDomain })
+        });
+        process.stdout.write(renderQuickCheck(quick));
+        if (raw.failOnAlerts && quick.sites.some((site) => site.status === "alert")) {
+          process.stderr.write("open-local-audit: sites need attention (--fail-on-alerts)\n");
+          process.exitCode = 1;
+        }
         return;
       }
 

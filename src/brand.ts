@@ -29,6 +29,7 @@ export async function readBrandConfig(path: string): Promise<ReportBrandConfig> 
     primaryColor: readColor(parsed.primaryColor),
     accentColor: readColor(parsed.accentColor),
     footerText: optionalString(parsed.footerText),
-    contact: optionalString(parsed.contact)
+    contact: optionalString(parsed.contact),
+    signature: optionalString(typeof parsed.signature === "string" ? parsed.signature.replace(/\r\n?/g, "\n") : undefined)
   };
 }
