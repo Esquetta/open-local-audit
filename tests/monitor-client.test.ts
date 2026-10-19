@@ -156,7 +156,9 @@ describe("monitor schedules", () => {
     expect(ps1.content).toContain(
       "& npx --yes open-local-audit@0.82.0 monitor '--input' 'C:\\Work\\Müşteri 100% Owner''s\\clients.csv' '--out-dir' 'C:\\Work\\Müşteri 100% Owner''s\\monitoring' '--lighthouse' 2>&1"
     );
-    expect(ps1.content).toContain("| Out-File -LiteralPath 'C:\\Work\\Müşteri 100% Owner''s\\monitoring\\monitor.log' -Append -Encoding utf8\r\nexit $LASTEXITCODE");
+    expect(ps1.content).toContain("$log = 'C:\\Work\\Müşteri 100% Owner''s\\monitoring\\monitor.log'\r\n");
+    expect(ps1.content).toContain("$output | Out-File -LiteralPath $log -Append -Encoding utf8\r\n");
+    expect(ps1.content.trimEnd().endsWith("exit $code")).toBe(true);
   });
 
   it("prints schtasks lines for Command Prompt and PowerShell that start PowerShell on the script", () => {
@@ -204,7 +206,9 @@ describe("monitor schedules", () => {
     const [script] = schedule.files;
 
     expect(schedule.files).toHaveLength(1);
-    expect(script.content.startsWith("#!/bin/sh\ncd /home/me/clients || exit 1\n")).toBe(true);
+    expect(script.content.startsWith("#!/bin/sh\n")).toBe(true);
+    expect(script.content).toContain("\ncd /home/me/clients || { notify ");
+    expect(script.content).toContain("\nlog='/home/me/50% sites/monitor.log'\n");
     expect(script.content).toContain("npx --yes open-local-audit@0.82.0 monitor --input '/home/me/it'\\''s here/clients.csv' --out-dir '/home/me/50% sites'");
     expect(schedule.instructions).toContain("0 9 1 * * '/home/me/50\\% sites/run-monitor.sh'");
   });

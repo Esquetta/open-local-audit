@@ -557,9 +557,14 @@ const monitorProgram = program
           import("./monitor-quick.js")
         ]);
         const quick = await runQuickCheck(await readBatchInput(String(raw.input)), {
-          check: (url) => quickCheckUrl(url, { timeoutMs: options.timeout, checkDomain: options.checkDomain })
+          check: (url) => quickCheckUrl(url, { timeoutMs: options.timeout, checkDomain: options.checkDomain }),
+          outDir: String(raw.outDir),
+          brand
         });
         process.stdout.write(renderQuickCheck(quick));
+        if (quick.dashboardPath) {
+          process.stdout.write(`Overview: ${quick.dashboardPath}\n`);
+        }
         if (raw.failOnAlerts && quick.sites.some((site) => site.status === "alert")) {
           process.stderr.write("open-local-audit: sites need attention (--fail-on-alerts)\n");
           process.exitCode = 1;
@@ -586,6 +591,9 @@ const monitorProgram = program
         `Monitored ${summary.sites.length} site${summary.sites.length === 1 ? "" : "s"}: ${attention.length} need${attention.length === 1 ? "s" : ""} attention\n`
       );
       process.stdout.write(`Summary: ${summary.summaryPaths.markdown}\n`);
+      if (summary.dashboardPath) {
+        process.stdout.write(`Overview: ${summary.dashboardPath}\n`);
+      }
       if (raw.failOnAlerts && attention.length > 0) {
         process.stderr.write("open-local-audit: sites need attention (--fail-on-alerts)\n");
         process.exitCode = 1;

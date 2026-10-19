@@ -3,6 +3,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, join, relative, sep } from "node:path";
 import type { BatchInputEntry } from "./batch.js";
 import { compareReports, readComparisonReport, renderComparisonHtml, renderComparisonMarkdown, renderComparisonPdf } from "./compare.js";
+import { writeDashboard } from "./monitor-dashboard.js";
 import { renderSiteHistory, type SiteHistoryRun } from "./monitor-history.js";
 import { writeReportOutputs } from "./output.js";
 import { escapeCell, overallScore, severityRank } from "./reporters.js";
@@ -58,6 +59,8 @@ export interface MonitorSummary {
   outDir: string;
   sites: MonitorSiteResult[];
   summaryPaths: { markdown: string; json: string };
+  // The operator overview (index.html); missing when it could not be written.
+  dashboardPath?: string;
 }
 
 // Run folders are named by UTC time, so sorting their names sorts them by date.
@@ -360,6 +363,12 @@ export async function runMonitor(entries: BatchInputEntry[], options: MonitorOpt
   const summary: MonitorSummary = { runId, outDir: options.outDir, sites, summaryPaths };
   await writeFile(summaryPaths.markdown, renderMonitorMarkdown(summary));
   await writeFile(summaryPaths.json, renderMonitorJson(summary));
+  // The overview is a convenience, so a failure to write it never fails the run.
+  try {
+    summary.dashboardPath = await writeDashboard(options.outDir, options.brand);
+  } catch {
+    summary.dashboardPath = undefined;
+  }
   return summary;
 }
 

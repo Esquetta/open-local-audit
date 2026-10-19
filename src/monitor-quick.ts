@@ -1,11 +1,17 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { BatchInputEntry } from "./batch.js";
+import { writeDashboard } from "./monitor-dashboard.js";
 import { currentAlerts, monitorRunId, monitorSiteFolder, type MonitorAlert } from "./monitor.js";
-import type { AuditReport } from "./types.js";
+import type { AuditReport, ReportBrandConfig } from "./types.js";
 
 export interface QuickCheckOptions {
   // Usually quickCheckUrl: the page itself plus the certificate and domain, without a full audit.
   check: (url: string) => Promise<AuditReport>;
   now?: Date;
+  // When set, the latest result is kept in quick-status.json there and the overview (index.html) is rebuilt.
+  outDir?: string;
+  brand?: ReportBrandConfig;
 }
 
 export interface QuickCheckSite {
@@ -21,6 +27,7 @@ export interface QuickCheckSite {
 export interface QuickCheckSummary {
   runId: string;
   sites: QuickCheckSite[];
+  dashboardPath?: string;
 }
 
 function message(error: unknown): string {
@@ -67,7 +74,19 @@ export async function runQuickCheck(entries: BatchInputEntry[], options: QuickCh
       alerts
     });
   }
-  return { runId: monitorRunId(options.now ?? new Date()), sites };
+  const summary: QuickCheckSummary = { runId: monitorRunId(options.now ?? new Date()), sites };
+  if (options.outDir) {
+    // Only the latest result is kept; the monthly history is left alone. Saving it is a convenience, so a locked or
+    // read-only folder never hides the alerts this check found.
+    try {
+      await mkdir(options.outDir, { recursive: true });
+      await writeFile(join(options.outDir, "quick-status.json"), `${JSON.stringify(summary, null, 2)}\n`);
+      summary.dashboardPath = await writeDashboard(options.outDir, options.brand);
+    } catch {
+      summary.dashboardPath = undefined;
+    }
+  }
+  return summary;
 }
 
 export function renderQuickCheck(summary: QuickCheckSummary): string {

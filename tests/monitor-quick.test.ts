@@ -127,7 +127,7 @@ describe("daily schedules", () => {
     });
     expect(windows.scriptPath).toBe("C:\\Work\\monitoring\\run-monitor-quick.ps1");
     expect(windows.files[0].content).toContain("'--quick'");
-    expect(windows.files[0].content).toContain("-LiteralPath 'C:\\Work\\monitoring\\quick.log'");
+    expect(windows.files[0].content).toContain("$log = 'C:\\Work\\monitoring\\quick.log'");
     expect(windows.instructions).toContain('schtasks /Create /SC DAILY /ST 08:00 /TN "Open Local Audit quick check" /TR "powershell');
     expect(windows.instructions).toContain("Schedule it every day at 08:00");
 
@@ -148,12 +148,13 @@ describe("daily schedules", () => {
     const quick = run(["--quick", "--fail-on-alerts"]);
     expect(quick.status).toBe(1);
     expect(quick.stdout).toContain("ALERT  http://127.0.0.1:9/: Site did not load:");
-    expect(existsSync(join(dir, "monitoring"))).toBe(false);
+    expect(quick.stdout).toContain(`Overview: ${join(dir, "monitoring", "index.html")}`);
+    expect(JSON.parse(readFileSync(join(dir, "monitoring", "quick-status.json"), "utf8")).sites[0].status).toBe("alert");
 
     const lighthouse = run(["--quick", "--lighthouse", "--print-schedule"]);
     expect(lighthouse.status).toBe(1);
     expect(lighthouse.stderr).toContain("--lighthouse is not used with --quick");
-    expect(existsSync(join(dir, "monitoring"))).toBe(false);
+    expect(existsSync(join(dir, "monitoring", process.platform === "win32" ? "run-monitor-quick.ps1" : "run-monitor-quick.sh"))).toBe(false);
 
     const schedule = run(["--quick", "--print-schedule"]);
     expect(schedule.status).toBe(0);
