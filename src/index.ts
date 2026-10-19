@@ -17,6 +17,8 @@ export type { ClientEmailInput, MonitorAlert, MonitorOptions, MonitorSiteResult,
 export { renderSiteHistory } from "./monitor-history.js";
 export type { SiteHistoryOptions, SiteHistoryRun } from "./monitor-history.js";
 export { renderQuickCheck, runQuickCheck } from "./monitor-quick.js";
+export { renderDashboard, writeDashboard } from "./monitor-dashboard.js";
+export type { DashboardInput } from "./monitor-dashboard.js";
 export type { QuickCheckOptions, QuickCheckSite, QuickCheckSummary } from "./monitor-quick.js";
 export { extractPublicContact } from "./contact.js";
 export { detectDotnetStack } from "./dotnet-stack.js";

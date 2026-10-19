@@ -2,6 +2,13 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.85.0 - 2026-10-19
+
+- Scheduled runs now show a desktop notification when they end with a non-zero exit code: alerts with `--fail-on-alerts`, or an error such as `npx` not being found. Windows scripts show a toast through Windows PowerShell's own notification identity, so no setup is needed; shell scripts use `osascript` on macOS and `notify-send` on Linux when available, passing the text as an argument. The notification shows up to four lines from the run's output: the `ALERT` lines of a daily check, or the attention summary of a monthly run. Each run's output is now written to the log when the run finishes. Regenerate your scripts with `--print-schedule` to get notifications.
+- `monitor` and `monitor --quick` rebuild `index.html` in `--out-dir`, a client overview for the operator: one row per client with the latest monthly score and change, the latest daily check (status and response time), open alerts, and links to the history page, client PDF, and email draft, with clients that need attention first. For a client with a daily result, certificate, domain, and loading alerts come from that newer check instead of the monthly run. Links only point to relative files inside the output folder. Both commands print its path as "Overview", and library calls to `runMonitor` and `runQuickCheck` (with the new `outDir` option) write it too. A failure to write it, or `quick-status.json`, never fails a run.
+- `monitor --quick` now keeps its latest result in `quick-status.json` in `--out-dir` for the overview. It still writes no reports or history.
+- Exported `renderDashboard`, `writeDashboard`, and the `DashboardInput` type from the public API. `MonitorSummary` and `QuickCheckSummary` gain an optional `dashboardPath`, and `QuickCheckOptions` gains optional `outDir` and `brand`.
+
 ## v0.84.0 - 2026-10-18
 
 - Added `monitor --quick`, a daily check between monthly runs. It fetches only each homepage (no robots.txt, sitemap, link checks, or Lighthouse), reads the HTTPS certificate and, unless `--no-check-domain` is set, the domain registration, and prints one line per site: `OK` with the HTTP status and response time, or `ALERT` when the site does not load, returns a non-2xx status, shows a maintenance, parked, or for-sale page, or fails the certificate or domain checks. It writes no reports or history. The new alerts use a new `down` kind in `MonitorAlert`. `--fail-on-alerts` exits with code 1 when any site needs attention. `--lighthouse` cannot be combined with it.
