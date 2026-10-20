@@ -5,6 +5,21 @@ import type { BatchInputEntry } from "./batch.js";
 import { compareReports, readComparisonReport, renderComparisonHtml, renderComparisonMarkdown, renderComparisonPdf } from "./compare.js";
 import { writeDashboard } from "./monitor-dashboard.js";
 import { renderSiteHistory, type SiteHistoryRun } from "./monitor-history.js";
+import {
+  localDay,
+  readQuickHistory,
+  readWorkLog,
+  runIdDate,
+  serviceSections,
+  siteAvailability,
+  siteWork,
+  workLogFile,
+  workTotal,
+  type ServiceSection,
+  type SiteAvailability,
+  type SiteWork,
+  type WorkLogEntry
+} from "./monitor-service.js";
 import { writeReportOutputs } from "./output.js";
 import { escapeCell, overallScore, severityRank } from "./reporters.js";
 import type { AuditComparison } from "./compare.js";
@@ -48,6 +63,11 @@ export interface MonitorSiteResult {
   // Time to fetch the page HTML, with the previous run's time when it had one.
   responseTimeMs?: number;
   previousResponseTimeMs?: number;
+  // Daily checks and logged work since the previous run (or the last 30 days on a first run), from serviceSince.
+  serviceSince?: string;
+  availability?: SiteAvailability;
+  work?: SiteWork;
+  includedMinutes?: number;
   newFindings: number;
   fixedFindings: number;
   alerts: MonitorAlert[];
@@ -144,6 +164,8 @@ export interface ClientEmailInput {
   previousPerformance?: number;
   // True when an earlier run exists but could not be compared, such as after a profile change.
   newBaseline?: boolean;
+  // Availability from the daily checks and the work done since the last check.
+  service?: ServiceSection[];
 }
 
 // A plain-text draft the operator edits and sends from their own mailbox. Only facts from the audit go in.
@@ -194,6 +216,12 @@ export function renderClientEmail(input: ClientEmailInput): string {
     ...(certificate || domain
       ? ["", ...(certificate ? [`HTTPS certificate: ${certificate}`] : []), ...(domain ? [`Domain registration: ${domain}`] : [])]
       : []),
+    ...(input.service ?? []).flatMap((section) => [
+      "",
+      `${section.title.charAt(0)}${section.title.slice(1).toLowerCase()}:`,
+      ...section.items.map((item) => `- ${item}`),
+      ...section.lines
+    ]),
     ...(nextSteps.length > 0 ? ["", "What I recommend next:", ...nextSteps] : ["", "The checks found nothing that needs fixing right now."]),
     "",
     `The full report is attached (${input.pdfFile}).`,
@@ -221,12 +249,27 @@ async function writeSiteHistory(siteDir: string, name: string, brand: ReportBran
   return path;
 }
 
-async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, options: MonitorOptions): Promise<MonitorSiteResult> {
-  const base = { url: entry.url, ...(entry.label ? { label: entry.label } : {}), slug, newFindings: 0, fixedFindings: 0 };
+interface ServiceRecords {
+  quickHistory: Awaited<ReturnType<typeof readQuickHistory>>;
+  workLog: WorkLogEntry[];
+}
+
+const day = 24 * 60 * 60 * 1000;
+
+async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, options: MonitorOptions, records: ServiceRecords): Promise<MonitorSiteResult> {
+  const base = {
+    url: entry.url,
+    ...(entry.label ? { label: entry.label } : {}),
+    ...(entry.includedMinutes === undefined ? {} : { includedMinutes: entry.includedMinutes }),
+    slug,
+    newFindings: 0,
+    fixedFindings: 0
+  };
   const profile = entry.profile ?? options.profile ?? "generic";
   const siteDir = join(options.outDir, slug);
   const reportDir = join(siteDir, runId);
-  const runDate = options.now ?? new Date();
+  // The run id's time, so this run's period ends exactly where the next run's period starts.
+  const runDate = runIdDate(runId) ?? options.now ?? new Date();
 
   let report: AuditReport;
   try {
@@ -254,6 +297,12 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
   const score = overallScore(report);
   const alerts = currentAlerts(report);
   const previous = await previousReport(siteDir, runId);
+  // The period this report covers: since the previous run, or the last 30 days on a first run.
+  const since = (previous && runIdDate(previous.runId)) || new Date(runDate.getTime() - 30 * day);
+  const availability = siteAvailability(records.quickHistory, entry.url, since, runDate);
+  const work = siteWork(records.workLog, entry.url, localDay(since), localDay(runDate), entry.includedMinutes);
+  const service = serviceSections({ since, availability, work });
+  const period = { serviceSince: since.toISOString(), ...(availability ? { availability } : {}), ...(work ? { work } : {}) };
   let comparison: AuditComparison | undefined;
   let baselineNote = "First run: baseline recorded";
   if (previous) {
@@ -280,20 +329,23 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
   };
 
   if (!comparison || !previous) {
-    await writeFile(emailPath, renderClientEmail({ entry, report, runDate, pdfFile: basename(reportPdfPath ?? "open-local-audit-report.pdf"), brand: options.brand, newBaseline: Boolean(previous) }));
+    await writeFile(
+      emailPath,
+      renderClientEmail({ entry, report, runDate, pdfFile: basename(reportPdfPath ?? "open-local-audit-report.pdf"), brand: options.brand, newBaseline: Boolean(previous), service })
+    );
     const { historyPath, historyNote } = await history();
     const note = [baselineNote, lighthouseNote, historyNote].filter(Boolean).join("; ");
-    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, emailPath, ...(historyPath ? { historyPath } : {}), score, ...speed, ...response, alerts, note };
+    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, emailPath, ...(historyPath ? { historyPath } : {}), score, ...speed, ...response, ...period, alerts, note };
   }
 
   const comparisonPath = join(reportDir, "comparison.html");
-  await writeFile(join(reportDir, "comparison.md"), renderComparisonMarkdown(comparison, { brand: options.brand }));
-  await writeFile(comparisonPath, renderComparisonHtml(comparison, { brand: options.brand }));
+  await writeFile(join(reportDir, "comparison.md"), renderComparisonMarkdown(comparison, { brand: options.brand, service }));
+  await writeFile(comparisonPath, renderComparisonHtml(comparison, { brand: options.brand, service }));
   const pdfPath = join(reportDir, "comparison.pdf");
-  await writeFile(pdfPath, await renderComparisonPdf(comparison, { brand: options.brand }));
+  await writeFile(pdfPath, await renderComparisonPdf(comparison, { brand: options.brand, service }));
   await writeFile(
     emailPath,
-    renderClientEmail({ entry, report, runDate, pdfFile: "comparison.pdf", brand: options.brand, comparison, previousPerformance })
+    renderClientEmail({ entry, report, runDate, pdfFile: "comparison.pdf", brand: options.brand, comparison, previousPerformance, service })
   );
   const { historyPath, historyNote } = await history();
   const comparedNote = [lighthouseNote, historyNote].filter(Boolean).join("; ");
@@ -315,6 +367,7 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
     scoreChange: comparison.overall.change,
     ...speed,
     ...response,
+    ...period,
     newFindings: comparison.introduced.length,
     fixedFindings: comparison.fixed.length,
     alerts: [...newHigh, ...alerts],
@@ -336,11 +389,18 @@ export async function runMonitor(entries: BatchInputEntry[], options: MonitorOpt
     return site.folder;
   });
 
+  // A mistake in the hand-kept work log stops the run before any site is audited, so no client email misses work.
+  const workLog = await readWorkLog(options.outDir);
+  if (workLog.errors.length > 0) {
+    throw new Error(`Fix ${workLogFile} before monitoring:\n${workLog.errors.join("\n")}`);
+  }
+  const records: ServiceRecords = { quickHistory: await readQuickHistory(options.outDir), workLog: workLog.entries };
+
   const runId = monitorRunId(options.now ?? new Date());
   const sites: MonitorSiteResult[] = [];
   for (const [index, entry] of entries.entries()) {
     try {
-      sites.push(await monitorSite(entry, slugs[index], runId, options));
+      sites.push(await monitorSite(entry, slugs[index], runId, options, records));
     } catch (error) {
       // A report that cannot be written for one site, such as a locked file, should not stop the other sites.
       sites.push({
@@ -400,6 +460,10 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
   // The speed column appears only when the run used Lighthouse.
   const showSpeed = summary.sites.some((site) => site.performance !== undefined);
   const showResponse = summary.sites.some((site) => site.responseTimeMs !== undefined);
+  const showUptime = summary.sites.some((site) => site.availability !== undefined);
+  const showWork = summary.sites.some((site) => site.work !== undefined);
+  const uptime = (site: MonitorSiteResult) => (site.availability ? `${site.availability.up}/${site.availability.checks} checks` : "");
+  const work = (site: MonitorSiteResult) => (site.work ? workTotal(site.work).replace(/^Time (used|spent): /, "").replace(/\.$/, "") : "");
   const responseTime = (site: MonitorSiteResult) =>
     site.responseTimeMs === undefined
       ? ""
@@ -419,6 +483,8 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
     site.scoreChange === undefined ? "" : signed(site.scoreChange),
     ...(showSpeed ? [speed(site)] : []),
     ...(showResponse ? [responseTime(site)] : []),
+    ...(showUptime ? [uptime(site)] : []),
+    ...(showWork ? [work(site)] : []),
     site.status === "compared" ? `${site.newFindings}` : "",
     site.status === "compared" ? `${site.fixedFindings}` : "",
     relativePath(summary, site.comparisonPath ?? (site.reportDir ? join(site.reportDir, "open-local-audit-report.html") : undefined)),
@@ -426,7 +492,7 @@ export function renderMonitorMarkdown(summary: MonitorSummary): string {
     relativePath(summary, site.emailPath),
     relativePath(summary, site.historyPath)
   ]);
-  const header = ["Site", "Status", "Score", "Change", ...(showSpeed ? ["Speed"] : []), ...(showResponse ? ["Response"] : []), "New", "Fixed", "Report", "Client PDF", "Email draft", "History"];
+  const header = ["Site", "Status", "Score", "Change", ...(showSpeed ? ["Speed"] : []), ...(showResponse ? ["Response"] : []), ...(showUptime ? ["Uptime"] : []), ...(showWork ? ["Work"] : []), "New", "Fixed", "Report", "Client PDF", "Email draft", "History"];
 
   return [
     "# Website Monitoring Summary",

@@ -14,6 +14,8 @@ export interface BatchInputEntry {
   profile?: AuditProfile;
   source?: string;
   sourceId?: string;
+  // Monthly minutes of work included in the client's plan; monitor reports the time used against it.
+  includedMinutes?: number;
 }
 
 export interface BatchReportOptions {
@@ -163,6 +165,7 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
   const segmentIndex = headers.indexOf("segment");
   const profileIndex = headers.indexOf("profile");
   const sourceIndex = headers.indexOf("source");
+  const includedMinutesIndex = headers.indexOf("included_minutes");
 
   if (urlIndex < 0) {
     throw new Error("CSV batch input requires a url column");
@@ -188,6 +191,13 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
 
     if (sourceIndex >= 0 && cells[sourceIndex]) {
       entry.source = cells[sourceIndex];
+    }
+
+    if (includedMinutesIndex >= 0 && cells[includedMinutesIndex]) {
+      if (!/^\d{1,5}$/.test(cells[includedMinutesIndex])) {
+        throw new Error(`included_minutes must be a whole number of minutes, got "${cells[includedMinutesIndex]}" for ${entry.url}`);
+      }
+      entry.includedMinutes = Number(cells[includedMinutesIndex]);
     }
 
     return entry;

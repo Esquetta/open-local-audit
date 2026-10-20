@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { brandName, escapeCell, escapeHtml, overallScore, severityRank } from "./reporters.js";
+import type { ServiceSection } from "./monitor-service.js";
 import type { AuditProfile, AuditReport, Finding, FindingCategory, ReportRenderOptions } from "./types.js";
 
 export interface ScoreChange {
@@ -31,6 +32,8 @@ export interface ComparisonScreenshot {
 
 export interface ComparisonRenderOptions extends ReportRenderOptions {
   screenshots?: { before?: ComparisonScreenshot; after?: ComparisonScreenshot };
+  // Monitoring adds availability from the daily checks and the work done since the last check.
+  service?: ServiceSection[];
 }
 
 function siteHost(url: string): string {
@@ -197,7 +200,7 @@ export function renderComparisonJson(comparison: AuditComparison): string {
   return `${JSON.stringify(comparison, null, 2)}\n`;
 }
 
-export function renderComparisonMarkdown(comparison: AuditComparison, options: ReportRenderOptions = {}): string {
+export function renderComparisonMarkdown(comparison: AuditComparison, options: ComparisonRenderOptions = {}): string {
   const evidence = (finding: Finding) => finding.evidence.map((item) => `${item.label}: ${item.value}`).join("; ");
   const section = (title: string, empty: string, header: string[], rows: string[][]): string[] => [
     `## ${title}`,
@@ -249,6 +252,14 @@ export function renderComparisonMarkdown(comparison: AuditComparison, options: R
       ["Severity", "Finding", "Evidence", "Recommendation"],
       comparison.introduced.map((finding) => [finding.severity, finding.title, evidence(finding), finding.recommendation])
     ),
+    ...(options.service ?? []).flatMap((section) => [
+      `## ${section.title}`,
+      "",
+      ...section.items.map((item) => `- ${item}`),
+      ...(section.items.length > 0 ? [""] : []),
+      ...section.lines,
+      ""
+    ]),
     ...(comparison.screenshots.before || comparison.screenshots.after
       ? [
           "## Screenshots",
@@ -294,6 +305,15 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
       : "<p>Not captured</p>";
     return `<figure>${image}<figcaption>${escapeHtml(label)} (${escapeHtml(scannedAt)})</figcaption></figure>`;
   };
+  const service = (options.service ?? [])
+    .map(
+      (section) => `    <section>
+    <h2>${escapeHtml(section.title)}</h2>
+    ${section.items.length > 0 ? `<ul>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}${section.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+    </section>
+`
+    )
+    .join("");
   const screenshots =
     options.screenshots?.before || options.screenshots?.after
       ? `    <section>
@@ -361,7 +381,7 @@ ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).joi
     <h2>New Issues</h2>
     ${table("No new issues were found.", ["Severity", "Finding", "Evidence", "Recommendation"], comparison.introduced.map((finding) => [finding.severity, finding.title, evidence(finding), finding.recommendation]))}
     </section>
-${screenshots}${footer}    </main>
+${service}${screenshots}${footer}    </main>
   </body>
 </html>
 `;
@@ -430,6 +450,15 @@ export async function renderComparisonPdf(comparison: AuditComparison, options: 
   findingList(comparison.remaining, "No issues from the earlier audit are still open.", true);
   sectionTitle("New Issues");
   findingList(comparison.introduced, "No new issues were found.", true);
+  for (const section of options.service ?? []) {
+    sectionTitle(section.title);
+    for (const item of section.items) {
+      doc.text(`- ${item}`);
+    }
+    for (const line of section.lines) {
+      doc.text(line);
+    }
+  }
 
   const shots = [
     ["Before", comparisonDates(comparison).before, options.screenshots?.before],
