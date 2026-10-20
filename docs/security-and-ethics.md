@@ -14,7 +14,7 @@ Open Local Audit audits public websites supplied by the operator or found in an 
 - Generate local JSON and Markdown reports.
 - Run limited internal link checks when explicitly requested.
 - Look up a site's domain registration expiry over RDAP when `--check-domain` is passed and by default in `monitor` (`--no-check-domain` turns it off). The lookup downloads IANA's RDAP bootstrap file, then sends only the site's host name, and its parent names down to two labels, to that domain's registry over HTTPS. It follows no redirects and stores nothing beyond the audit finding.
-- Keep monitoring history for the sites the operator lists in `monitor`: each run's reports, comparisons, and client email drafts, and each site's `history.html`, plus the client overview `index.html` and the latest daily result `quick-status.json`, are written to the operator's `--out-dir`, and nothing is uploaded or sent. `--print-schedule` writes a run script there and prints a scheduler command for the operator to run; it does not create scheduled tasks. Those scripts show local desktop notifications when a run needs attention; nothing leaves the computer. Each scheduled run uses `npx` to fetch the pinned package version from the npm registry when it is not already cached.
+- Keep monitoring history for the sites the operator lists in `monitor`: each run's reports, comparisons, and client email drafts, and each site's `history.html`, plus the client overview `index.html`, the latest daily result `quick-status.json`, and the daily up or down log `quick-history.jsonl`, are written to the operator's `--out-dir`, which is also where monthly runs read the operator's own `work-log.csv`, and nothing is uploaded or sent. `--print-schedule` writes a run script there and prints a scheduler command for the operator to run; it does not create scheduled tasks. Those scripts show local desktop notifications when a run needs attention; nothing leaves the computer. Each scheduled run uses `npx` to fetch the pinned package version from the npm registry when it is not already cached.
 - Run Lighthouse against the audited page when the operator passes `--lighthouse`. Lighthouse loads the page in a local Chrome or Chromium browser that sends Lighthouse's emulated mobile Chrome user agent, which does not name Open Local Audit.
 - Import operator-prepared business CSVs for local `manual-csv` discovery triage.
 - Audit website URLs supplied by the operator or resolved from the local CSV.
@@ -48,7 +48,7 @@ Operators should use `--suppression-list` to avoid repeatedly auditing or review
 ## Data minimization
 
 Default behavior:
-- Do not store scan history, except the run folders that `monitor` writes to the operator's `--out-dir`.
+- Do not store scan history, except the run folders and the quick check files that `monitor` writes to the operator's `--out-dir`.
 - Write reports only when the operator passes an output path.
 - Do not send scan data to maintainers or third-party services. Domain lookups send the domain name only to its registry's RDAP service.
 - Neutralize formula-like CSV cells before export.

@@ -3,13 +3,15 @@ import { join } from "node:path";
 import type { BatchInputEntry } from "./batch.js";
 import { writeDashboard } from "./monitor-dashboard.js";
 import { currentAlerts, monitorRunId, monitorSiteFolder, type MonitorAlert } from "./monitor.js";
+import { appendQuickHistory } from "./monitor-service.js";
 import type { AuditReport, ReportBrandConfig } from "./types.js";
 
 export interface QuickCheckOptions {
   // Usually quickCheckUrl: the page itself plus the certificate and domain, without a full audit.
   check: (url: string) => Promise<AuditReport>;
   now?: Date;
-  // When set, the latest result is kept in quick-status.json there and the overview (index.html) is rebuilt.
+  // When set, the latest result is kept in quick-status.json there, added to quick-history.jsonl for the monthly
+  // availability count, and the overview (index.html) is rebuilt.
   outDir?: string;
   brand?: ReportBrandConfig;
 }
@@ -21,6 +23,7 @@ export interface QuickCheckSite {
   finalUrl?: string;
   statusCode?: number;
   responseTimeMs?: number;
+  includedMinutes?: number;
   alerts: MonitorAlert[];
 }
 
@@ -49,7 +52,11 @@ export async function runQuickCheck(entries: BatchInputEntry[], options: QuickCh
 
   const sites: QuickCheckSite[] = [];
   for (const entry of entries) {
-    const base = { url: entry.url, ...(entry.label ? { label: entry.label } : {}) };
+    const base = {
+      url: entry.url,
+      ...(entry.label ? { label: entry.label } : {}),
+      ...(entry.includedMinutes === undefined ? {} : { includedMinutes: entry.includedMinutes })
+    };
     let report: AuditReport;
     try {
       report = await options.check(entry.url);
@@ -76,10 +83,20 @@ export async function runQuickCheck(entries: BatchInputEntry[], options: QuickCh
   }
   const summary: QuickCheckSummary = { runId: monitorRunId(options.now ?? new Date()), sites };
   if (options.outDir) {
-    // Only the latest result is kept; the monthly history is left alone. Saving it is a convenience, so a locked or
-    // read-only folder never hides the alerts this check found.
+    // The monthly history is left alone. Saving is a convenience, so a locked or read-only folder never hides the
+    // alerts this check found. A site counts as down when it did not load, returned an error, or showed a placeholder.
+    // The availability record is written first and on its own, so a locked quick-status.json never drops a day.
     try {
       await mkdir(options.outDir, { recursive: true });
+      await appendQuickHistory(
+        options.outDir,
+        summary.runId,
+        sites.map((site) => ({ url: site.url, up: !site.alerts.some((alert) => alert.kind === "down") }))
+      );
+    } catch {
+      // Like the files below, the record is a convenience; the alerts are still returned.
+    }
+    try {
       await writeFile(join(options.outDir, "quick-status.json"), `${JSON.stringify(summary, null, 2)}\n`);
       summary.dashboardPath = await writeDashboard(options.outDir, options.brand);
     } catch {

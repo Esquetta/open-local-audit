@@ -2,6 +2,14 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.86.0 - 2026-10-20
+
+- `monitor --quick` adds one line per check to `quick-history.jsonl` in `--out-dir`, recording whether each site was up. A site counts as down when it did not load, returned a non-2xx status, or showed a placeholder page; certificate and domain warnings do not count.
+- Monthly `monitor` runs report the daily checks since the previous run (or the last 30 days on a first run): `client-email.md`, `comparison.md`, `comparison.html`, and `comparison.pdf` get an "Availability" section with the number of checks the site loaded on and the days it did not.
+- Added a work log: `work-log.csv` in `--out-dir`, with `date`, `site`, `minutes`, and optional `description` columns. Monthly runs list the work dated from the previous run's day up to the day before their own run in a "Work done" section of the same files, with the total time. A new optional `included_minutes` column in the client list reports the time used against the minutes included in the client's plan. A row that cannot be read stops the monthly run before any audit, naming its line.
+- The monitoring summary gains Uptime and Work columns, and `MonitorSiteResult` gains `serviceSince`, `availability`, `work`, and `includedMinutes`. The client overview gains "Uptime, 30 days" and "Work since report" columns, an alert when logged work goes over the included minutes, and a warning when `work-log.csv` has unreadable rows.
+- Exported `readWorkLog`, `serviceSections`, and the `ServiceSection`, `SiteAvailability`, `SiteWork`, and `WorkLogEntry` types. `BatchInputEntry` and `QuickCheckSite` gain an optional `includedMinutes`, and `ComparisonRenderOptions` an optional `service`.
+
 ## v0.85.0 - 2026-10-19
 
 - Scheduled runs now show a desktop notification when they end with a non-zero exit code: alerts with `--fail-on-alerts`, or an error such as `npx` not being found. Windows scripts show a toast through Windows PowerShell's own notification identity, so no setup is needed; shell scripts use `osascript` on macOS and `notify-send` on Linux when available, passing the text as an argument. The notification shows up to four lines from the run's output: the `ALERT` lines of a daily check, or the attention summary of a monthly run. Each run's output is now written to the log when the run finishes. Regenerate your scripts with `--print-schedule` to get notifications.

@@ -20,6 +20,8 @@ export { renderQuickCheck, runQuickCheck } from "./monitor-quick.js";
 export { renderDashboard, writeDashboard } from "./monitor-dashboard.js";
 export type { DashboardInput } from "./monitor-dashboard.js";
 export type { QuickCheckOptions, QuickCheckSite, QuickCheckSummary } from "./monitor-quick.js";
+export { readWorkLog, serviceSections } from "./monitor-service.js";
+export type { ServiceSection, SiteAvailability, SiteWork, WorkLogEntry } from "./monitor-service.js";
 export { extractPublicContact } from "./contact.js";
 export { detectDotnetStack } from "./dotnet-stack.js";
 export { fetchOvertureCandidates } from "./overture.js";

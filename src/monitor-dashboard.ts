@@ -2,6 +2,18 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { escapeHtml } from "./reporters.js";
 import type { MonitorAlert } from "./monitor.js";
+import {
+  localDay,
+  readQuickHistory,
+  readWorkLog,
+  runIdDate,
+  siteAvailability,
+  siteIdentity,
+  siteWork,
+  workLogFile,
+  workTotal,
+  type WorkLogEntry
+} from "./monitor-service.js";
 import type { ReportBrandConfig } from "./types.js";
 
 // The rows the dashboard needs from the monthly summary JSON and quick-status.json. Both files are read back from
@@ -16,6 +28,7 @@ interface MonthlySite {
   historyPath?: unknown;
   pdfPath?: unknown;
   emailPath?: unknown;
+  includedMinutes?: unknown;
 }
 
 interface QuickSite {
@@ -24,24 +37,23 @@ interface QuickSite {
   status?: unknown;
   statusCode?: unknown;
   responseTimeMs?: unknown;
+  includedMinutes?: unknown;
   alerts?: unknown;
 }
 
 export interface DashboardInput {
   monthly?: { runId?: unknown; sites?: unknown };
   quick?: { runId?: unknown; sites?: unknown };
+  // Every daily check so far (quick-history.jsonl) and the work log, with the number of work log rows it could not read.
+  quickHistory?: Awaited<ReturnType<typeof readQuickHistory>>;
+  workLog?: WorkLogEntry[];
+  workLogErrors?: number;
   brand?: ReportBrandConfig;
 }
 
-const runIdPattern = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z$/;
-
 function runDate(runId: unknown): string | undefined {
-  const match = typeof runId === "string" ? runIdPattern.exec(runId) : null;
-  if (!match) {
-    return undefined;
-  }
-  const date = new Date(`${match[1]}T${match[2]}:${match[3]}:${match[4]}.${match[5] ?? "000"}Z`);
-  if (Number.isNaN(date.getTime())) {
+  const date = runIdDate(runId);
+  if (!date) {
     return undefined;
   }
   return `${date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}, ${date.toLocaleTimeString("en-GB", {
@@ -74,14 +86,9 @@ function sites<T>(value: unknown): T[] {
 }
 
 // Matches the identity monitor uses for its folders, so the same site lines up in both files.
-function siteKey(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.hostname.toLowerCase().replace(/\.$/, "").replace(/^www\./, "")}${parsed.port ? `:${parsed.port}` : ""}${parsed.pathname.replace(/\/+$/, "")}${parsed.search}`;
-  } catch {
-    return url;
-  }
-}
+const siteKey = siteIdentity;
+
+const dayMs = 24 * 60 * 60 * 1000;
 
 // Only relative paths inside the output folder become links, so a hand-edited file cannot add a script or remote URL.
 function link(path: unknown, label: string): string {
@@ -107,6 +114,11 @@ export function renderDashboard(input: DashboardInput): string {
   const quickByKey = new Map(quick.map((site) => [siteKey(text(site.url)), site]));
   const keys = [...new Set([...monthly.map((site) => siteKey(text(site.url))), ...quick.map((site) => siteKey(text(site.url)))])];
   const monthlyByKey = new Map(monthly.map((site) => [siteKey(text(site.url)), site]));
+  // Uptime covers the 30 days up to the latest daily check; work counts from the day of the latest monthly run, which
+  // is what the next monthly email will list.
+  const uptimeEnd = runIdDate(input.quick?.runId);
+  const monthlyRun = runIdDate(input.monthly?.runId);
+  const workSince = monthlyRun ? localDay(monthlyRun) : "0000-00-00";
 
   const rows = keys.map((key) => {
     const month = monthlyByKey.get(key);
@@ -122,6 +134,11 @@ export function renderDashboard(input: DashboardInput): string {
     const responseTime = count(day?.responseTimeMs);
     const loaded = statusCode === undefined ? "" : `HTTP ${statusCode}${responseTime === undefined ? "" : ` in ${responseTime} ms`}`;
     const daily = !day ? "Not checked" : day.status === "ok" ? (loaded ? `OK, ${loaded}` : "OK") : loaded ? `Alert, ${loaded}` : "Did not load";
+    const availability = uptimeEnd ? siteAvailability(input.quickHistory ?? [], url, new Date(uptimeEnd.getTime() - 30 * dayMs), uptimeEnd) : undefined;
+    const work = siteWork(input.workLog ?? [], url, workSince, undefined, count(day?.includedMinutes) ?? count(month?.includedMinutes));
+    if (work?.includedMinutes !== undefined && work.minutes > work.includedMinutes) {
+      messages.push(workTotal(work));
+    }
     return {
       attention: messages.length > 0 || month?.status === "failed",
       html: `<tr>
@@ -129,6 +146,8 @@ export function renderDashboard(input: DashboardInput): string {
           <td>${messages.length > 0 || month?.status === "failed" ? '<span class="chip warn">⚠ Needs attention</span>' : '<span class="chip ok">✓ OK</span>'}</td>
           <td>${score === undefined ? "–" : `${score}/100${change === undefined ? "" : ` <span class="muted">(${signed(change)})</span>`}`}</td>
           <td>${escapeHtml(daily)}</td>
+          <td>${availability ? `${Math.floor((availability.up / availability.checks) * 100)}% <span class="muted">(${availability.up}/${availability.checks})</span>` : '<span class="muted">–</span>'}</td>
+          <td>${work ? `${work.minutes}${work.includedMinutes === undefined ? "" : ` of ${work.includedMinutes}`} min` : '<span class="muted">–</span>'}</td>
           <td>${messages.length > 0 ? `<ul>${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}</ul>` : '<span class="muted">None</span>'}</td>
           <td class="links">${[link(month?.historyPath, "History"), link(month?.pdfPath, "PDF"), link(month?.emailPath, "Email draft")].filter(Boolean).join(" · ") || '<span class="muted">–</span>'}</td>
         </tr>`
@@ -165,7 +184,8 @@ export function renderDashboard(input: DashboardInput): string {
       ul { margin: 0; padding-left: 18px; }
       .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
       .chip.ok { color: var(--ok); background: var(--ok-bg); }
-      .chip.warn { color: var(--warn); background: var(--warn-bg); }
+      .chip.warn, .notice { color: var(--warn); background: var(--warn-bg); }
+      .notice { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
       .links { white-space: nowrap; }
       a { color: inherit; }
     </style>
@@ -173,10 +193,14 @@ export function renderDashboard(input: DashboardInput): string {
   <body>
     <main>
       <h1>${escapeHtml(brandName)} client overview</h1>
-      <p class="meta">${rows.length} client${rows.length === 1 ? "" : "s"}, ${attention === 0 ? "none need attention" : `${attention} need${attention === 1 ? "s" : ""} attention`}. Last monthly check: ${escapeHtml(monthlyDate ?? "none yet")}. Last daily check: ${escapeHtml(quickDate ?? "none yet")}.</p>
+      <p class="meta">${rows.length} client${rows.length === 1 ? "" : "s"}, ${attention === 0 ? "none need attention" : `${attention} need${attention === 1 ? "s" : ""} attention`}. Last monthly check: ${escapeHtml(monthlyDate ?? "none yet")}. Last daily check: ${escapeHtml(quickDate ?? "none yet")}.</p>${
+        input.workLogErrors
+          ? `\n      <p class="notice">${workLogFile} has ${input.workLogErrors} problem${input.workLogErrors === 1 ? "" : "s"}; the next monthly run stops until ${input.workLogErrors === 1 ? "it is" : "they are"} fixed.</p>`
+          : ""
+      }
       <div class="table-wrap">
         <table>
-          <thead><tr><th scope="col">Client</th><th scope="col">Status</th><th scope="col">Score</th><th scope="col">Daily check</th><th scope="col">Alerts</th><th scope="col">Files</th></tr></thead>
+          <thead><tr><th scope="col">Client</th><th scope="col">Status</th><th scope="col">Score</th><th scope="col">Daily check</th><th scope="col">Uptime, 30 days</th><th scope="col">Work since report</th><th scope="col">Alerts</th><th scope="col">Files</th></tr></thead>
           <tbody>${ordered.map((row) => row.html).join("")}</tbody>
         </table>
       </div>
@@ -207,11 +231,15 @@ export async function writeDashboard(outDir: string, brand?: ReportBrandConfig):
     .sort()
     .at(-1);
   const path = join(outDir, "index.html");
+  const workLog = await readWorkLog(outDir).catch(() => ({ entries: [], errors: [] }));
   await writeFile(
     path,
     renderDashboard({
       monthly: newestSummary ? await readJson(join(outDir, newestSummary)) : undefined,
       quick: await readJson(join(outDir, "quick-status.json")),
+      quickHistory: await readQuickHistory(outDir),
+      workLog: workLog.entries,
+      workLogErrors: workLog.errors.length,
       brand
     })
   );
