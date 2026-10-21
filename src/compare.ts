@@ -1,7 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { brandName, escapeCell, escapeHtml, overallScore, severityRank } from "./reporters.js";
-import type { ServiceSection } from "./monitor-service.js";
 import type { AuditProfile, AuditReport, Finding, FindingCategory, ReportRenderOptions } from "./types.js";
 
 export interface ScoreChange {
@@ -32,8 +31,6 @@ export interface ComparisonScreenshot {
 
 export interface ComparisonRenderOptions extends ReportRenderOptions {
   screenshots?: { before?: ComparisonScreenshot; after?: ComparisonScreenshot };
-  // Monitoring adds availability from the daily checks and the work done since the last check.
-  service?: ServiceSection[];
 }
 
 function siteHost(url: string): string {

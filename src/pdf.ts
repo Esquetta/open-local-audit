@@ -125,6 +125,16 @@ export async function renderPdfReport(report: AuditReport, options: ReportRender
     doc.text(`- ${recommendation}`);
   }
 
+  for (const section of options.service ?? []) {
+    writeSectionTitle(doc, section.title);
+    for (const item of section.items) {
+      doc.text(`- ${item}`);
+    }
+    for (const line of section.lines) {
+      doc.text(line);
+    }
+  }
+
   if (brand?.footerText || brand?.contact) {
     doc.moveDown(1);
     doc.fontSize(8).fillColor("#5f6b75").text([brand.footerText, brand.contact].filter(Boolean).join(" | "));

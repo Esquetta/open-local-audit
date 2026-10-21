@@ -12,8 +12,8 @@ export {
   comparisonDates
 } from "./compare.js";
 export type { AuditComparison, ComparisonRenderOptions, ComparisonScreenshot, ScoreChange } from "./compare.js";
-export { monitorRunId, renderClientEmail, renderMonitorJson, renderMonitorMarkdown, runMonitor } from "./monitor.js";
-export type { ClientEmailInput, MonitorAlert, MonitorOptions, MonitorSiteResult, MonitorSummary } from "./monitor.js";
+export { clientEmailParts, monitorRunId, renderClientEmail, renderClientEml, renderMonitorJson, renderMonitorMarkdown, runMonitor } from "./monitor.js";
+export type { ClientEmailInput, ClientEmlInput, MonitorAlert, MonitorOptions, MonitorSiteResult, MonitorSummary } from "./monitor.js";
 export { renderSiteHistory } from "./monitor-history.js";
 export type { SiteHistoryOptions, SiteHistoryRun } from "./monitor-history.js";
 export { renderQuickCheck, runQuickCheck } from "./monitor-quick.js";

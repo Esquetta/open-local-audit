@@ -1,4 +1,5 @@
 import type { BusinessIdentityResult } from "./business-identity.js";
+import type { ServiceSection } from "./monitor-service.js";
 
 export type Severity = "high" | "medium" | "low" | "info";
 
@@ -107,6 +108,8 @@ export interface ReportBrandConfig {
 
 export interface ReportRenderOptions {
   brand?: ReportBrandConfig;
+  // Monitoring adds availability from the daily checks and the work done since the last check (PDF and comparison reports).
+  service?: ServiceSection[];
 }
 
 export interface PageSnapshot {

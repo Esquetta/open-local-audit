@@ -28,6 +28,7 @@ interface MonthlySite {
   historyPath?: unknown;
   pdfPath?: unknown;
   emailPath?: unknown;
+  emlPath?: unknown;
   includedMinutes?: unknown;
 }
 
@@ -149,7 +150,7 @@ export function renderDashboard(input: DashboardInput): string {
           <td>${availability ? `${Math.floor((availability.up / availability.checks) * 100)}% <span class="muted">(${availability.up}/${availability.checks})</span>` : '<span class="muted">–</span>'}</td>
           <td>${work ? `${work.minutes}${work.includedMinutes === undefined ? "" : ` of ${work.includedMinutes}`} min` : '<span class="muted">–</span>'}</td>
           <td>${messages.length > 0 ? `<ul>${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}</ul>` : '<span class="muted">None</span>'}</td>
-          <td class="links">${[link(month?.historyPath, "History"), link(month?.pdfPath, "PDF"), link(month?.emailPath, "Email draft")].filter(Boolean).join(" · ") || '<span class="muted">–</span>'}</td>
+          <td class="links">${[link(month?.historyPath, "History"), link(month?.pdfPath, "PDF"), link(month?.emailPath, "Email draft"), link(month?.emlPath, "Mail (.eml)")].filter(Boolean).join(" · ") || '<span class="muted">–</span>'}</td>
         </tr>`
     };
   });

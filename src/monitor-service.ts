@@ -42,6 +42,12 @@ interface QuickHistoryRecord {
 
 const runIdPattern = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z$/;
 
+// A plain ASCII address such as owner@clinic.co.uk: no display name, spaces, or anything else that could reach the
+// headers of an email draft.
+export function isPlainEmailAddress(value: string): boolean {
+  return /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(value);
+}
+
 export function runIdDate(runId: unknown): Date | undefined {
   const match = typeof runId === "string" ? runIdPattern.exec(runId) : null;
   if (!match) {
