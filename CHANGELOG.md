@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.87.0 - 2026-10-21
+
+- `monitor` writes `client-email.eml` next to every `client-email.md`: the same email as an unsent draft (`X-Unsent: 1`) with the client PDF attached (`comparison.pdf`, or the report PDF on a first run). Outlook for Windows opens it as a new message ready to send; other mail programs may show it as a received message to edit as new or forward. Nothing is sent. A new optional `client_email` column in the client list addresses it; several addresses are separated by semicolons, and anything other than plain ASCII addresses is rejected (also by `batch`, which reads the same client list format). Long subjects and recipient lists are folded onto short header lines. If the draft cannot be written, the run still counts and the site note says why. The summary JSON gains `emlPath` and the client overview a "Mail (.eml)" link.
+- The report PDF that `monitor` writes now includes the "Availability" and "Work Done" sections too, so a client's first monthly report lists the work and daily checks before there is a comparison.
+- Exported `clientEmailParts`, `renderClientEml`, and the `ClientEmlInput` type. `BatchInputEntry` gains an optional `clientEmail`, `MonitorSiteResult` an optional `emlPath`, and `ReportRenderOptions` an optional `service` (which `ComparisonRenderOptions` now inherits).
+
 ## v0.86.0 - 2026-10-20
 
 - `monitor --quick` adds one line per check to `quick-history.jsonl` in `--out-dir`, recording whether each site was up. A site counts as down when it did not load, returned a non-2xx status, or showed a placeholder page; certificate and domain warnings do not count.

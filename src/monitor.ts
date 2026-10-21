@@ -6,6 +6,7 @@ import { compareReports, readComparisonReport, renderComparisonHtml, renderCompa
 import { writeDashboard } from "./monitor-dashboard.js";
 import { renderSiteHistory, type SiteHistoryRun } from "./monitor-history.js";
 import {
+  isPlainEmailAddress,
   localDay,
   readQuickHistory,
   readWorkLog,
@@ -21,6 +22,7 @@ import {
   type WorkLogEntry
 } from "./monitor-service.js";
 import { writeReportOutputs } from "./output.js";
+import { renderPdfReport } from "./pdf.js";
 import { escapeCell, overallScore, severityRank } from "./reporters.js";
 import type { AuditComparison } from "./compare.js";
 import type { AuditProfile, AuditReport, LighthouseSummary, ReportBrandConfig } from "./types.js";
@@ -51,6 +53,8 @@ export interface MonitorSiteResult {
   pdfPath?: string;
   // A ready-to-edit monthly email for the client; it is never sent.
   emailPath?: string;
+  // The same email as an unsent .eml draft with the client PDF attached, to open in a mail program.
+  emlPath?: string;
   // The site's history page across every run in the output folder.
   historyPath?: string;
   previousRunId?: string;
@@ -168,8 +172,8 @@ export interface ClientEmailInput {
   service?: ServiceSection[];
 }
 
-// A plain-text draft the operator edits and sends from their own mailbox. Only facts from the audit go in.
-export function renderClientEmail(input: ClientEmailInput): string {
+// The subject and plain-text body of the monthly client email. Only facts from the audit go in.
+export function clientEmailParts(input: ClientEmailInput): { subject: string; body: string } {
   const { entry, report, comparison } = input;
   const name = entry.label ?? new URL(report.finalUrl).hostname.replace(/^www\./, "");
   const score = overallScore(report);
@@ -184,11 +188,8 @@ export function renderClientEmail(input: ClientEmailInput): string {
     .slice(0, 3)
     .map((finding, index) => `${index + 1}. ${finding.title}: ${finding.recommendation}`);
 
-  return [
-    "<!-- Draft written by Open Local Audit. Check each point on the live site before sending; nothing has been sent. -->",
-    "",
-    `Subject: Website check for ${name}, ${input.runDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}`,
-    "",
+  const subject = `Website check for ${name}, ${input.runDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}`;
+  const body = [
     "Hi,",
     "",
     `Here is this month's check of ${report.finalUrl}.`,
@@ -231,6 +232,76 @@ export function renderClientEmail(input: ClientEmailInput): string {
       : ["Best regards,", ...(input.brand?.name ? [input.brand.name] : []), ...(input.brand?.contact ? [input.brand.contact] : [])]),
     ""
   ].join("\n");
+  return { subject, body };
+}
+
+// A plain-text draft the operator edits and sends from their own mailbox.
+export function renderClientEmail(input: ClientEmailInput): string {
+  const { subject, body } = clientEmailParts(input);
+  return `<!-- Draft written by Open Local Audit. Check each point on the live site before sending; nothing has been sent. -->\n\nSubject: ${subject}\n\n${body}`;
+}
+
+function base64Lines(data: Buffer): string {
+  return (data.toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
+}
+
+// Header text that is not plain ASCII, or would make a line longer than 78 characters, becomes RFC 2047 encoded
+// words, split on character boundaries and folded onto short lines.
+function headerText(name: string, value: string): string {
+  if (/^[\x20-\x7e]*$/.test(value) && name.length + 2 + value.length <= 78) {
+    return value;
+  }
+  const words: string[] = [];
+  let current = "";
+  for (const character of value) {
+    if (Buffer.byteLength(current + character) > 39) {
+      words.push(current);
+      current = "";
+    }
+    current += character;
+  }
+  words.push(current);
+  return words.map((word) => `=?UTF-8?B?${Buffer.from(word).toString("base64")}?=`).join("\r\n ");
+}
+
+export interface ClientEmlInput {
+  to?: string[];
+  subject: string;
+  body: string;
+  attachment: { filename: string; data: Buffer };
+}
+
+// An unsent email draft (.eml) with the PDF attached. Mail programs such as Outlook open it ready to edit and send;
+// nothing is sent by Open Local Audit. It has no sender, so the mail program uses its own account.
+export function renderClientEml(input: ClientEmlInput): string {
+  const invalid = (input.to ?? []).find((address) => !isPlainEmailAddress(address));
+  if (invalid !== undefined) {
+    throw new Error(`Not a plain email address: ${JSON.stringify(invalid)}`);
+  }
+  const boundary = `open-local-audit-${createHash("sha256").update(input.subject).update(input.body).digest("hex").slice(0, 24)}`;
+  const filename = input.attachment.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+  return [
+    "X-Unsent: 1",
+    ...(input.to && input.to.length > 0 ? [`To: ${input.to.join(",\r\n ")}`] : []),
+    `Subject: ${headerText("Subject", input.subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: multipart/mixed;",
+    ` boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Lines(Buffer.from(input.body.replace(/\r?\n/g, "\r\n"))),
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${filename}"`,
+    `Content-Disposition: attachment; filename="${filename}"`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    base64Lines(input.attachment.data),
+    `--${boundary}--`,
+    ""
+  ].join("\r\n");
 }
 
 // Rebuilds the site's history page from every readable run, including the one just written.
@@ -289,9 +360,17 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
     }
   }
   await writeReportOutputs(report, { format: "all", outDir: reportDir, brand: options.brand });
-  const [reportPdf] = await writeReportOutputs(report, { format: "pdf", outDir: reportDir, brand: options.brand });
-  const reportPdfPath = reportPdf.path;
   const emailPath = join(reportDir, "client-email.md");
+  const emlPath = join(reportDir, "client-email.eml");
+  // Like the history page, the .eml draft is extra: if it cannot be written, the run still counts and the note says why.
+  const eml = async (parts: { subject: string; body: string }, filename: string, data: Buffer): Promise<{ emlPath?: string; emlNote?: string }> => {
+    try {
+      await writeFile(emlPath, renderClientEml({ to: entry.clientEmail, ...parts, attachment: { filename, data } }));
+      return { emlPath };
+    } catch (error) {
+      return { emlNote: `Mail draft not written: ${message(error)}` };
+    }
+  };
   const performance = report.lighthouse?.categories.performance;
 
   const score = overallScore(report);
@@ -303,6 +382,9 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
   const work = siteWork(records.workLog, entry.url, localDay(since), localDay(runDate), entry.includedMinutes);
   const service = serviceSections({ since, availability, work });
   const period = { serviceSince: since.toISOString(), ...(availability ? { availability } : {}), ...(work ? { work } : {}) };
+  const reportPdfPath = join(reportDir, "open-local-audit-report.pdf");
+  const reportPdf = await renderPdfReport(report, { brand: options.brand, service });
+  await writeFile(reportPdfPath, reportPdf);
   let comparison: AuditComparison | undefined;
   let baselineNote = "First run: baseline recorded";
   if (previous) {
@@ -329,26 +411,25 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
   };
 
   if (!comparison || !previous) {
-    await writeFile(
-      emailPath,
-      renderClientEmail({ entry, report, runDate, pdfFile: basename(reportPdfPath ?? "open-local-audit-report.pdf"), brand: options.brand, newBaseline: Boolean(previous), service })
-    );
+    const email = { entry, report, runDate, pdfFile: basename(reportPdfPath), brand: options.brand, newBaseline: Boolean(previous), service };
+    await writeFile(emailPath, renderClientEmail(email));
+    const draft = await eml(clientEmailParts(email), basename(reportPdfPath), reportPdf);
     const { historyPath, historyNote } = await history();
-    const note = [baselineNote, lighthouseNote, historyNote].filter(Boolean).join("; ");
-    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, emailPath, ...(historyPath ? { historyPath } : {}), score, ...speed, ...response, ...period, alerts, note };
+    const note = [baselineNote, lighthouseNote, historyNote, draft.emlNote].filter(Boolean).join("; ");
+    return { ...base, status: "baseline", reportDir, pdfPath: reportPdfPath, emailPath, ...(draft.emlPath ? { emlPath } : {}), ...(historyPath ? { historyPath } : {}), score, ...speed, ...response, ...period, alerts, note };
   }
 
   const comparisonPath = join(reportDir, "comparison.html");
   await writeFile(join(reportDir, "comparison.md"), renderComparisonMarkdown(comparison, { brand: options.brand, service }));
   await writeFile(comparisonPath, renderComparisonHtml(comparison, { brand: options.brand, service }));
   const pdfPath = join(reportDir, "comparison.pdf");
-  await writeFile(pdfPath, await renderComparisonPdf(comparison, { brand: options.brand, service }));
-  await writeFile(
-    emailPath,
-    renderClientEmail({ entry, report, runDate, pdfFile: "comparison.pdf", brand: options.brand, comparison, previousPerformance, service })
-  );
+  const comparisonPdf = await renderComparisonPdf(comparison, { brand: options.brand, service });
+  await writeFile(pdfPath, comparisonPdf);
+  const email = { entry, report, runDate, pdfFile: "comparison.pdf", brand: options.brand, comparison, previousPerformance, service };
+  await writeFile(emailPath, renderClientEmail(email));
+  const draft = await eml(clientEmailParts(email), "comparison.pdf", comparisonPdf);
   const { historyPath, historyNote } = await history();
-  const comparedNote = [lighthouseNote, historyNote].filter(Boolean).join("; ");
+  const comparedNote = [lighthouseNote, historyNote, draft.emlNote].filter(Boolean).join("; ");
   // Certificate and domain problems already have their own alert on every run.
   const newHigh = comparison.introduced
     .filter((finding) => finding.severity === "high" && !["tls-certificate-valid", "domain-expiry"].includes(finding.id))
@@ -360,6 +441,7 @@ async function monitorSite(entry: BatchInputEntry, slug: string, runId: string, 
     comparisonPath,
     pdfPath,
     emailPath,
+    ...(draft.emlPath ? { emlPath } : {}),
     ...(historyPath ? { historyPath } : {}),
     previousRunId: previous.runId,
     score,
@@ -447,6 +529,7 @@ export function renderMonitorJson(summary: MonitorSummary): string {
     comparisonPath: site.comparisonPath ? relativePath(summary, site.comparisonPath) : undefined,
     pdfPath: site.pdfPath ? relativePath(summary, site.pdfPath) : undefined,
     emailPath: site.emailPath ? relativePath(summary, site.emailPath) : undefined,
+    emlPath: site.emlPath ? relativePath(summary, site.emlPath) : undefined,
     historyPath: site.historyPath ? relativePath(summary, site.historyPath) : undefined
   }));
   return `${JSON.stringify({ runId: summary.runId, sites }, null, 2)}\n`;

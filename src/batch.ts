@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { auditUrl } from "./audit.js";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
+import { isPlainEmailAddress } from "./monitor-service.js";
 import { writeReportOutputs, type OutputFormat, type ReportOutput } from "./output.js";
 import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditOptions, AuditProfile, AuditReport, PublicContact, ReportBrandConfig, Severity } from "./types.js";
@@ -16,6 +17,8 @@ export interface BatchInputEntry {
   sourceId?: string;
   // Monthly minutes of work included in the client's plan; monitor reports the time used against it.
   includedMinutes?: number;
+  // Where monitor's .eml drafts are addressed; nothing is sent.
+  clientEmail?: string[];
 }
 
 export interface BatchReportOptions {
@@ -166,6 +169,7 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
   const profileIndex = headers.indexOf("profile");
   const sourceIndex = headers.indexOf("source");
   const includedMinutesIndex = headers.indexOf("included_minutes");
+  const clientEmailIndex = headers.indexOf("client_email");
 
   if (urlIndex < 0) {
     throw new Error("CSV batch input requires a url column");
@@ -198,6 +202,16 @@ export async function readBatchInput(path: string): Promise<BatchInputEntry[]> {
         throw new Error(`included_minutes must be a whole number of minutes, got "${cells[includedMinutesIndex]}" for ${entry.url}`);
       }
       entry.includedMinutes = Number(cells[includedMinutesIndex]);
+    }
+
+    if (clientEmailIndex >= 0 && cells[clientEmailIndex]) {
+      // Several addresses are separated with semicolons. Plain addresses only, so nothing else can reach the draft's headers.
+      const addresses = cells[clientEmailIndex].split(";").map((address) => address.trim()).filter(Boolean);
+      const invalid = addresses.find((address) => !isPlainEmailAddress(address));
+      if (invalid !== undefined) {
+        throw new Error(`client_email must be email addresses separated by semicolons, got "${invalid}" for ${entry.url}`);
+      }
+      entry.clientEmail = addresses;
     }
 
     return entry;
