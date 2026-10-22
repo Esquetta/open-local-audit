@@ -60,7 +60,7 @@ const pitchReasons: Array<[RegExp, string]> = [
   [/^review-cue-present$/, "No reviews or testimonials are shown, so new visitors have less reason to trust the business."]
 ];
 
-const maxPoints = 3;
+export const maxPoints = 3;
 // The chain, public-body, and location reasons that discovery writes into opportunityReasons.
 const placementFlagPattern =
   /public-sector domain|looks like a multi-location brand|branch page on a larger site|phone area code \S+ differs/i;
@@ -74,7 +74,8 @@ function evidenceText(finding: Finding): string {
   return Array.isArray(finding.evidence) ? finding.evidence.map((item) => item?.value ?? "").join("; ") : "";
 }
 
-function pitchPoints(report: AuditReport): PitchPoint[] {
+// The findings a business owner would notice, most pressing first, one per reason.
+export function pitchPoints(report: AuditReport): PitchPoint[] {
   const seen = new Set<number>();
   return report.findings
     .filter((finding) => pitchRank(finding) >= 0 && !/^not checked$/i.test(evidenceText(finding).trim()))
