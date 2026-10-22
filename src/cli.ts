@@ -494,6 +494,45 @@ const compareProgram = program
     }
   });
 
+const proposalProgram = program
+  .command("proposal")
+  .description("Write a one-page monthly care proposal for a business from its audit report and your offer file.")
+  .argument("<report>", "JSON report file or report directory from an earlier audit")
+  .requiredOption("--offer <path>", "read your plans, prices, and wording from a JSON file")
+  .option("--name <name>", "business name to address (default: the site's host)")
+  .option("-f, --format <format>", "proposal format: html or pdf", "html")
+  .option("-o, --out <path>", "write the proposal to a file instead of stdout")
+  .option("--brand-config <path>", "read report branding from a JSON file")
+  .action(async (reportPath: string) => {
+    try {
+      const options = proposalProgram.opts() as { offer: string; name?: string; format: string; out?: string; brandConfig?: string };
+      if (!["html", "pdf"].includes(options.format)) {
+        throw new Error("proposal --format must be html or pdf");
+      }
+      if (options.format === "pdf" && !options.out) {
+        throw new Error("--out is required when proposal --format pdf is used");
+      }
+
+      const { buildProposal, readOfferConfig, renderProposalHtml, renderProposalPdf } = await import("./proposal.js");
+      const brand = options.brandConfig ? await readBrandConfig(options.brandConfig) : undefined;
+      const proposal = buildProposal(await readComparisonReport(reportPath), await readOfferConfig(options.offer), { name: options.name });
+      const content = options.format === "pdf" ? await renderProposalPdf(proposal, brand) : renderProposalHtml(proposal, brand);
+      if (!options.out) {
+        process.stdout.write(content);
+        return;
+      }
+
+      await mkdir(dirname(options.out), { recursive: true });
+      await writeFile(options.out, content);
+      process.stdout.write(`Proposal for ${proposal.name}: ${proposal.points.length} problem${proposal.points.length === 1 ? "" : "s"} listed, ${proposal.offer.plans.length} plan${proposal.offer.plans.length === 1 ? "" : "s"}\n`);
+      process.stdout.write(`Output: ${options.out}\n`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
 const monitorProgram = program
   .command("monitor")
   .description("Re-audit client sites, compare each with its previous run, and write a monitoring summary.")

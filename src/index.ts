@@ -21,6 +21,8 @@ export { renderDashboard, writeDashboard } from "./monitor-dashboard.js";
 export type { DashboardInput } from "./monitor-dashboard.js";
 export type { QuickCheckOptions, QuickCheckSite, QuickCheckSummary } from "./monitor-quick.js";
 export { readWorkLog, serviceSections } from "./monitor-service.js";
+export { buildProposal, readOfferConfig, renderProposalHtml, renderProposalPdf } from "./proposal.js";
+export type { OfferConfig, Proposal } from "./proposal.js";
 export type { ServiceSection, SiteAvailability, SiteWork, WorkLogEntry } from "./monitor-service.js";
 export { extractPublicContact } from "./contact.js";
 export { detectDotnetStack } from "./dotnet-stack.js";

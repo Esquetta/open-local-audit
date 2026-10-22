@@ -408,6 +408,27 @@ open-local-audit compare reports/before/example-com reports/after/example-com --
 
 `compare` reads two JSON reports, either as files or as report directories containing `open-local-audit-report.json`, and matches findings by rule id. It lists fixed issues, issues that are still open, and new issues, with category and overall score changes, as Markdown (default), JSON, HTML, or PDF (`--out` is required for PDF); `--brand-config` applies report branding. When both audits were run with `--screenshot`, the HTML and PDF outputs show the homepage screenshots side by side under "Before and After"; the HTML embeds them so the file can be shared on its own. Screenshot paths are read relative to each report's directory, and files outside that directory are ignored. Markdown only says whether each screenshot was captured. Both reports must be for the same site (a leading `www.` is ignored) and the same profile, and the earlier report must come first. Rules added in a newer release appear as new issues, so compare reports produced by the same Open Local Audit version when the result goes to a customer. Run both audits with the same options too: a finding that only some options produce, such as broken links with `--check-links`, shows as fixed when the later audit skips that check. Comparison is local only and makes no network calls.
 
+Turn an audit into a monthly care proposal for the business:
+
+```bash
+open-local-audit proposal reports/riverside-dental --offer offer.json --name "Riverside Dental" --brand-config brand.json --format pdf --out proposal.pdf
+```
+
+`proposal` reads a JSON report (a file or report directory) and writes a one-page proposal as HTML (default) or PDF (`--out` is required for PDF). It lists up to three problems a business owner would notice, picked and worded the same way as the shortlist pitch briefs, with the overall score and how many more points the full report has; what monthly care includes; your plans; and the next step. `--name` sets the business name (default: the site's host), and `--brand-config` adds your business name, colors, and footer. Plans, prices, and wording come only from your offer file:
+
+```json
+{
+  "plans": [
+    { "name": "Care Lite", "price": "£29 / month", "features": ["Daily check", "Monthly report"] },
+    { "name": "Care", "price": "£49 / month", "features": ["Everything in Care Lite", "30 minutes of changes each month"] }
+  ],
+  "nextStep": "Reply to this email and I will set up the first check this week.",
+  "validDays": 14
+}
+```
+
+The offer file needs one to four `plans`, each with a `name`, a `price` written as you want it shown, and optional `features`. Optional fields are `title`, `intro`, `includes` (what monthly care includes; by default the monthly report, certificate and domain warnings, and history page that a monthly `monitor` run provides; list the daily check here if you schedule `--quick` for the client), `nextStep`, and `validDays` (prints a "Valid until" date). Unknown fields are rejected so a typo does not silently drop text. Every proposal says it is based on an automated check and that each point is confirmed on the live site before work starts. Proposals are local files: nothing is sent.
+
 Monitor client sites every month with one command:
 
 ```bash
@@ -521,6 +542,7 @@ The first implementation milestone is a CLI that accepts one URL and outputs:
 - CI-friendly exit codes with `--fail-on`.
 - Clear owner-readable recommendations.
 - Structured-data quality, address, opening-hours, service-location, CTA, and placeholder-copy checks.
+- Monthly care proposals from an audit with `proposal`, using your own plans and prices.
 - Monthly client monitoring with `monitor`: re-audits, progress comparisons with the previous run, client PDFs and email drafts with your signature, per-site history pages, a daily quick check, response-time and optional Lighthouse speed tracking, a summary of sites that need attention, monthly availability from the daily checks, a work log with included minutes, a client overview page, desktop notifications for scheduled runs, and a ready-made monthly schedule.
 - Optional domain registration expiry checks with `--check-domain`.
 - robots.txt crawl checks for the audited page.

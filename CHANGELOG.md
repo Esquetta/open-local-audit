@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.88.0 - 2026-10-22
+
+- Added `proposal`, which turns a JSON audit report into a one-page monthly care proposal as HTML or PDF: up to three problems a business owner would notice (chosen and worded like the shortlist pitch briefs), the overall score, what monthly care includes, the operator's plans, and the next step. Plans, prices, and wording come from an `--offer` JSON file that is validated strictly; `--name` sets the business name and `--brand-config` the branding. Nothing is sent.
+- Exported `buildProposal`, `readOfferConfig`, `renderProposalHtml`, `renderProposalPdf`, and the `OfferConfig` and `Proposal` types.
+- Updated the development dependency vitest to 4.1.12 for security advisories GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp.
+
 ## v0.87.0 - 2026-10-21
 
 - `monitor` writes `client-email.eml` next to every `client-email.md`: the same email as an unsent draft (`X-Unsent: 1`) with the client PDF attached (`comparison.pdf`, or the report PDF on a first run). Outlook for Windows opens it as a new message ready to send; other mail programs may show it as a received message to edit as new or forward. Nothing is sent. A new optional `client_email` column in the client list addresses it; several addresses are separated by semicolons, and anything other than plain ASCII addresses is rejected (also by `batch`, which reads the same client list format). Long subjects and recipient lists are folded onto short header lines. If the draft cannot be written, the run still counts and the site note says why. The summary JSON gains `emlPath` and the client overview a "Mail (.eml)" link.
