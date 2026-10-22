@@ -2,6 +2,10 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.88.1 - 2026-10-22
+
+- `proposal` no longer promises a one-page document: a typical offer fits on one PDF page, but an offer near the allowed limits can run to more. The command now prints a note with the page count when the PDF has more than one page, so it can be shortened before it reaches a client.
+
 ## v0.88.0 - 2026-10-22
 
 - Added `proposal`, which turns a JSON audit report into a one-page monthly care proposal as HTML or PDF: up to three problems a business owner would notice (chosen and worded like the shortlist pitch briefs), the overall score, what monthly care includes, the operator's plans, and the next step. Plans, prices, and wording come from an `--offer` JSON file that is validated strictly; `--name` sets the business name and `--brand-config` the branding. Nothing is sent.

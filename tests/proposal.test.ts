@@ -131,6 +131,23 @@ describe("care proposals", () => {
     expect(html.stdout).toContain("Proposal for Riverside Dental: 3 problems listed, 2 plans");
     expect(readFileSync(join(dir, "proposal.html"), "utf8")).toContain("<h1>Website care proposal for Riverside Dental</h1>");
 
+    expect(html.stdout).not.toContain("Note: the PDF runs to");
+
+    const longOffer = {
+      includes: Array.from({ length: 10 }, (_, index) => `Inclusion ${index + 1}: ${"a careful check of one more part of the website, ".repeat(5)}`),
+      plans: Array.from({ length: 4 }, (_, index) => ({ name: `Plan ${index + 1}`, price: "£99 / month", features: Array.from({ length: 10 }, () => "A long feature line that explains one more thing included in this plan") }))
+    };
+    writeFileSync(join(dir, "long-offer.json"), JSON.stringify(longOffer));
+    const long = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/cli.ts", "proposal", dir, "--offer", join(dir, "long-offer.json"), "--format", "pdf", "--out", join(dir, "long.pdf")],
+      { encoding: "utf8" }
+    );
+    expect(long.status).toBe(0);
+    expect(long.stdout).toMatch(/Note: the PDF runs to [2-9] pages; shorten the offer's includes or plan features to keep it to one\./);
+    const short = run(["--format", "pdf", "--out", join(dir, "short.pdf")]);
+    expect(short.stdout).not.toContain("Note: the PDF runs to");
+
     const pdf = run(["--format", "pdf"]);
     expect(pdf.status).toBe(1);
     expect(pdf.stderr).toContain("--out is required when proposal --format pdf is used");
