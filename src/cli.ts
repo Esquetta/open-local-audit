@@ -496,7 +496,7 @@ const compareProgram = program
 
 const proposalProgram = program
   .command("proposal")
-  .description("Write a one-page monthly care proposal for a business from its audit report and your offer file.")
+  .description("Write a short monthly care proposal for a business from its audit report and your offer file.")
   .argument("<report>", "JSON report file or report directory from an earlier audit")
   .requiredOption("--offer <path>", "read your plans, prices, and wording from a JSON file")
   .option("--name <name>", "business name to address (default: the site's host)")
@@ -526,6 +526,11 @@ const proposalProgram = program
       await writeFile(options.out, content);
       process.stdout.write(`Proposal for ${proposal.name}: ${proposal.points.length} problem${proposal.points.length === 1 ? "" : "s"} listed, ${proposal.offer.plans.length} plan${proposal.offer.plans.length === 1 ? "" : "s"}\n`);
       process.stdout.write(`Output: ${options.out}\n`);
+      // A typical offer fits on one page; a long one still renders, so say so before it reaches a client.
+      const pages = Buffer.isBuffer(content) ? (content.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length : 1;
+      if (pages > 1) {
+        process.stdout.write(`Note: the PDF runs to ${pages} pages; shorten the offer's includes or plan features to keep it to one.\n`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);

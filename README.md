@@ -414,7 +414,7 @@ Turn an audit into a monthly care proposal for the business:
 open-local-audit proposal reports/riverside-dental --offer offer.json --name "Riverside Dental" --brand-config brand.json --format pdf --out proposal.pdf
 ```
 
-`proposal` reads a JSON report (a file or report directory) and writes a one-page proposal as HTML (default) or PDF (`--out` is required for PDF). It lists up to three problems a business owner would notice, picked and worded the same way as the shortlist pitch briefs, with the overall score and how many more points the full report has; what monthly care includes; your plans; and the next step. `--name` sets the business name (default: the site's host), and `--brand-config` adds your business name, colors, and footer. Plans, prices, and wording come only from your offer file:
+`proposal` reads a JSON report (a file or report directory) and writes a short proposal as HTML (default) or PDF (`--out` is required for PDF). A typical offer fits on one PDF page; when a long offer runs to more, the command prints a note so you can shorten its `includes` or plan features. It lists up to three problems a business owner would notice, picked and worded the same way as the shortlist pitch briefs, with the overall score and how many more points the full report has; what monthly care includes; your plans; and the next step. `--name` sets the business name (default: the site's host), and `--brand-config` adds your business name, colors, and footer. Plans, prices, and wording come only from your offer file:
 
 ```json
 {

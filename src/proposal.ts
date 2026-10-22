@@ -74,7 +74,7 @@ function longDate(date: Date): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// A one-page monthly care proposal for a business from its audit: the problems an owner would notice, what monthly
+// A short monthly care proposal for a business from its audit: the problems an owner would notice, what monthly
 // care includes, and the operator's plans.
 export function buildProposal(report: AuditReport, offer: OfferConfig, options: { name?: string; now?: Date } = {}): Proposal {
   const now = options.now ?? new Date();
