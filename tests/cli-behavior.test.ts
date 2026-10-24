@@ -1357,7 +1357,7 @@ describe("CLI behavior helpers", () => {
       );
 
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("Invalid enum value");
+      expect(result.stderr).toContain('Invalid option: expected one of \\"standard\\"|\\"crm\\"');
     } finally {
       removeTempDir(tmp);
     }

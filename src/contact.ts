@@ -20,6 +20,13 @@ const enquiryFieldPattern = /name|phone|e-?mail|message/i;
 const newsletterCuePattern = /newsletter|subscri|mailchimp|list-manage/i;
 const socialHosts = ["facebook.com", "instagram.com", "linkedin.com", "x.com", "twitter.com", "tiktok.com", "youtube.com"];
 const placeholderSocialPattern = /\/(yourbusiness|example|placeholder|your-company|yourcompany)(?:\/?$)/i;
+// Error-tracking keys (Sentry on Wix and others) look like emails but reach nobody, and so do template addresses: a
+// placeholder name at a placeholder domain, such as your@email.com or name@domain.com.
+const nonContactEmailDomainPattern = /(?:^|\.)(?:sentry\.io|wixpress\.com|example\.(?:com|org|net))$/i;
+const placeholderEmailDomainPattern = /^(?:domain|yourdomain|email|yoursite|mysite|website|company|yourcompany)\.com$/i;
+const placeholderEmailLocalPattern = /^(?:your|you|name|yourname|email|youremail|user|username|someone|test|info|hello)$/i;
+const textBlockElements =
+  "address, article, aside, blockquote, dd, div, dl, dt, figcaption, footer, form, h1, h2, h3, h4, h5, h6, header, label, li, main, nav, ol, p, section, table, td, th, tr, ul";
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
@@ -47,7 +54,13 @@ function normalizeEmail(value: string): string | undefined {
   }
 
   emailPattern.lastIndex = 0;
-  if (/\.(png|jpe?g|gif|svg|webp|ico)$/i.test(email) || /@(example\.com|example\.org)$/i.test(email)) {
+  const [local, domain] = email.split("@");
+  if (
+    /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(email) ||
+    nonContactEmailDomainPattern.test(domain) ||
+    (placeholderEmailLocalPattern.test(local) && placeholderEmailDomainPattern.test(domain)) ||
+    /^[0-9a-f]{24,}$/i.test(local)
+  ) {
     return undefined;
   }
 
@@ -262,7 +275,15 @@ export function extractPublicContact(html: string, finalUrl: string): PublicCont
   }
 
   if (emails.length === 0) {
-    const textEmail = $("body").text().match(emailPattern)?.map((match) => normalizeEmail(match)).find(Boolean);
+    // Block boundaries become line breaks, so an address is not run together with the next block's text
+    // ("info@clinic.co.uk" followed by an "Address" heading must not read as "info@clinic.co.ukaddress"), while an
+    // address split across inline elements ("info<span>@</span>clinic.co.uk") still reads as one.
+    const body = $("body").clone();
+    body.find("script, style, noscript, template").remove();
+    body.find("br").replaceWith("\n");
+    body.find(textBlockElements).append("\n");
+    const bodyText = body.text();
+    const textEmail = bodyText.match(emailPattern)?.map((match) => normalizeEmail(match)).find(Boolean);
     if (textEmail) {
       emails.push(textEmail);
       sources.push("text-email");

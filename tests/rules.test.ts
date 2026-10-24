@@ -94,7 +94,7 @@ describe("audit rules", () => {
         "meta-description-present",
         "viewport-present",
         "single-h1",
-        "phone-link-present",
+        "phone-number-visible",
         "localbusiness-schema-present",
         "robots-txt-present",
         "sitemap-xml-present",

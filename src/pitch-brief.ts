@@ -43,6 +43,7 @@ const pitchReasons: Array<[RegExp, string]> = [
   [/^https-enabled$/, "Browsers mark the site as \"Not secure\"."],
   [/^viewport-present$/, "The page does not adapt to phones, where most local searches happen."],
   [/^phone-link-present$/, "The phone number is not tap-to-call on mobile."],
+  [/^phone-number-visible$/, "No phone number is shown, so visitors who want to call have to look elsewhere."],
   [/^primary-cta-present$|-cta$/, "There is no clear booking or contact button, so ready-to-buy visitors have to hunt for the next step."],
   [/^contact-form-present$/, "Visitors who do not want to call have no way to send an enquiry."],
   [/^broken-internal-links$/, "Some links on the site lead to dead pages."],
