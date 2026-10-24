@@ -484,6 +484,57 @@ function visiblePhones($: CheerioAPI, body: VisibleBody, country: CountryCode | 
   return Array.from(new Map(phones.map((phone) => [`${phone.e164};${phone.ext ?? ""}`, phone])).values());
 }
 
+// The country whose national number format a page uses: its country-code domain (".co.uk" is GB), else a regional
+// html lang such as "en-GB".
+function pageCountry($: CheerioAPI, snapshot: PageSnapshot): CountryCode | undefined {
+  const candidates: string[] = [];
+  try {
+    const tld = new URL(snapshot.finalUrl).hostname.toLowerCase().split(".").at(-1) ?? "";
+    candidates.push(tld === "uk" ? "GB" : tld.toUpperCase());
+  } catch {
+    // An unparsable URL gives no country.
+  }
+  candidates.push(($("html").attr("lang") ?? "").split(/[-_]/)[1]?.toUpperCase() ?? "");
+  return candidates.find((code) => code.length === 2 && supportedPhoneCountries.has(code)) as CountryCode | undefined;
+}
+
+// Numbers by their shape, counted even when the page's country is wrong or unknown (a UK business on a .com site keeps
+// WordPress's default lang="en-US"): a trunk-prefixed national number of 10 or 11 digits such as "0114 258 5525", and,
+// where the country may be the US or Canada, "(415) 555-0199", "415-555-0199", or "415 555 0199".
+const trunkPhonePattern = /(?<![\p{L}\p{N}+])\(?0\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}(?![\p{L}\p{N}])/gu;
+const northAmericanPhonePattern = /(?<![\p{L}\p{N}+])(?:\(\d{3}\)\s?\d{3}[\s.-]\d{4}|\d{3}[\s.-]\d{3}[\s.-]\d{4})(?![\p{L}\p{N}])/gu;
+
+const shownPhoneCache = new WeakMap<CheerioAPI, string[]>();
+
+// Phone numbers a visitor can see: tel: links, labelled numbers, unlabelled numbers written with an international or
+// trunk prefix (so order and reference numbers are not read as phones), and numbers that only have a phone's shape.
+function shownPhoneNumbers($: CheerioAPI, snapshot: PageSnapshot): string[] {
+  const cached = shownPhoneCache.get($);
+  if (cached) {
+    return cached;
+  }
+  const body = visibleBody($);
+  const country = pageCountry($, snapshot);
+  const lines = visibleLines(body);
+  const parsed = lines.flatMap((line) =>
+    findPhoneNumbersInText(line, country ? { defaultCountry: country } : {})
+      .filter(({ number, startsAt }) => number.isValid() && /^[+(0]/.test(line.slice(startsAt)))
+      .map(({ number }) => number.formatInternational())
+  );
+  const patterns = [trunkPhonePattern, ...(!country || country === "US" || country === "CA" ? [northAmericanPhonePattern] : [])];
+  const shaped = lines.flatMap((line) =>
+    patterns.flatMap((pattern) =>
+      [...line.matchAll(pattern)]
+        .map((match) => match[0])
+        .filter((value) => pattern !== trunkPhonePattern || [10, 11].includes(value.replace(/\D/g, "").length))
+        .map((value) => parsedPhone(value, country)?.display ?? value)
+    )
+  );
+  const numbers = [...new Set([...visiblePhones($, body, country).map((phone) => phone.display), ...parsed, ...shaped])];
+  shownPhoneCache.set($, numbers);
+  return numbers;
+}
+
 // Abbreviations map to one canonical form so "St." and "Street" match while "Street" and "Road" stay different.
 const canonicalAddressTokens: Record<string, string> = {
   st: "street",
@@ -1715,8 +1766,19 @@ const rules: Rule[] = [
     severity: "high",
     source: "Contact links",
     recommendation: "Add a tappable phone link using the tel: format.",
-    check: ({ $ }) => hasLink($, (href) => href.toLowerCase().startsWith("tel:")),
-    evidence: () => "No tel: link found"
+    // Only a number visitors can see but cannot tap counts here; a page without any number gets phone-number-visible.
+    check: ({ $, snapshot }) => hasLink($, (href) => href.toLowerCase().startsWith("tel:")) || shownPhoneNumbers($, snapshot).length === 0,
+    evidence: ({ $, snapshot }) => `Shown as text without a tel: link: ${shownPhoneNumbers($, snapshot).slice(0, 3).join(", ")}`
+  },
+  {
+    id: "phone-number-visible",
+    title: "No phone number is shown",
+    category: "trust-contact",
+    severity: "medium",
+    source: "Contact links",
+    recommendation: "Show the business phone number on the page as a tappable phone link (tel:) if customers call the business.",
+    check: ({ $, snapshot }) => hasLink($, (href) => href.toLowerCase().startsWith("tel:")) || shownPhoneNumbers($, snapshot).length > 0,
+    evidence: () => "No phone number or tel: link found on the page"
   },
   {
     id: "email-link-present",
