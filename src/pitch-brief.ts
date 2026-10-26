@@ -97,6 +97,9 @@ function offerFor(lead: ShortlistLead, report: AuditReport | undefined, points: 
   if (points.some((point) => point.findingId === "website-placeholder") || lead.hasWebsite === "no") {
     return "Starter website: the business has no working site to fix.";
   }
+  if (/domain does not resolve/i.test(lead.reason)) {
+    return "Website rescue or starter website: the listed website no longer loads because its domain does not resolve.";
+  }
   if (!report) {
     return "No offer yet: audit the website first.";
   }
@@ -109,7 +112,14 @@ function offerFor(lead: ShortlistLead, report: AuditReport | undefined, points: 
 }
 
 function checksFor(lead: ShortlistLead, report: AuditReport | undefined): string[] {
-  const checks = ["Re-check each pitch point on the live site; audits can be wrong or out of date."];
+  const dead = /domain does not resolve/i.test(lead.reason);
+  const checks = dead
+    ? [
+        "Open the listed website in a browser to confirm it does not load.",
+        "Confirm the business still trades (Companies House status, phone, recent reviews) before contacting it; a dead website can also mean the business has closed.",
+        "Avoid emailing an address at that domain; it may bounce. Call or use another public channel."
+      ]
+    : ["Re-check each pitch point on the live site; audits can be wrong or out of date."];
   const identity = report?.businessIdentity?.status;
   if (identity && identity !== "matched") {
     checks.push(`Confirm the website belongs to this business; the identity check is ${identity}.`);
@@ -210,7 +220,9 @@ export function renderPitchBriefsMarkdown(briefs: PitchBrief[], generatedAt: str
 
     if (brief.reportStatus !== "found") {
       lines.push(
-        brief.reportStatus === "none"
+        brief.reasons.some((reason) => /domain does not resolve/i.test(reason))
+          ? "The listed website does not load: its domain has no DNS record. Check the site in a browser to confirm before using it as the pitch."
+          : brief.reportStatus === "none"
           ? "No audit report is linked to this lead, so there are no pitch points yet."
           : "The linked audit report could not be read, so there are no pitch points yet.",
         ""

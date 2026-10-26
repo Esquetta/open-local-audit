@@ -1,4 +1,4 @@
-import { lookup as dnsLookup } from "node:dns/promises";
+import { lookup as dnsLookup, Resolver as DnsResolver } from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
 import { createRequire } from "node:module";
@@ -8,6 +8,7 @@ import { extractPublicContact } from "./contact.js";
 import { extractBusinessIdentities, type ObservedBusinessIdentity } from "./business-identity.js";
 import { probeTlsCertificate } from "./tls-probe.js";
 import type { PageSnapshot, PublicContact, RedirectHop } from "./types.js";
+import { domainUnresolvedError } from "./website-errors.js";
 
 const USER_AGENT = "open-local-audit/0.1 (+https://github.com/Esquetta/open-local-audit)";
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -43,6 +44,29 @@ export interface WebsiteEnrichmentOptions {
 class BlockedError extends Error {}
 
 class TimeoutError extends Error {}
+
+// The listed or requested host has no DNS record. It carries the host so that a dead redirect target is not blamed on
+// the listed website.
+class UnresolvedError extends Error {
+  constructor(
+    readonly hostname: string,
+    message = `${domainUnresolvedError}: ${hostname}`
+  ) {
+    super(message);
+  }
+}
+
+// getaddrinfo also reports ENOTFOUND on Windows and macOS when the machine is offline or its DNS server cannot be
+// reached, so a missing name is confirmed with a direct DNS query, which tells "no such name" (ENOTFOUND) and "no
+// address records" (ENODATA) apart from server and network failures.
+async function confirmNoSuchHost(hostname: string): Promise<boolean> {
+  try {
+    // A CNAME to a name without address records answers with no addresses rather than an error.
+    return (await new DnsResolver({ timeout: 3_000, tries: 2 }).resolve4(hostname)).length === 0;
+  } catch (error) {
+    return ["ENOTFOUND", "ENODATA"].includes((error as NodeJS.ErrnoException).code ?? "");
+  }
+}
 
 function normalizeHeaders(headers: Headers): Record<string, string> {
   const output: Record<string, string> = {};
@@ -83,13 +107,22 @@ function isPublicAddress(address: string): boolean {
   return /^[23]/.test(normalized) && !/^2001:(?:0:|db8:)/.test(normalized) && !normalized.startsWith("2002:");
 }
 
-async function resolvePublicAddresses(hostname: string, resolve: Resolver): Promise<string[]> {
+async function resolvePublicAddresses(hostname: string, resolve: Resolver, confirmMissing: (hostname: string) => Promise<boolean>): Promise<string[]> {
   hostname = hostname.replace(/^\[|\]$/g, "");
   if (hostname.toLowerCase() === "localhost") {
     throw new BlockedError("localhost is not a public website target");
   }
 
-  const addresses = isIP(hostname) ? [hostname] : await resolve(hostname);
+  let addresses: string[];
+  try {
+    addresses = isIP(hostname) ? [hostname] : await resolve(hostname);
+  } catch (error) {
+    // No such name (rather than a failing resolver): the domain has no record at all.
+    if (["ENOTFOUND", "ENODATA"].includes((error as NodeJS.ErrnoException).code ?? "") && (await confirmMissing(hostname))) {
+      throw new UnresolvedError(hostname);
+    }
+    throw error;
+  }
   if (addresses.length === 0 || addresses.some((address) => !isPublicAddress(address))) {
     throw new BlockedError("target resolved to a non-public address");
   }
@@ -300,6 +333,8 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxPages = Math.max(1, Math.min(options.maxPages ?? 3, 3));
   const resolve = options.resolve ?? defaultResolver;
+  // An injected resolver's error codes are taken as given; the default one is confirmed with a direct DNS query.
+  const confirmMissing = options.resolve ? async () => true : confirmNoSuchHost;
   const robotsRules = new Map<string, ReturnType<typeof robotsParser>>();
   const warnings: string[] = [];
   const sourceUrls: string[] = [];
@@ -324,7 +359,7 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
     let raceTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       const operation = (async () => {
-        const addresses = await resolvePublicAddresses(target.hostname, resolve);
+        const addresses = await resolvePublicAddresses(target.hostname, resolve, confirmMissing);
         if (controller.signal.aborted) throw new TimeoutError("request timed out");
         const response = options.fetch
           ? await options.fetch(target.toString(), { redirect: "manual", signal: controller.signal, headers: { "user-agent": USER_AGENT } })
@@ -363,8 +398,9 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
         response = await request(robotsUrl);
       }
     } catch (error) {
-      if (error instanceof BlockedError) throw error;
-      if (error instanceof TimeoutError) throw error;
+      // Only the site's own host missing from DNS is news; a robots.txt redirect to a dead host is just unreachable.
+      if (error instanceof UnresolvedError && error.hostname !== target.hostname) throw new BlockedError("robots.txt could not be reached");
+      if (error instanceof BlockedError || error instanceof TimeoutError || error instanceof UnresolvedError) throw error;
       throw new BlockedError("robots.txt could not be reached");
     }
     if (response.status === 404) {
@@ -382,13 +418,21 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
   };
   const fetchPage = async (requestedUrl: string, homepageHost: string): Promise<PageSnapshot> => {
     let current = new URL(requestedUrl);
+    const requestedHost = current.hostname;
     const hops: RedirectHop[] = [];
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
       if (!/^https?:$/.test(current.protocol) || current.username || current.password || !sameBusinessHost(homepageHost, current.hostname)) {
         throw new BlockedError("redirect left the business website");
       }
-      await allowedByRobots(current);
-      const response = await request(current);
+      let response: Response;
+      try {
+        await allowedByRobots(current);
+        response = await request(current);
+      } catch (error) {
+        // A redirect to a host without DNS is a broken redirect, not a dead listed website.
+        if (error instanceof UnresolvedError && error.hostname !== requestedHost) throw new Error(`redirect target ${error.hostname} does not resolve`);
+        throw error;
+      }
       if (isRedirect(response)) {
         const location = response.headers.get("location");
         if (!location) throw new Error("redirect response had no location");
@@ -416,7 +460,23 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
     if (!/^https?:$/.test(initial.protocol) || initial.username || initial.password) {
       throw new BlockedError("only public HTTP(S) URLs are allowed");
     }
-    const homepage = await fetchPage(initial.toString(), initial.hostname);
+    let homepage: PageSnapshot;
+    try {
+      homepage = await fetchPage(initial.toString(), initial.hostname);
+    } catch (error) {
+      // Listings often name only one of the www and bare hosts; when that one has no DNS record, try the other.
+      if (!(error instanceof UnresolvedError) || error.hostname !== initial.hostname || isIP(initial.hostname.replace(/^\[|\]$/g, ""))) throw error;
+      const alternate = new URL(initial.toString());
+      alternate.hostname = initial.hostname.startsWith("www.") ? initial.hostname.slice(4) : `www.${initial.hostname}`;
+      warnings.push(`${initial.hostname} does not resolve; tried ${alternate.hostname}`);
+      try {
+        homepage = await fetchPage(alternate.toString(), alternate.hostname);
+      } catch (retryError) {
+        throw retryError instanceof UnresolvedError && retryError.hostname === alternate.hostname
+          ? new UnresolvedError(initial.hostname, `${domainUnresolvedError}: ${initial.hostname} (also tried ${alternate.hostname})`)
+          : retryError;
+      }
+    }
     // Read the homepage certificate for the TLS rule from an address that passes the same public-address check,
     // connecting to it directly so a second DNS answer cannot redirect the handshake. Failures skip the rule.
     const probe = options.probeTls ?? (options.fetch ? undefined : probeTlsCertificate);
@@ -424,7 +484,7 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
       let dnsTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         const [address] = await Promise.race([
-          resolvePublicAddresses(new URL(homepage.finalUrl).hostname, resolve),
+          resolvePublicAddresses(new URL(homepage.finalUrl).hostname, resolve, confirmMissing),
           new Promise<never>((_resolve, reject) => {
             dnsTimer = setTimeout(() => reject(new TimeoutError("request timed out")), remainingMs());
           })
