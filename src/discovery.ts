@@ -5,6 +5,7 @@ import { auditProfileSchema, inputUrlSchema } from "./schema.js";
 import type { AuditProfile, DotnetStack, PublicContact } from "./types.js";
 import type { BusinessIdentityEvidence, BusinessIdentityResult } from "./business-identity.js";
 import type { AuditSelectionDecision } from "./audit-selection.js";
+import { isDomainUnresolved } from "./website-errors.js";
 
 export type DiscoveryProviderName = "manual-csv" | "google-places" | "overture";
 
@@ -760,6 +761,13 @@ function priorityFor(input: ProspectRowInput): Pick<ProspectExportRow, "priority
   if (input.audit?.identity?.status === "conflict") {
     return { priority: "medium", nextAction: "Verify the business website manually; its identity conflicts with the source." };
   }
+  // A dead listed domain has no page to compare, so its identity is always uncertain; that is not a reason to rank it lower.
+  if (input.audit?.status === "failed" && isDomainUnresolved(input.audit.error)) {
+    return {
+      priority: "high",
+      nextAction: "Confirm the business still trades, then offer a new website: its listed website domain no longer resolves."
+    };
+  }
   if (input.audit?.identity?.status === "uncertain") {
     return { priority: "medium", nextAction: "Confirm that this website belongs to the business before using its audit for outreach." };
   }
@@ -835,6 +843,10 @@ function opportunityScoreFor(input: ProspectRowInput): number {
     return 70;
   }
 
+  if (input.audit?.status === "failed" && isDomainUnresolved(input.audit.error)) {
+    return 95;
+  }
+
   if (input.audit?.status === "failed") {
     return 60;
   }
@@ -870,6 +882,10 @@ function opportunityReasonsFor(input: ProspectRowInput): string[] {
 
   if (input.resolution.status === "invalid") {
     return ["Website URL is invalid", "Manual cleanup needed before audit"];
+  }
+
+  if (input.audit?.status === "failed" && isDomainUnresolved(input.audit.error)) {
+    return ["Listed website domain does not resolve (site down; the domain may have lapsed)", "Website-build opportunity"];
   }
 
   if (input.audit?.status === "failed") {
@@ -949,6 +965,15 @@ function enrichmentFor(input: ProspectRowInput): Pick<
     };
   }
 
+  if (input.audit?.status === "failed" && isDomainUnresolved(input.audit.error)) {
+    return {
+      pitchAngle: "Restore or rebuild the website that no longer loads",
+      recommendedOffer: "Starter website build",
+      estimatedNeed: "High",
+      outreachPriorityReason: reasons.join("; ")
+    };
+  }
+
   if (input.audit?.status === "failed") {
     return {
       pitchAngle: "Manually qualify technical blockers",
@@ -973,6 +998,13 @@ function contactHandoffFor(input: ProspectRowInput): Pick<
   const contact = prospectContact(input);
   if (input.audit?.identity?.status === "conflict") {
     return { preferredContactChannel: "manual-review", outreachAction: "Resolve the website identity conflict before outreach.", contactabilityReason: "Only source contacts are retained; website identity conflicts with the business record." };
+  }
+  if (input.audit?.status === "failed" && isDomainUnresolved(input.audit.error)) {
+    return {
+      preferredContactChannel: "manual-review",
+      outreachAction: "Confirm the business still trades, then call or use a listing or social profile; email at that domain may bounce.",
+      contactabilityReason: "The listed website domain does not resolve, so the site is down and email at that domain may not work either."
+    };
   }
   if (input.audit?.identity?.status === "uncertain") {
     return { preferredContactChannel: "manual-review", outreachAction: "Verify the business and branch before using website contacts or audit findings.", contactabilityReason: "Website identity has insufficient or mixed evidence; contacts require manual verification." };
