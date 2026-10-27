@@ -135,7 +135,8 @@ async function defaultResolver(hostname: string): Promise<string[]> {
   return entries.map((entry) => entry.address);
 }
 
-function requestWithPinnedLookup(url: URL, addresses: string[], signal: AbortSignal): Promise<Response> {
+// Exported for tests only; it is not part of the public API.
+export function requestWithPinnedLookup(url: URL, addresses: string[], signal: AbortSignal): Promise<Response> {
   return new Promise<Response>((resolve, reject) => {
     const transport = url.protocol === "https:" ? https : http;
     const request = transport.request(
@@ -159,14 +160,21 @@ function requestWithPinnedLookup(url: URL, addresses: string[], signal: AbortSig
         });
         incoming.on("error", reject);
         incoming.on("end", () => {
-          const headers = new Headers();
-          for (const [name, value] of Object.entries(incoming.headers)) {
-            if (value !== undefined) {
-              headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+          // This runs in an event handler, so anything thrown here would crash the whole discovery run: a status
+          // outside 200-599 (some sites answer 999) or a header value Headers rejects fails only this site instead.
+          try {
+            const status = incoming.statusCode ?? 500;
+            if (status < 200 || status > 599) throw new Error(`website returned an invalid HTTP status ${status}`);
+            const headers = new Headers();
+            for (const [name, value] of Object.entries(incoming.headers)) {
+              if (value !== undefined) {
+                headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+              }
             }
+            resolve(new Response([204, 205, 304].includes(status) ? null : Buffer.concat(chunks), { status, headers }));
+          } catch (error) {
+            reject(error);
           }
-          const status = incoming.statusCode ?? 500;
-          resolve(new Response([204, 205, 304].includes(status) ? null : Buffer.concat(chunks), { status, headers }));
         });
       }
     );

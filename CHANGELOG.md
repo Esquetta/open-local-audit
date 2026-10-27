@@ -2,6 +2,10 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.90.1 - 2026-10-27
+
+- Fixed a crash in Overture discovery: a website answering with an HTTP status outside 200-599 (some sites send 999) made the whole run exit with `RangeError: init["status"] must be in the range of 200 to 599` and write no output. Such a site, or one with a header value that cannot be read, now fails only its own audit, as `website returned an invalid HTTP status <code>`.
+
 ## v0.90.0 - 2026-10-26
 
 - Discovery now reports a listed website whose domain has no DNS record as `website domain does not resolve: <host> (also tried <other host>)` instead of "robots.txt could not be reached". Such leads are dead or lapsed websites, so they get high priority, opportunity score 95, the reasons "Listed website domain does not resolve (site down; the domain may have lapsed)" and "Website-build opportunity", the offer "Starter website build", and a contact note that email at that domain may bounce. Pitch briefs offer a website rescue or starter website and replace the pitch-point checks with: open the site in a browser to confirm, confirm the business still trades, and avoid emailing that domain. In the Sheffield and Bristol runs of 23-25 October, a DNS check showed that 24 of the 29 "robots.txt could not be reached" failures were domains without any DNS record. A missing name reported by the system resolver is confirmed with a direct DNS query first, because Windows and macOS also report it when the machine is offline; resolver and network failures still count as unreachable. Only the listed host itself counts: a redirect to a host without DNS is reported as `redirect target <host> does not resolve`, and a robots.txt redirect to one as an unreachable robots.txt; both still count as ordinary failed audits.
