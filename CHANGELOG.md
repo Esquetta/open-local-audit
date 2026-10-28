@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.91.0 - 2026-10-28
+
+- Pitch briefs now rate each lead's pitch strength, with the reason: `strong` for one problem an owner notices at once (a dead domain, a placeholder or error page, a certificate or domain about to lapse, a page hidden from Google, no mobile viewport, a phone number that cannot be tapped, or no page title), `medium` for at least two smaller owner-visible problems (no meta description, no visible phone number, an http final URL, an outdated copyright year, a missing booking or contact action, a missing contact form, broken links, mixed content, or no visible address), `weak` when only minor points remain, and `none` without points or a report.
+- Added `shortlist --min-pitch-strength strong|medium|weak`, which reads each lead's JSON report from `--reports-dir` and keeps only leads at or above that strength before `--top` is applied. `--reports-dir` can now be used with it as well as with `--pitch-brief`.
+- Exported `pitchStrength`, `meetsPitchStrength`, and the `PitchStrength` type. `PitchBrief` gains `strength` and `strengthReason`.
+
 ## v0.90.1 - 2026-10-27
 
 - Fixed a crash in Overture discovery: a website answering with an HTTP status outside 200-599 (some sites send 999) made the whole run exit with `RangeError: init["status"] must be in the range of 200 to 599` and write no output. Such a site, or one with a header value that cannot be read, now fails only its own audit, as `website returned an invalid HTTP status <code>`.

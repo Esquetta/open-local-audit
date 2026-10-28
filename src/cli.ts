@@ -682,7 +682,8 @@ const shortlistProgram = program
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .option("--pitch-brief <path>", "write Markdown pitch notes for each shortlisted lead from its audit report")
-  .option("--reports-dir <path>", "resolve lead report paths for --pitch-brief from this directory (default: reports next to --input)")
+  .option("--reports-dir <path>", "resolve lead report paths for --pitch-brief and --min-pitch-strength from this directory (default: reports next to --input)")
+  .option("--min-pitch-strength <strength>", "include only leads whose audit supports at least this pitch strength: strong, medium, or weak")
   .action(async () => {
     const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
@@ -690,6 +691,7 @@ const shortlistProgram = program
       reviewCsv?: string;
       pitchBrief?: string;
       reportsDir?: string;
+      minPitchStrength?: string;
       top: string;
       minOpportunityScore?: string;
       minScore?: string;
@@ -731,8 +733,11 @@ const shortlistProgram = program
         throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
-      if (options.reportsDir && !options.pitchBrief) {
-        throw new Error("--reports-dir is only used with --pitch-brief");
+      if (options.reportsDir && !options.pitchBrief && !options.minPitchStrength) {
+        throw new Error("--reports-dir is only used with --pitch-brief or --min-pitch-strength");
+      }
+      if (options.minPitchStrength !== undefined && !["strong", "medium", "weak"].includes(options.minPitchStrength)) {
+        throw new Error("shortlist --min-pitch-strength must be strong, medium, or weak");
       }
 
       const top = Number(options.top);
@@ -747,6 +752,9 @@ const shortlistProgram = program
         reviewCsv: options.reviewCsv,
         pitchBrief: options.pitchBrief
           ? { out: options.pitchBrief, reportsDir: options.reportsDir ?? defaultReportsDir(options.input) }
+          : undefined,
+        minPitchStrength: options.minPitchStrength
+          ? { minimum: options.minPitchStrength as "strong" | "medium" | "weak", reportsDir: options.reportsDir ?? defaultReportsDir(options.input) }
           : undefined,
         format,
         shortlist: {

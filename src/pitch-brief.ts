@@ -14,6 +14,11 @@ export interface PitchPoint {
 
 export type PitchReportStatus = "found" | "missing" | "none";
 
+// How strong a cold email the audit supports. Strong: one problem an owner notices at once (the site is down, hidden
+// from Google, marked "Not secure", broken on phones, or its number cannot be tapped). Medium: at least two smaller
+// owner-visible problems. Weak: only minor points (headings, opening hours, map links), not worth a cold email.
+export type PitchStrength = "strong" | "medium" | "weak" | "none";
+
 export interface PitchBrief {
   rank: number;
   companyName: string;
@@ -26,6 +31,8 @@ export interface PitchBrief {
   contactabilityReason: string;
   reportStatus: PitchReportStatus;
   offer: string;
+  strength: PitchStrength;
+  strengthReason: string;
   points: PitchPoint[];
   morePoints: number;
   checks: string[];
@@ -62,6 +69,45 @@ const pitchReasons: Array<[RegExp, string]> = [
 ];
 
 export const maxPoints = 3;
+
+const strongPitchIds = new Set([
+  "website-placeholder",
+  "http-status-ok",
+  "tls-certificate-valid",
+  "domain-expiry",
+  "page-indexable",
+  "robots-txt-allows-page",
+  "viewport-present",
+  "phone-link-present",
+  "title-present"
+]);
+const mediumPitchPattern =
+  // https-enabled only says the final URL is http; HTTPS may still work, so it is not enough on its own.
+  /^(?:https-enabled|phone-number-visible|contact-form-present|broken-internal-links|meta-description-present|mixed-content-absent|current-date-signals|visible-address-present|primary-cta-present)$|-cta$/;
+const strengthRank: Record<PitchStrength, number> = { strong: 3, medium: 2, weak: 1, none: 0 };
+
+export function pitchStrength(leadReason: string, report: AuditReport | undefined): { strength: PitchStrength; reason: string } {
+  if (/domain does not resolve/i.test(leadReason)) {
+    return { strength: "strong", reason: "the listed website does not load" };
+  }
+  const points = report ? pitchPoints(report) : [];
+  const strong = points.find((point) => strongPitchIds.has(point.findingId));
+  if (strong) {
+    return { strength: "strong", reason: strong.title };
+  }
+  const medium = points.filter((point) => mediumPitchPattern.test(point.findingId));
+  if (medium.length >= 2) {
+    return { strength: "medium", reason: medium.slice(0, 2).map((point) => point.title).join("; ") };
+  }
+  if (points.length > 0) {
+    return { strength: "weak", reason: `only minor points: ${points.slice(0, 3).map((point) => point.title).join("; ")}` };
+  }
+  return { strength: "none", reason: report ? "no owner-visible problems" : "no audit report" };
+}
+
+export function meetsPitchStrength(strength: PitchStrength, minimum: PitchStrength): boolean {
+  return strengthRank[strength] >= strengthRank[minimum];
+}
 // The chain, public-body, and location reasons that discovery writes into opportunityReasons.
 const placementFlagPattern =
   /public-sector domain|looks like a multi-location brand|branch page on a larger site|phone area code \S+ differs/i;
@@ -136,6 +182,7 @@ function checksFor(lead: ShortlistLead, report: AuditReport | undefined): string
 
 export function buildPitchBrief(lead: ShortlistLead, report: AuditReport | undefined, reportStatus: PitchReportStatus): PitchBrief {
   const points = report ? pitchPoints(report) : [];
+  const { strength, reason: strengthReason } = pitchStrength(lead.reason, report);
   return {
     rank: lead.rank,
     companyName: lead.companyName,
@@ -151,6 +198,8 @@ export function buildPitchBrief(lead: ShortlistLead, report: AuditReport | undef
     contactabilityReason: lead.contactabilityReason,
     reportStatus,
     offer: offerFor(lead, report, points),
+    strength,
+    strengthReason,
     points: points.slice(0, maxPoints),
     morePoints: Math.max(points.length - maxPoints, 0),
     checks: checksFor(lead, report)
@@ -211,6 +260,7 @@ export function renderPitchBriefsMarkdown(briefs: PitchBrief[], generatedAt: str
       "",
       `- Website: ${brief.website ? inline(brief.website) : "None found"}`,
       `- Offer: ${brief.offer}`,
+      `- Pitch strength: ${brief.strength} (${inline(brief.strengthReason)})`,
       `- Priority: ${brief.priority || "unknown"}${brief.opportunityScore === undefined ? "" : ` (opportunity score ${brief.opportunityScore})`}`,
       `- Contact: ${brief.contactChannel ? inline(brief.contactChannel) : "unknown"}${brief.contactabilityReason ? ` - ${inline(brief.contactabilityReason)}` : ""}`,
       ...(brief.reasons.length > 0 ? [`- Why it was shortlisted: ${brief.reasons.map(inline).join("; ")}`] : []),
