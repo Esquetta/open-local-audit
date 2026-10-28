@@ -71,8 +71,8 @@ export {
 } from "./review.js";
 export { runLighthouseAudit } from "./lighthouse.js";
 export { renderPdfReport } from "./pdf.js";
-export { buildPitchBrief, readLeadReport, renderPitchBriefsMarkdown } from "./pitch-brief.js";
-export type { PitchBrief, PitchPoint, PitchReportStatus } from "./pitch-brief.js";
+export { buildPitchBrief, meetsPitchStrength, pitchStrength, readLeadReport, renderPitchBriefsMarkdown } from "./pitch-brief.js";
+export type { PitchBrief, PitchPoint, PitchReportStatus, PitchStrength } from "./pitch-brief.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";
 export {
   buildLeadShortlist,
