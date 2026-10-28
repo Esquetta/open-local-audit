@@ -44,7 +44,7 @@ export async function runShortlistReport(options: ShortlistRunOptions): Promise<
       result.leads.map(async (lead) => pitchStrength(lead.reason, (await readLeadReport(reportsDir, lead.reportPath)).report).strength)
     );
     const strongEnough = result.leads.filter((_lead, index) => meetsPitchStrength(strengths[index], minimum));
-    const leads = strongEnough.slice(0, top).map((lead, index) => ({ rank: index + 1, ...lead, ...{ rank: index + 1 } }));
+    const leads = strongEnough.slice(0, top).map(({ rank: _rank, ...lead }, index) => ({ rank: index + 1, ...lead }));
     result = { ...result, filteredRows: result.filteredRows + result.leads.length - strongEnough.length, selected: leads.length, leads };
   }
 
