@@ -2,6 +2,13 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.92.0 - 2026-10-29
+
+- Added `shortlist --email-drafts <dir> --outreach <file>`, which writes an unsent `.eml` cold email draft for each shortlisted lead rated strong or medium, from its pitch brief and your own wording, sender, and company details, with an opt-out line, plus an `index.md` that lists every lead with its draft or the reason it was skipped. Drafts go to the lead's `publicEmail` when it holds a plain address. Weak and unrated leads are skipped, and so are dead-domain leads, because email at that domain may bounce. `--no-links` keeps URLs, domains, and email addresses out of drafts. A run replaces the drafts an earlier run wrote to the same folder. Nothing is sent.
+- A robots.txt that answers 401, 403, or another 4xx status other than 429 now counts as unavailable, so the site is audited as RFC 9309 allows, instead of failing with "robots.txt did not permit crawling". 429 and 5xx answers still count as a disallow.
+- Added `--version`.
+- `renderClientEml` accepts a draft without an attachment and writes it as plain text. Exported `buildOutreachDraft`, `planOutreachDrafts`, `readOutreachConfig`, `renderOutreachEml`, and `renderOutreachIndex`.
+
 ## v0.91.0 - 2026-10-28
 
 - Pitch briefs now rate each lead's pitch strength, with the reason: `strong` for one problem an owner notices at once (a dead domain, a placeholder or error page, a certificate or domain about to lapse, a page hidden from Google, no mobile viewport, a phone number that cannot be tapped, or no page title), `medium` for at least two smaller owner-visible problems (no meta description, no visible phone number, an http final URL, an outdated copyright year, a missing booking or contact action, a missing contact form, broken links, mixed content, or no visible address), `weak` when only minor points remain, and `none` without points or a report.

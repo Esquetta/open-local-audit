@@ -35,6 +35,7 @@ import {
 } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
+import type { OutreachConfig } from "./outreach.js";
 import { runShortlistReport } from "./shortlist-runner.js";
 import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
@@ -682,8 +683,11 @@ const shortlistProgram = program
   .option("--summary-json <path>", "write shortlist automation summary JSON output")
   .option("--format <format>", "shortlist report format: markdown, json, or csv", "markdown")
   .option("--pitch-brief <path>", "write Markdown pitch notes for each shortlisted lead from its audit report")
-  .option("--reports-dir <path>", "resolve lead report paths for --pitch-brief and --min-pitch-strength from this directory (default: reports next to --input)")
+  .option("--reports-dir <path>", "resolve lead report paths for --pitch-brief, --min-pitch-strength, and --email-drafts from this directory (default: reports next to --input)")
   .option("--min-pitch-strength <strength>", "include only leads whose audit supports at least this pitch strength: strong, medium, or weak")
+  .option("--email-drafts <dir>", "write an unsent .eml cold email draft for each strong or medium lead, and an index.md, to this directory")
+  .option("--outreach <path>", "read your sender, company details, and offer wording for --email-drafts from a JSON file")
+  .option("--no-links", "leave drafts free of URLs, domains, and email addresses; leads whose draft would contain one are skipped")
   .action(async () => {
     const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
@@ -692,6 +696,9 @@ const shortlistProgram = program
       pitchBrief?: string;
       reportsDir?: string;
       minPitchStrength?: string;
+      emailDrafts?: string;
+      outreach?: string;
+      links: boolean;
       top: string;
       minOpportunityScore?: string;
       minScore?: string;
@@ -733,8 +740,23 @@ const shortlistProgram = program
         throw new Error("shortlist --format must be markdown, json, or csv");
       }
 
-      if (options.reportsDir && !options.pitchBrief && !options.minPitchStrength) {
-        throw new Error("--reports-dir is only used with --pitch-brief or --min-pitch-strength");
+      if (options.reportsDir && !options.pitchBrief && !options.minPitchStrength && !options.emailDrafts) {
+        throw new Error("--reports-dir is only used with --pitch-brief, --min-pitch-strength, or --email-drafts");
+      }
+      if (Boolean(options.emailDrafts) !== Boolean(options.outreach)) {
+        throw new Error("--email-drafts and --outreach must be used together");
+      }
+      if (!options.links && !options.emailDrafts) {
+        throw new Error("--no-links is only used with --email-drafts");
+      }
+      let outreach: OutreachConfig | undefined;
+      if (options.outreach) {
+        const { configLink, readOutreachConfig } = await import("./outreach.js");
+        outreach = await readOutreachConfig(options.outreach);
+        const link = options.links ? undefined : configLink(outreach);
+        if (link) {
+          throw new Error(`Outreach config ${options.outreach} contains "${link}", which --no-links leaves out of drafts`);
+        }
       }
       if (options.minPitchStrength !== undefined && !["strong", "medium", "weak"].includes(options.minPitchStrength)) {
         throw new Error("shortlist --min-pitch-strength must be strong, medium, or weak");
@@ -756,6 +778,10 @@ const shortlistProgram = program
         minPitchStrength: options.minPitchStrength
           ? { minimum: options.minPitchStrength as "strong" | "medium" | "weak", reportsDir: options.reportsDir ?? defaultReportsDir(options.input) }
           : undefined,
+        emailDrafts:
+          options.emailDrafts && outreach
+            ? { dir: options.emailDrafts, config: outreach, reportsDir: options.reportsDir ?? defaultReportsDir(options.input), links: options.links }
+            : undefined,
         format,
         shortlist: {
           top,
@@ -793,6 +819,9 @@ const shortlistProgram = program
       }
       if (options.pitchBrief) {
         process.stdout.write(`Pitch brief: ${options.pitchBrief}\n`);
+      }
+      if (options.emailDrafts) {
+        process.stdout.write(`Email drafts: ${join(options.emailDrafts, "index.md")}\n`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -922,6 +951,7 @@ const reviewProgram = program
 
 program
   .name("open-local-audit")
+  .version((createRequire(import.meta.url)("../package.json") as { version: string }).version)
   .description("Audit a public local-business website and generate an evidence-backed report.")
   .argument("[url]", "HTTP or HTTPS URL to audit")
   .option("--input <path>", "read URLs from a text file for batch audits")

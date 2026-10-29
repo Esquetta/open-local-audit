@@ -1,5 +1,6 @@
-import { mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import type { OutreachConfig } from "./outreach.js";
 import { buildPitchBrief, meetsPitchStrength, pitchStrength, readLeadReport, renderPitchBriefsMarkdown, type PitchStrength } from "./pitch-brief.js";
 import {
   buildLeadShortlist,
@@ -22,6 +23,8 @@ export interface ShortlistRunOptions {
   pitchBrief?: { out: string; reportsDir: string };
   // Keep only leads whose audit supports at least this pitch strength, read from reportsDir, before taking the top N.
   minPitchStrength?: { minimum: PitchStrength; reportsDir: string };
+  // Write an unsent .eml cold email draft for each lead worth one, plus an index of every lead and why it was skipped.
+  emailDrafts?: { dir: string; config: OutreachConfig; reportsDir: string; links: boolean };
   format: ShortlistFormat;
   shortlist: Omit<ShortlistOptions, "reviewRows">;
 }
@@ -63,16 +66,42 @@ export async function runShortlistReport(options: ShortlistRunOptions): Promise<
     await writeWorkflowOutputFile(options.summaryJson, renderShortlistSummaryJson(result));
   }
 
-  if (options.pitchBrief) {
-    const reportsDir = options.pitchBrief.reportsDir;
-    const briefs = await Promise.all(
+  const readBriefs = (reportsDir: string) =>
+    Promise.all(
       result.leads.map(async (lead) => {
         const { report, status } = await readLeadReport(reportsDir, lead.reportPath);
         return buildPitchBrief(lead, report, status);
       })
     );
+
+  if (options.pitchBrief) {
+    const briefs = await readBriefs(options.pitchBrief.reportsDir);
     await mkdir(dirname(options.pitchBrief.out), { recursive: true });
     await writeWorkflowOutputFile(options.pitchBrief.out, renderPitchBriefsMarkdown(briefs, new Date().toISOString()));
+  }
+
+  if (options.emailDrafts) {
+    const { dir, config, reportsDir, links } = options.emailDrafts;
+    // The .eml writer lives with monitoring, which loads the PDF renderer, so it is only imported when drafts are asked for.
+    const { planOutreachDrafts, readLeadEmails, renderOutreachEml, renderOutreachIndex } = await import("./outreach.js");
+    const planned = planOutreachDrafts(await readBriefs(reportsDir), config, { emails: readLeadEmails(input), links });
+    await mkdir(dir, { recursive: true });
+    // Drafts from an earlier run are named by rank, so they would sit next to the new ones, including drafts for
+    // leads since marked contacted or do-not-contact. Only files with this command's naming are removed.
+    for (const name of await readdir(dir)) {
+      if (/^\d{2,}-[a-z0-9-]+\.eml$/.test(name)) {
+        await rm(join(dir, name), { force: true });
+      }
+    }
+    for (const { draft, file } of planned) {
+      if (draft && file) {
+        await writeWorkflowOutputFile(join(dir, file), renderOutreachEml(draft));
+      }
+    }
+    await writeWorkflowOutputFile(
+      join(dir, "index.md"),
+      renderOutreachIndex(planned.map(({ draft: _draft, ...entry }) => entry), new Date().toISOString())
+    );
   }
 
   return result;

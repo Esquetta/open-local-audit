@@ -74,6 +74,20 @@ describe("website enrichment", () => {
     expect(requests).toEqual(["https://shop.example/robots.txt"]);
   });
 
+  it("treats a 4xx robots.txt as unavailable and a 429 or 5xx one as a disallow", async () => {
+    const run = (robotsStatus: number) =>
+      enrichWebsite("https://shop.example/", {
+        resolve: publicResolver,
+        fetch: async (input) => (input.toString().endsWith("/robots.txt") ? response("", robotsStatus) : response("<title>Shop</title>"))
+      });
+    for (const status of [401, 403, 410]) {
+      expect((await run(status)).status).toBe("success");
+    }
+    for (const status of [429, 500, 503]) {
+      expect(await run(status)).toMatchObject({ status: "blocked", error: "robots.txt did not permit crawling" });
+    }
+  });
+
   it("bounds a slow or oversized response", async () => {
     const timedOut = await enrichWebsite("https://shop.example/", {
       timeoutMs: 10,
