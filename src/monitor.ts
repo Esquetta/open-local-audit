@@ -268,23 +268,30 @@ export interface ClientEmlInput {
   to?: string[];
   subject: string;
   body: string;
-  attachment: { filename: string; data: Buffer };
+  attachment?: { filename: string; data: Buffer };
 }
 
-// An unsent email draft (.eml) with the PDF attached. Mail programs such as Outlook open it ready to edit and send;
-// nothing is sent by Open Local Audit. It has no sender, so the mail program uses its own account.
+// An unsent email draft (.eml), with the PDF attached when there is one. Mail programs such as Outlook open it ready
+// to edit and send; nothing is sent by Open Local Audit. It has no sender, so the mail program uses its own account.
 export function renderClientEml(input: ClientEmlInput): string {
   const invalid = (input.to ?? []).find((address) => !isPlainEmailAddress(address));
   if (invalid !== undefined) {
     throw new Error(`Not a plain email address: ${JSON.stringify(invalid)}`);
   }
   const boundary = `open-local-audit-${createHash("sha256").update(input.subject).update(input.body).digest("hex").slice(0, 24)}`;
-  const filename = input.attachment.filename.replace(/[^A-Za-z0-9._-]/g, "_");
-  return [
+  const headers = [
     "X-Unsent: 1",
     ...(input.to && input.to.length > 0 ? [`To: ${input.to.join(",\r\n ")}`] : []),
     `Subject: ${headerText("Subject", input.subject)}`,
-    "MIME-Version: 1.0",
+    "MIME-Version: 1.0"
+  ];
+  const text = base64Lines(Buffer.from(input.body.replace(/\r?\n/g, "\r\n")));
+  if (!input.attachment) {
+    return [...headers, "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", text, ""].join("\r\n");
+  }
+  const filename = input.attachment.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+  return [
+    ...headers,
     "Content-Type: multipart/mixed;",
     ` boundary="${boundary}"`,
     "",
@@ -292,7 +299,7 @@ export function renderClientEml(input: ClientEmlInput): string {
     "Content-Type: text/plain; charset=utf-8",
     "Content-Transfer-Encoding: base64",
     "",
-    base64Lines(Buffer.from(input.body.replace(/\r?\n/g, "\r\n"))),
+    text,
     `--${boundary}`,
     `Content-Type: application/pdf; name="${filename}"`,
     `Content-Disposition: attachment; filename="${filename}"`,

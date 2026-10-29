@@ -411,11 +411,13 @@ export async function enrichWebsite(url: string, options: WebsiteEnrichmentOptio
       if (error instanceof BlockedError || error instanceof TimeoutError || error instanceof UnresolvedError) throw error;
       throw new BlockedError("robots.txt could not be reached");
     }
-    if (response.status === 404) {
+    // RFC 9309: a 4xx robots.txt is unavailable, so crawling is allowed. 429 asks for a slower crawl, and 5xx or
+    // anything else means disallow.
+    if (response.status >= 400 && response.status < 500 && response.status !== 429) {
       robotsRules.set(cacheKey, robotsParser(new URL("/robots.txt", target.origin).toString(), ""));
       return;
     }
-    if (response.status === 403 || response.status < 200 || response.status >= 300) {
+    if (response.status < 200 || response.status >= 300) {
       throw new BlockedError("robots.txt did not permit crawling");
     }
     const policy = robotsParser(new URL("/robots.txt", target.origin).toString(), await readLimitedText(response));
