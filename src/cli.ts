@@ -35,7 +35,7 @@ import {
 } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
 import { resolveGoogleMapsApiKey } from "./secrets.js";
-import type { OutreachConfig } from "./outreach.js";
+import type { LegalStatusIndex, OutreachConfig } from "./outreach.js";
 import { runShortlistReport } from "./shortlist-runner.js";
 import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
 import { renderTerminalSummary } from "./summary.js";
@@ -688,6 +688,7 @@ const shortlistProgram = program
   .option("--email-drafts <dir>", "write an unsent .eml cold email draft for each strong or medium lead, and an index.md, to this directory")
   .option("--outreach <path>", "read your sender, company details, and offer wording for --email-drafts from a JSON file")
   .option("--no-links", "leave drafts free of URLs, domains, and email addresses; leads whose draft would contain one are skipped")
+  .option("--legal-status <path>", "read Companies House results (leadKey or label, companyNumber, companyType, companyStatus) and draft only for active companies and LLPs")
   .action(async () => {
     const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
@@ -697,6 +698,7 @@ const shortlistProgram = program
       reportsDir?: string;
       minPitchStrength?: string;
       emailDrafts?: string;
+      legalStatus?: string;
       outreach?: string;
       links: boolean;
       top: string;
@@ -749,10 +751,16 @@ const shortlistProgram = program
       if (!options.links && !options.emailDrafts) {
         throw new Error("--no-links is only used with --email-drafts");
       }
+      if (options.legalStatus && !options.emailDrafts) {
+        throw new Error("--legal-status is only used with --email-drafts");
+      }
       let outreach: OutreachConfig | undefined;
+      let legal: LegalStatusIndex | undefined;
       if (options.outreach) {
-        const { configLink, readOutreachConfig } = await import("./outreach.js");
+        const { configLink, readLegalStatus, readOutreachConfig } = await import("./outreach.js");
         outreach = await readOutreachConfig(options.outreach);
+        // Read before anything is written, so a bad file leaves the previous outputs as they were.
+        legal = options.legalStatus ? readLegalStatus(await readFile(options.legalStatus, "utf8")) : undefined;
         const link = options.links ? undefined : configLink(outreach);
         if (link) {
           throw new Error(`Outreach config ${options.outreach} contains "${link}", which --no-links leaves out of drafts`);
@@ -780,7 +788,7 @@ const shortlistProgram = program
           : undefined,
         emailDrafts:
           options.emailDrafts && outreach
-            ? { dir: options.emailDrafts, config: outreach, reportsDir: options.reportsDir ?? defaultReportsDir(options.input), links: options.links }
+            ? { dir: options.emailDrafts, config: outreach, reportsDir: options.reportsDir ?? defaultReportsDir(options.input), links: options.links, legal }
             : undefined,
         format,
         shortlist: {

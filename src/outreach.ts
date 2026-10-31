@@ -42,10 +42,23 @@ export async function readOutreachConfig(path: string): Promise<OutreachConfig> 
 }
 
 // A URL, a bare domain, or an email address. Some mail tools rewrite these into tracking redirects, and links in a
-// first cold email hurt delivery, so --no-links keeps drafts free of them. File names such as robots.txt or Next.js
-// are not domains.
-const linkPattern =
-  /\bhttps?:\/\/|\bwww\.|\b[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?!(?:txt|js|json|html?|php|xml|css|pdf|png|jpe?g|gif|svg|webp)\b)[a-z]{2,63}\b/i;
+// first cold email hurt delivery, so --no-links keeps drafts free of them. A domain ends in a country code or a common
+// generic top-level domain, so file names (robots.txt, Next.js) and names such as "Howard & Co.leads" do not count.
+const genericTlds = [
+  "com", "net", "org", "info", "biz", "io", "app", "dev", "ai", "tv", "xyz", "online", "site", "website", "web", "page",
+  "shop", "store", "tech", "cloud", "digital", "email", "agency", "studio", "services", "solutions", "consulting",
+  "company", "business", "group", "global", "london", "scot", "wales", "cymru", "clinic", "dental", "dentist", "health",
+  "care", "law", "legal", "lawyer", "attorney", "accountant", "accountants", "finance", "tax", "properties", "homes",
+  "estate", "plumbing", "builders", "construction", "fitness", "salon", "beauty", "hair", "spa", "restaurant", "cafe",
+  "bar", "pub", "hotel", "travel", "events", "photography", "media", "news", "blog", "live", "life", "world", "today",
+  "space", "pro", "club", "design", "marketing", "education", "academy", "school", "ltd", "limited", "art", "vet",
+  "church", "garden", "cleaning", "photo", "photos", "florist", "works"
+];
+const label = "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?";
+const linkPattern = new RegExp(
+  `\\bhttps?://|\\bwww\\.|[^\\s@]+@[^\\s@]+\\.[a-z]{2,}|\\b${label}(?:\\.${label})*\\.(?:(?!js\\b)[a-z]{2}|${genericTlds.join("|")})\\b`,
+  "i"
+);
 
 export function findLink(value: string): string | undefined {
   return value.match(linkPattern)?.[0];
@@ -141,11 +154,85 @@ export function readLeadEmails(csv: string): Map<string, string> {
   return emails;
 }
 
+export interface LegalStatus {
+  companyNumber: string;
+  companyType: string;
+  companyStatus: string;
+}
+
+function nameKey(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+// The operator's Companies House results, one row per lead, matched by leadKey or else by the lead's label.
+export interface LegalStatusIndex {
+  byKey: Map<string, LegalStatus>;
+  byName: Map<string, LegalStatus>;
+}
+
+export function readLegalStatus(csv: string): LegalStatusIndex {
+  const lines = cleanInputLines(csv);
+  const byKey = new Map<string, LegalStatus>();
+  const byName = new Map<string, LegalStatus>();
+  const headers = parseCsvLine(lines[0] ?? "");
+  const column = (...names: string[]) => names.map((name) => headers.indexOf(name)).find((index) => index >= 0) ?? -1;
+  const [key, name, number, type, status] = [
+    column("leadKey"),
+    column("label", "companyName"),
+    column("companyNumber"),
+    column("companyType"),
+    column("companyStatus")
+  ];
+  if ((key < 0 && name < 0) || type < 0 || status < 0) {
+    throw new Error("--legal-status needs leadKey or label, companyType, and companyStatus columns");
+  }
+  for (const line of lines.slice(1)) {
+    const cells = parseCsvLine(line);
+    const row = { companyNumber: cells[number] ?? "", companyType: cells[type] ?? "", companyStatus: cells[status] ?? "" };
+    // A row is found by its leadKey first and by its label as well, in case the leads come from another export.
+    if (key >= 0 && cells[key]) {
+      byKey.set(cells[key], row);
+    }
+    if (name >= 0 && nameKey(cells[name] ?? "")) {
+      byName.set(nameKey(cells[name]), row);
+    }
+  }
+  return { byKey, byName };
+}
+
+// Bodies corporate under UK PECR, which may receive business marketing email without prior consent: companies
+// (Companies House types such as ltd, plc, private-limited-guarant-nsc), LLPs, CICs, CIOs, and registered societies,
+// written as Companies House codes or labels. Sole traders, partnerships, and limited partnerships are not.
+const corporateType = new RegExp(
+  [
+    "^(?:ltd|plc|llp|cic|cio|private-limited\\S*|private-unlimited\\S*|old-public-company|northern-ireland|royal-charter",
+    "registered-society\\S*|industrial-and-provident-society|european-public-limited-liability-company-se",
+    "investment-company-with-variable-capital|(?:scottish-)?charitable-incorporated-organisation)$",
+    "^(?:(?:private|public) )?(?:limited|unlimited) company$|^limited liability partnership$|^community interest company$",
+    "^(?:scottish )?charitable incorporated organisation$|^registered society$"
+  ].join("|"),
+  "i"
+);
+
+function legalReason(status: LegalStatus | undefined): string | undefined {
+  if (!status) {
+    return "legal form not confirmed: add the lead to --legal-status after a Companies House check";
+  }
+  if (!corporateType.test(status.companyType.trim())) {
+    return `not a company or LLP (${status.companyType || "type unknown"}); UK PECR needs prior consent, so phone or use the contact form`;
+  }
+  if (status.companyStatus.trim().toLowerCase() !== "active") {
+    return `company status is ${status.companyStatus || "unknown"}, not active`;
+  }
+  return undefined;
+}
+
 export interface OutreachDraftResult {
   rank: number;
   companyName: string;
   strength: PitchBrief["strength"];
   to?: string;
+  company?: string;
   file?: string;
   skipped?: string;
 }
@@ -164,20 +251,32 @@ function slug(value: string): string {
 }
 
 // Which shortlisted leads get a draft, and the draft file for each. Weak and unrated leads are not worth a cold email,
-// and a lead whose website domain does not resolve would bounce, so those are listed with the reason instead.
+// and a lead whose website domain does not resolve would bounce, so those are listed with the reason instead. With
+// Companies House results, only active companies and LLPs get a draft.
 export function planOutreachDrafts(
   briefs: PitchBrief[],
   config: OutreachConfig,
-  options: { emails: Map<string, string>; links: boolean }
+  options: { emails: Map<string, string>; links: boolean; legal?: LegalStatusIndex }
 ): Array<OutreachDraftResult & { draft?: OutreachDraft }> {
   return briefs.map((brief) => {
     const to = options.emails.get(brief.leadKey);
-    const base = { rank: brief.rank, companyName: brief.companyName, strength: brief.strength, ...(to ? { to } : {}) };
+    const legal = options.legal && (options.legal.byKey.get(brief.leadKey) ?? options.legal.byName.get(nameKey(brief.companyName)));
+    const base = {
+      rank: brief.rank,
+      companyName: brief.companyName,
+      strength: brief.strength,
+      ...(to ? { to } : {}),
+      ...(legal ? { company: `${legal.companyNumber ? `${legal.companyNumber} ` : ""}(${legal.companyType || "type unknown"}, ${legal.companyStatus || "status unknown"})` } : {})
+    };
     if (brief.reasons.some((reason) => /domain does not resolve/i.test(reason))) {
       return { ...base, skipped: "website domain does not resolve; email there may bounce, so phone or use another public channel" };
     }
     if (!meetsPitchStrength(brief.strength, "medium") || brief.points.length === 0) {
       return { ...base, skipped: `pitch strength ${brief.strength}: not worth a cold email` };
+    }
+    const notCorporate = options.legal ? legalReason(legal) : undefined;
+    if (notCorporate) {
+      return { ...base, skipped: notCorporate };
     }
     const draft = buildOutreachDraft(brief, config, { to, links: options.links });
     const link = options.links ? undefined : findLink(`${draft.subject}\n${draft.body}`);
@@ -206,14 +305,16 @@ export function renderOutreachIndex(results: OutreachDraftResult[], generatedAt:
     "Before sending each draft:",
     "",
     "- [ ] Re-check every point on the live site; audits can be wrong or out of date.",
-    "- [ ] Confirm the business may receive cold email. In the UK (PECR) that means a limited company or LLP; sole traders and partnerships need prior consent.",
+    "- [ ] Confirm the business may receive cold email. In the UK (PECR) that means a corporate body, such as a limited company or LLP; sole traders and partnerships need prior consent. A Company entry only repeats your Companies House results; check that the record's name and address are this business.",
     "- [ ] Add a recipient where none was found, and edit the wording to sound like you.",
     "",
-    "| # | Business | Strength | To | Draft |",
-    "| --- | --- | --- | --- | --- |",
+    "| # | Business | Strength | To | Company | Draft |",
+    "| --- | --- | --- | --- | --- | --- |",
     ...results.map(
       (result) =>
         `| ${result.rank} | ${cell(result.companyName)} | ${result.strength} | ${result.to ? cell(result.to) : "none found"} | ${
+          result.company ? cell(result.company) : "not checked"
+        } | ${
           result.file ? cell(result.file) : `skipped: ${cell(result.skipped ?? "")}`
         } |`
     ),

@@ -150,7 +150,7 @@ describe("public API", () => {
   });
 
   it("exports the monitor API without the domain lookup internals", () => {
-    for (const name of ["runMonitor", "renderMonitorMarkdown", "renderMonitorJson", "monitorRunId", "renderClientEmail", "renderSiteHistory", "runQuickCheck", "renderQuickCheck", "quickCheckUrl", "comparisonDates", "renderDashboard", "writeDashboard", "readWorkLog", "serviceSections", "clientEmailParts", "renderClientEml", "buildProposal", "readOfferConfig", "renderProposalHtml", "renderProposalPdf", "pitchStrength", "meetsPitchStrength", "buildOutreachDraft", "planOutreachDrafts", "readOutreachConfig", "renderOutreachEml", "renderOutreachIndex"]) {
+    for (const name of ["runMonitor", "renderMonitorMarkdown", "renderMonitorJson", "monitorRunId", "renderClientEmail", "renderSiteHistory", "runQuickCheck", "renderQuickCheck", "quickCheckUrl", "comparisonDates", "renderDashboard", "writeDashboard", "readWorkLog", "serviceSections", "clientEmailParts", "renderClientEml", "buildProposal", "readOfferConfig", "renderProposalHtml", "renderProposalPdf", "pitchStrength", "meetsPitchStrength", "buildOutreachDraft", "planOutreachDrafts", "readLegalStatus", "readOutreachConfig", "renderOutreachEml", "renderOutreachIndex"]) {
       expect(typeof (publicApi as Record<string, unknown>)[name]).toBe("function");
     }
     expect(publicApi).not.toHaveProperty("probeDomainExpiry");

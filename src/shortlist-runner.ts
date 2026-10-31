@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { OutreachConfig } from "./outreach.js";
+import type { LegalStatusIndex, OutreachConfig } from "./outreach.js";
 import { buildPitchBrief, meetsPitchStrength, pitchStrength, readLeadReport, renderPitchBriefsMarkdown, type PitchStrength } from "./pitch-brief.js";
 import {
   buildLeadShortlist,
@@ -24,7 +24,8 @@ export interface ShortlistRunOptions {
   // Keep only leads whose audit supports at least this pitch strength, read from reportsDir, before taking the top N.
   minPitchStrength?: { minimum: PitchStrength; reportsDir: string };
   // Write an unsent .eml cold email draft for each lead worth one, plus an index of every lead and why it was skipped.
-  emailDrafts?: { dir: string; config: OutreachConfig; reportsDir: string; links: boolean };
+  // legal holds Companies House results; with it, only active companies and LLPs get a draft.
+  emailDrafts?: { dir: string; config: OutreachConfig; reportsDir: string; links: boolean; legal?: LegalStatusIndex };
   format: ShortlistFormat;
   shortlist: Omit<ShortlistOptions, "reviewRows">;
 }
@@ -81,10 +82,10 @@ export async function runShortlistReport(options: ShortlistRunOptions): Promise<
   }
 
   if (options.emailDrafts) {
-    const { dir, config, reportsDir, links } = options.emailDrafts;
+    const { dir, config, reportsDir, links, legal } = options.emailDrafts;
     // The .eml writer lives with monitoring, which loads the PDF renderer, so it is only imported when drafts are asked for.
     const { planOutreachDrafts, readLeadEmails, renderOutreachEml, renderOutreachIndex } = await import("./outreach.js");
-    const planned = planOutreachDrafts(await readBriefs(reportsDir), config, { emails: readLeadEmails(input), links });
+    const planned = planOutreachDrafts(await readBriefs(reportsDir), config, { emails: readLeadEmails(input), links, legal });
     await mkdir(dir, { recursive: true });
     // Drafts from an earlier run are named by rank, so they would sit next to the new ones, including drafts for
     // leads since marked contacted or do-not-contact. Only files with this command's naming are removed.
