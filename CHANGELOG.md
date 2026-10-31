@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.93.0 - 2026-10-31
+
+- Added `shortlist --legal-status <file>` for `--email-drafts`. It reads your Companies House results (a CSV matched by `leadKey` or `label`, with `companyType`, `companyStatus`, and an optional `companyNumber`) and drafts only for active companies, LLPs, CICs, CIOs, and registered societies, which UK PECR allows to receive business marketing email. Leads without a row, sole traders, partnerships and limited partnerships, and companies that are not active are skipped with the reason. A file without the needed columns fails the run before anything is written. `index.md` gains a Company column.
+- `--no-links` now counts a name as a domain only when it ends in a country code or a common generic top-level domain (now including `.ltd`), so business names such as "Howard & Co.leads" or "J.D.Wetherspoon" no longer skip a lead. Email addresses are caught whatever their domain.
+- Exported `readLegalStatus` and the `LegalStatus` and `LegalStatusIndex` types.
+
 ## v0.92.0 - 2026-10-29
 
 - Added `shortlist --email-drafts <dir> --outreach <file>`, which writes an unsent `.eml` cold email draft for each shortlisted lead rated strong or medium, from its pitch brief and your own wording, sender, and company details, with an opt-out line, plus an `index.md` that lists every lead with its draft or the reason it was skipped. Drafts go to the lead's `publicEmail` when it holds a plain address. Weak and unrated leads are skipped, and so are dead-domain leads, because email at that domain may bounce. `--no-links` keeps URLs, domains, and email addresses out of drafts. A run replaces the drafts an earlier run wrote to the same folder. Nothing is sent.

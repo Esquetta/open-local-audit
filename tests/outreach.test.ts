@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildOutreachDraft, configLink, findLink, legalLine, planOutreachDrafts, readLeadEmails, renderOutreachEml, type OutreachConfig } from "../src/outreach.js";
+import { buildOutreachDraft, configLink, findLink, legalLine, planOutreachDrafts, readLeadEmails, readLegalStatus, renderOutreachEml, type OutreachConfig } from "../src/outreach.js";
 import { buildPitchBrief } from "../src/pitch-brief.js";
 import type { ShortlistLead } from "../src/shortlist.js";
 import type { AuditReport, Finding } from "../src/types.js";
@@ -121,9 +121,13 @@ describe("outreach drafts", () => {
   it("finds URLs, domains, and email addresses but not ordinary sentences", () => {
     expect(findLink("See https://x.test for more")).toBe("https://");
     expect(findLink("TORUT LTD · torut.dev")).toBe("torut.dev");
-    expect(findLink("reply to info@shop.co.uk")).toBe("shop.co.uk");
+    expect(findLink("reply to info@shop.co.uk")).toBe("info@shop.co.uk");
+    expect(findLink("Sam, torut.ltd")).toBe("torut.ltd");
+    expect(findLink("write to hello@acme.clinicx")).toBe("hello@acme.clinicx");
     expect(findLink("Company No. 17205563, London E1 0SG. Fixed price, e.g. three fixes.")).toBeUndefined();
     expect(findLink("I fix robots.txt files and Next.js sites.")).toBeUndefined();
+    expect(findLink("D'a'rcy Howard & Co.leads, J.D.Wetherspoon, St.John's")).toBeUndefined();
+    expect(findLink("smiles.dental and smith.accountants")).toBe("smiles.dental");
     expect(configLink({ ...config, signature: "Sam\nexample.studio" })).toBe("example.studio");
     expect(configLink(config)).toBeUndefined();
   });
@@ -147,6 +151,51 @@ describe("outreach drafts", () => {
       { rank: 4, companyName: "Shop.co.uk Ltd", strength: "strong", skipped: "the draft would contain \"Shop.co.uk\", which --no-links leaves out" },
       { rank: 12, companyName: "Çiçek Diş Kliniği", strength: "strong", file: "12-cicek-dis-klinigi.eml" }
     ]);
+  });
+
+  it("drafts only for active companies and LLPs when Companies House results are given", () => {
+    const legal = readLegalStatus(
+      [
+        "leadKey,label,companyNumber,companyType,companyStatus",
+        "overture:1,,01234567,ltd,active",
+        "overture:2,,OC123456,llp,Active",
+        ",Partner Practice,,partnership,active",
+        "overture:4,,07654321,private-limited-guarant-nsc,dissolved",
+        "overture:old,Renamed Key Ltd,09999999,Private limited company,active",
+        "overture:7,,LP012345,limited-partnership,active",
+        "overture:8,,SL012345,scottish-partnership,active",
+        "overture:9,,,partnership (not ltd),active",
+        ""
+      ].join("\n")
+    );
+    const planned = planOutreachDrafts(
+      [
+        brief(["phone-link-present"], { rank: 1, leadKey: "overture:1" }),
+        brief(["phone-link-present"], { rank: 2, companyName: "Law LLP", leadKey: "overture:2" }),
+        brief(["phone-link-present"], { rank: 3, companyName: "Partner  Practice", leadKey: "overture:3" }),
+        brief(["phone-link-present"], { rank: 4, companyName: "Closed Ltd", leadKey: "overture:4" }),
+        brief(["phone-link-present"], { rank: 5, companyName: "Unknown Ltd", leadKey: "overture:5" }),
+        brief(["phone-link-present"], { rank: 6, companyName: "Renamed Key Ltd", leadKey: "overture:6" }),
+        brief(["phone-link-present"], { rank: 7, companyName: "LP", leadKey: "overture:7" }),
+        brief(["phone-link-present"], { rank: 8, companyName: "SP", leadKey: "overture:8" }),
+        brief(["phone-link-present"], { rank: 9, companyName: "Note", leadKey: "overture:9" })
+      ],
+      config,
+      { emails: new Map(), links: true, legal }
+    );
+    expect(planned.map(({ company, file, skipped }) => [company, file ?? skipped])).toEqual([
+      ["01234567 (ltd, active)", "01-smith-accountants.eml"],
+      ["OC123456 (llp, Active)", "02-law-llp.eml"],
+      ["(partnership, active)", "not a company or LLP (partnership); UK PECR needs prior consent, so phone or use the contact form"],
+      ["07654321 (private-limited-guarant-nsc, dissolved)", "company status is dissolved, not active"],
+      [undefined, "legal form not confirmed: add the lead to --legal-status after a Companies House check"],
+      ["09999999 (Private limited company, active)", "06-renamed-key-ltd.eml"],
+      ["LP012345 (limited-partnership, active)", "not a company or LLP (limited-partnership); UK PECR needs prior consent, so phone or use the contact form"],
+      ["SL012345 (scottish-partnership, active)", "not a company or LLP (scottish-partnership); UK PECR needs prior consent, so phone or use the contact form"],
+      ["(partnership (not ltd), active)", "not a company or LLP (partnership (not ltd)); UK PECR needs prior consent, so phone or use the contact form"]
+    ]);
+    expect(() => readLegalStatus("leadKey,companyType\n")).toThrow("--legal-status needs leadKey or label, companyType, and companyStatus columns");
+    expect(() => readLegalStatus("")).toThrow("--legal-status needs");
   });
 
   it("renders a plain-text .eml without an attachment and reads the first plain lead email", () => {
@@ -195,8 +244,24 @@ describe("outreach drafts", () => {
     expect(decodeBody(eml)).toContain("One thing on the website may be putting visitors off:");
     const index = readFileSync(join(dir, "drafts", "index.md"), "utf8");
     expect(index).toContain("1 draft for 2 shortlisted leads. Nothing has been sent.");
-    expect(index).toContain("| 1 | Weak Clinic | weak | info@weak.test | skipped: pitch strength weak: not worth a cold email |");
-    expect(index).toContain("| 2 | Strong Clinic | strong | info@strong.test | 02-strong-clinic.eml |");
+    expect(index).toContain("| 1 | Weak Clinic | weak | info@weak.test | not checked | skipped: pitch strength weak: not worth a cold email |");
+    expect(index).toContain("| 2 | Strong Clinic | strong | info@strong.test | not checked | 02-strong-clinic.eml |");
+
+    // With Companies House results, a dissolved company gets no draft.
+    writeFileSync(join(dir, "legal.csv"), ["label,companyNumber,companyType,companyStatus", "Strong Clinic,01234567,ltd,dissolved", ""].join("\n"));
+    expect(run(["--email-drafts", join(dir, "drafts"), "--outreach", join(dir, "outreach.json"), "--legal-status", join(dir, "legal.csv")]).status).toBe(0);
+    expect(readdirSync(join(dir, "drafts")).sort()).toEqual(["index.md", "notes.txt"]);
+    expect(readFileSync(join(dir, "drafts", "index.md"), "utf8")).toContain(
+      "| 2 | Strong Clinic | strong | info@strong.test | 01234567 (ltd, dissolved) | skipped: company status is dissolved, not active |"
+    );
+    // A bad file fails the run before the shortlist or any draft is rewritten.
+    writeFileSync(join(dir, "bad-legal.csv"), "label,companyNumber\nStrong Clinic,01234567\n");
+    writeFileSync(join(dir, "shortlist.md"), "previous shortlist");
+    expect(run(["--email-drafts", join(dir, "drafts"), "--outreach", join(dir, "outreach.json"), "--legal-status", join(dir, "bad-legal.csv")]).stderr).toContain(
+      "--legal-status needs leadKey or label, companyType, and companyStatus columns"
+    );
+    expect(readFileSync(join(dir, "shortlist.md"), "utf8")).toBe("previous shortlist");
+    expect(run(["--legal-status", join(dir, "legal.csv")]).stderr).toContain("--legal-status is only used with --email-drafts");
 
     writeFileSync(join(dir, "linked.json"), JSON.stringify({ ...config, signature: "Sam\nexample.studio" }));
     const linked = run(["--email-drafts", join(dir, "drafts"), "--outreach", join(dir, "linked.json"), "--no-links"]);
