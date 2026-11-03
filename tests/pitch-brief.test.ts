@@ -71,6 +71,15 @@ function report(findings: Finding[], identity?: "matched" | "uncertain"): AuditR
 }
 
 describe("pitch briefs", () => {
+  it("only says there is no contact button when the page has no contact action at all", () => {
+    const withContactLink = buildPitchBrief(lead(), report([finding("lawyer-consultation-cta"), finding("current-date-signals", "low", "© 2021")]), "found");
+    expect(withContactLink.points.map((point) => point.findingId)).toEqual(["current-date-signals"]);
+    expect(withContactLink.strength).toBe("weak");
+
+    const withoutAny = buildPitchBrief(lead(), report([finding("lawyer-consultation-cta"), finding("primary-cta-present")]), "found");
+    expect(withoutAny.points.map((point) => point.findingId)).toEqual(["lawyer-consultation-cta"]);
+  });
+
   it("picks up to three owner-visible findings in pitch order, one per reason", () => {
     const brief = buildPitchBrief(
       lead(),

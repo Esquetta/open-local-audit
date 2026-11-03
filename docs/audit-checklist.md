@@ -3,7 +3,7 @@
 ## Technical basics
 
 - The site is a real website, not a maintenance, placeholder, or parked page.
-  - Finding `website-placeholder` replaces the whole audit when a page with at most 600 characters of title and visible text says the website itself is down or under maintenance (for example "Website temporarily down" or "Under maintenance" opening the title or the page text), or that the domain is parked or for sale. A short page that says only one feature, such as online booking, is unavailable, or that uses conditional copy such as "If our site is offline, call us", keeps the normal audit. All category scores are set to 0, and discovery ranks the lead as a website-build opportunity (opportunity score 95, high priority). Longer pages that mention the same phrases get the normal audit.
+  - Finding `website-placeholder` replaces the whole audit when a page with at most 600 characters of title and visible text says the website itself is down, under maintenance, or coming soon (for example "Website temporarily down", "New website coming soon", or "Under maintenance" or "Coming soon" opening the title or the page text), or that the domain is parked or for sale. A short page that says only one feature, such as online booking or a blog, is unavailable or coming soon, or that uses conditional copy such as "If our site is offline, call us", keeps the normal audit. All category scores are set to 0, and discovery ranks the lead as a website-build opportunity (opportunity score 95, high priority). Longer pages that mention the same phrases get the normal audit.
 - HTTP status is successful.
 - HTTPS is enabled.
 - HTTPS certificate is trusted and not about to expire.
@@ -33,7 +33,7 @@
 - Phone action exists.
 - WhatsApp action exists when relevant.
 - Email action exists when relevant.
-- Visitors can send an enquiry without calling: an enquiry form, a contact or booking page link, or an email link (a newsletter signup does not count).
+- Visitors can send an enquiry without calling: an enquiry form, a contact or booking page link, or an email link or visible email address (a newsletter signup does not count).
 - Address is visible.
 - Map or directions link exists.
 - Opening hours are visible.

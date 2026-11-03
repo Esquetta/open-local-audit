@@ -118,6 +118,16 @@ describe("outreach drafts", () => {
     }
   });
 
+  it("leaves the legal suffix out of the name in subjects and sentences", () => {
+    for (const companyName of ["Baldwin Cox Ltd", "Baldwin Cox Ltd.", "Baldwin Cox Limited", "Baldwin Cox Limited.", "Baldwin Cox Ltd ", "BALDWIN COX LTD", "Baldwin Cox LLP"]) {
+      const draft = buildOutreachDraft(brief(["phone-link-present"], { companyName }), config, { links: false });
+      expect(draft.subject).toMatch(/^Tap-to-call on the baldwin cox website$/i);
+      expect(draft.body).toMatch(/I came across baldwin cox while looking/i);
+    }
+    expect(buildOutreachDraft(brief(["phone-link-present"], { companyName: "Phipp & Co" }), config, { links: false }).subject).toContain("the Phipp & Co website");
+    expect(buildOutreachDraft(brief(["phone-link-present"], { companyName: "Limited" }), config, { links: false }).subject).toContain("the Limited website");
+  });
+
   it("finds URLs, domains, and email addresses but not ordinary sentences", () => {
     expect(findLink("See https://x.test for more")).toBe("https://");
     expect(findLink("TORUT LTD · torut.dev")).toBe("torut.dev");

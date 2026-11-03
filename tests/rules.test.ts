@@ -657,6 +657,42 @@ describe("audit rules", () => {
     );
   });
 
+  it("reads an outdated year after the copyright symbol, and a range ending this year as current", () => {
+    const year = new Date().getFullYear();
+    const dateFinding = (footer: string) =>
+      auditSnapshot(snapshot(`<html><head><title>Phipp and Co</title></head><body><footer>${footer}</footer></body></html>`)).findings.find(
+        (finding) => finding.id === "current-date-signals"
+      );
+
+    expect(dateFinding("© 2018 Phipp &amp; Co")?.evidence[0].value).toBe("© 2018");
+    expect(dateFinding("&copy; 2018 Phipp &amp; Co")?.evidence[0].value).toBe("© 2018");
+    expect(dateFinding(`© ${year} Phipp &amp; Co`)).toBeUndefined();
+    expect(dateFinding(`© 2018–${year} Phipp &amp; Co`)).toBeUndefined();
+    expect(dateFinding(`Copyright 2018 — ${year}`)).toBeUndefined();
+    expect(dateFinding("© 2015 – present Acme")).toBeUndefined();
+    expect(dateFinding("© 2015 to Present Acme")).toBeUndefined();
+    expect(dateFinding(`© 2015-${String(year).slice(2)} Acme`)).toBeUndefined();
+    expect(dateFinding(`© 2015 to ${year} Acme`)).toBeUndefined();
+    expect(dateFinding("© 2015-18 Acme")?.evidence[0].value).toBe("© 2015-18");
+    expect(dateFinding("Family-run since 1987")).toBeUndefined();
+  });
+
+  it("finds an address split by line breaks or given only by its postcode, but not a hidden one", () => {
+    const addressFlagged = (body: string) =>
+      auditSnapshot(
+        snapshot(`<html><head><title>Phipp and Co</title></head><body>${body}</body></html>`)
+      ).findings.some((finding) => finding.id === "visible-address-present");
+
+    expect(addressFlagged("<p>Phipp Accountants<br>6 Nottingham Road<br>Long Eaton<br>Nottingham<br>NG10 1HP</p>")).toBe(false);
+    expect(addressFlagged("<p>12 Bridgford Rd<br>West Bridgford<br>Nottingham<br>NG2 6AB</p>")).toBe(false);
+    expect(addressFlagged("<p>Hauptplatz 3</p><p>80331 München</p>")).toBe(false);
+    expect(addressFlagged("<p>100 Main St, Austin, TX 78701</p>")).toBe(false);
+    expect(addressFlagged("<p>12 High St, Leeds</p>")).toBe(false);
+    expect(addressFlagged("<p>4a Mill Lane, Otley</p>")).toBe(false);
+    expect(addressFlagged("<p>Accountants for local firms. Call us today.</p>")).toBe(true);
+    expect(addressFlagged('<p style="display:none">6 Nottingham Road, NG10 1HP</p><p>Accountants for local firms.</p>')).toBe(true);
+  });
+
   it("flags stale trust signals, missing social proof, shallow service detail, and missing brand icons", () => {
     const report = auditSnapshot(
       snapshot(`

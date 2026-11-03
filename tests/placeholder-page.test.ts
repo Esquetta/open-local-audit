@@ -32,6 +32,36 @@ describe("placeholder pages", () => {
     expect(Object.values(report.scores).every((score) => score.score === 0)).toBe(true);
   });
 
+  it("reports a short page announcing the website as coming soon, but not a part of a real site", () => {
+    const report = auditSnapshot(
+      snapshot(
+        "<html><head><title></title></head><body><h1>New website coming soon</h1><p>12 Bridgford Rd<br>West Bridgford<br>Nottingham<br>NG2 6AB</p><p>Call : 0115 982 1449</p><p>Email : info@example.test</p></body></html>"
+      )
+    );
+    expect(report.findings.map((finding) => finding.id)).toEqual(["website-placeholder"]);
+    expect(report.findings[0].evidence[0].value).toContain('"New website coming soon"');
+
+    for (const html of [
+      "<h1>Coming soon</h1><p>Call 0115 982 1449</p>",
+      "<p>Our website is under construction.</p>",
+      "<h1>Acme Dental</h1><p>Our new website is coming soon.</p>",
+      "<h1>Acme Dental</h1><p>Website coming soon</p>"
+    ]) {
+      expect(auditSnapshot(snapshot(html)).findings.map((finding) => finding.id)).toEqual(["website-placeholder"]);
+    }
+    for (const html of [
+      "<h1>Smith Dental</h1><p>Our new patient portal is coming soon. Call 0115 982 1449.</p>",
+      "<h1>Smith Dental</h1><p>Our blog is coming soon.</p>",
+      "<p>Coming soon: our winter opening hours.</p><p>Smith Dental, call 0115 982 1449.</p>",
+      "<p>Coming soon. New menu from May.</p><p>Smith Dental, call 0115 982 1449.</p>",
+      "<h1>Acme Plumbing</h1><p>Our booking website is under construction. Call 0123456789 for service.</p>",
+      "<h1>Acme Plumbing</h1><p>Our Spanish website coming soon.</p>",
+      "<h1>Smith Dental</h1><p>When our new website is coming soon we will write to you.</p>"
+    ]) {
+      expect(auditSnapshot(snapshot(html)).findings.map((finding) => finding.id)).not.toContain("website-placeholder");
+    }
+  });
+
   it("reports a parked for-sale domain even when it also mentions maintenance", () => {
     const report = auditSnapshot(
       snapshot("<html><head><title>example.test</title></head><body><h1>example.test</h1><p>This domain may be for sale. Under maintenance.</p></body></html>")
