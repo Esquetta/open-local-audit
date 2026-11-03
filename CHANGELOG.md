@@ -2,6 +2,15 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.94.0 - 2026-11-03
+
+- `visible-address-present` no longer flags an address split by line breaks, such as "6 Nottingham Road<br>Long Eaton", whose words the rule read as one, or one given by its postcode or an abbreviated street, such as "12 Bridgford Rd, NG2 6AB" or "12 High St, Leeds". Hidden text no longer counts as an address. The finding can disappear, so `compare` against earlier reports shows it as fixed even though the page did not change.
+- A short page announcing the whole website as coming soon, such as "New website coming soon", or opening with just "Coming soon" or "Under construction", is now reported as `website-placeholder`, with the same single finding and zero score as a maintenance page. A short page where only a part is coming soon, such as "Our blog is coming soon" or "Our booking website is under construction", keeps its normal audit.
+- `current-date-signals` now reads a year after the © symbol, so "© 2018" is flagged as outdated, and accepts more year ranges, so "© 2018–2026", "© 2018-26", and "© 2018 to present" count as current. A founding year such as "Family-run since 1987" is no longer read as an outdated date, so that finding can disappear.
+- `contact-form-present` now accepts an email address shown as plain text or obfuscated, such as Cloudflare's "[email protected]" or "info [at] example.com", not only a mailto link.
+- Pitch briefs and email drafts only say there is no booking or contact button when the general `primary-cta-present` rule found none. A profile rule such as `lawyer-consultation-cta` alone no longer makes that claim, which can lower a lead's pitch strength.
+- Email drafts leave a trailing Ltd, Limited, LLP, or PLC out of the business name in subjects and sentences ("the Baldwin Cox website").
+
 ## v0.93.0 - 2026-10-31
 
 - Added `shortlist --legal-status <file>` for `--email-drafts`. It reads your Companies House results (a CSV matched by `leadKey` or `label`, with `companyType`, `companyStatus`, and an optional `companyNumber`) and drafts only for active companies, LLPs, CICs, CIOs, and registered societies, which UK PECR allows to receive business marketing email. Leads without a row, sole traders, partnerships and limited partnerships, and companies that are not active are skipped with the reason. A file without the needed columns fails the run before anything is written. `index.md` gains a Company column.

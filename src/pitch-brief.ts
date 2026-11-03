@@ -124,8 +124,12 @@ function evidenceText(finding: Finding): string {
 // The findings a business owner would notice, most pressing first, one per reason.
 export function pitchPoints(report: AuditReport): PitchPoint[] {
   const seen = new Set<number>();
+  // A profile rule only says a specific action is missing (a consultation button). "No contact button" needs the
+  // general rule to have found none as well.
+  const noContactAction = report.findings.some((finding) => finding.id === "primary-cta-present");
   return report.findings
     .filter((finding) => pitchRank(finding) >= 0 && !/^not checked$/i.test(evidenceText(finding).trim()))
+    .filter((finding) => noContactAction || !finding.id.endsWith("-cta"))
     .sort((left, right) => pitchRank(left) - pitchRank(right))
     // Profile rules can repeat a generic finding (a dental appointment CTA and the general CTA), so keep one point per reason.
     .filter((finding) => !seen.has(pitchRank(finding)) && Boolean(seen.add(pitchRank(finding))))

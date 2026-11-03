@@ -1045,8 +1045,24 @@ function hasOrganizationSchema($: CheerioAPI): boolean {
   return hasJsonLdType($, (type) => type === "Organization" || type.endsWith("Organization"));
 }
 
-function hasVisibleAddress(text: string): boolean {
-  return /\b(address|street|avenue|road|suite|floor|cadde|caddesi|sokak|mahalle|no:?)\b/i.test(text);
+// Reads visible text, which keeps line breaks between words ("6 Nottingham Road<br>Long Eaton"), and accepts a
+// postcode on its own, since many addresses abbreviate the street ("12 Bridgford Rd").
+function hasVisibleAddress($: CheerioAPI): boolean {
+  const text = collapsedText(visibleBody($));
+  return (
+    /\b(address|street|avenue|road|suite|floor|cadde|caddesi|sokak|mahalle|no:?)\b/i.test(text) ||
+    /\b\d+[a-zA-Z]?\s+\p{Lu}[\p{L}'’-]+(?:\s+\p{Lu}[\p{L}'’-]+)?\s+(?:Rd|St|Ave|Ln|Dr|Way|Lane|Drive|Close|Court|Place)\b/u.test(text) ||
+    ukPostcode.test(text) ||
+    usZipCode.test(text) ||
+    postcodeTown.test(text)
+  );
+}
+
+// Includes addresses hidden from scrapers: Cloudflare's "[email protected]" and "info [at] example.com" still reach a person.
+function hasVisibleEmail($: CheerioAPI): boolean {
+  return /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}|\[email\s+protected\]|[a-z0-9._%+-]\s*[[(]at[\])]\s*[a-z0-9-]+\.[a-z]{2,}/i.test(
+    collapsedText(visibleBody($))
+  );
 }
 
 function hasOpeningHours(text: string): boolean {
@@ -1133,14 +1149,17 @@ function hasPlaceholderCopy(text: string): boolean {
   return /\b(lorem ipsum|coming soon|under construction|placeholder|sample text)\b/i.test(text);
 }
 
+// A year the site itself claims to be current as of, with an optional range ("© 2015-26", "© 2015 to present"). A
+// founding year ("Family-run since 1987") says nothing about whether the page is up to date.
+const dateCuePattern =
+  /(?:©|copyright|copy|all rights reserved|last updated|updated)[^0-9]{0,30}((?:19|20)\d{2})(?!\d)(?:\s*(?:[-–—]|to)\s*((?:19|20)\d{2}|\d{2}|present|now|today|current)\b)?/gi;
+
 function hasCurrentDateSignals($: CheerioAPI, currentYear = new Date().getFullYear()): boolean {
   const candidateText = $("footer, [class*='footer' i], [id*='footer' i]")
     .toArray()
     .map((element) => $(element).text())
     .join(" ");
   const scopedText = candidateText || $("body").text();
-  const dateCuePattern =
-    /(?:copyright|copy|all rights reserved|last updated|updated|since)[^0-9]{0,30}((?:19|20)\d{2})(?:\s*-\s*((?:19|20)\d{2}))?/gi;
   const matches = Array.from(scopedText.matchAll(dateCuePattern));
 
   if (matches.length === 0) {
@@ -1148,17 +1167,15 @@ function hasCurrentDateSignals($: CheerioAPI, currentYear = new Date().getFullYe
   }
 
   return matches.some((match) => {
-    const startYear = Number(match[1]);
-    const endYear = match[2] ? Number(match[2]) : startYear;
-    return Math.max(startYear, endYear) >= currentYear;
+    const end = match[2];
+    const endYear = !end ? Number(match[1]) : /^\d{4}$/.test(end) ? Number(end) : /^\d{2}$/.test(end) ? 2000 + Number(end) : currentYear;
+    return Math.max(Number(match[1]), endYear) >= currentYear;
   });
 }
 
 function dateSignalEvidence($: CheerioAPI): string {
   const text = $("footer, [class*='footer' i], [id*='footer' i]").text() || $("body").text();
-  const match = text.match(
-    /(?:copyright|copy|all rights reserved|last updated|updated|since)[^0-9]{0,30}(?:19|20)\d{2}(?:\s*-\s*(?:19|20)\d{2})?/i
-  );
+  const match = text.match(new RegExp(dateCuePattern.source, "i"));
   return match?.[0].replace(/\s+/g, " ").trim() ?? "No current date or copyright signal found";
 }
 
@@ -1848,7 +1865,7 @@ const rules: Rule[] = [
     severity: "medium",
     source: "Page text",
     recommendation: "Show a clear address or location cue on the page so customers can confirm where the business operates.",
-    check: ({ text }) => hasVisibleAddress(text),
+    check: ({ $ }) => hasVisibleAddress($),
     evidence: () => "No address-like text found"
   },
   {
@@ -1892,9 +1909,10 @@ const rules: Rule[] = [
     check: ({ $, snapshot }) =>
       detectPageForms($, snapshot.finalUrl).enquiryForm ||
       hasContactOrBookingLink($, snapshot.finalUrl) ||
-      hasLink($, (href) => href.toLowerCase().startsWith("mailto:")),
+      hasLink($, (href) => href.toLowerCase().startsWith("mailto:")) ||
+      hasVisibleEmail($),
     evidence: ({ $, snapshot }) =>
-      `No enquiry form, contact page link, or email link${detectPageForms($, snapshot.finalUrl).newsletterForm ? "; only a newsletter signup form" : ""}`
+      `No enquiry form, contact page link, or email address${detectPageForms($, snapshot.finalUrl).newsletterForm ? "; only a newsletter signup form" : ""}`
   },
   {
     id: "privacy-policy-link-present",
@@ -2112,10 +2130,11 @@ export const ruleCount = rules.length;
 // Real sites can mention these phrases, so only short pages count as placeholders. Maintenance copy must be
 // about the whole site ("Website temporarily down", "Our site is offline") or open the page ("Under maintenance."), so a short page
 // saying "Our booking system is temporarily unavailable" keeps its normal audit. Conditional copy such as
-// "If our site is offline, call us" describes a fallback, not the site's state.
+// "If our site is offline, call us" describes a fallback, not the site's state. Coming-soon copy counts the same way:
+// about the whole site ("New website coming soon") or opening the page ("Coming soon"), not "Our blog is coming soon".
 const placeholderTextLimit = 600;
 const maintenanceCopy =
-  /(?:^|[.!?]\s+|\b(?:our|this|the) )(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|^(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b/i;
+  /(?:^|[.!?]\s+|\b(?:our|this|the) )(?:web)?site (?:is )?(?:temporarily |currently )?(?:down|unavailable|offline|under maintenance)\b|^(?:we(?:'|’)re |we are )?(?:currently |temporarily )?(?:down for|under(?:going)?) (?:scheduled )?maintenance\b|(?:^|\n|[.!?]\s+|\b(?:our|this|the|new) )(?:new )?website (?:is )?(?:coming soon|under construction)\b|^(?:coming soon|under construction)(?=[ \t]*[.!]?[ \t]*(?:\n|$))/i;
 const parkedCopy =
   /\b(?:(?:this )?domain (?:name )?(?:may be|is) for sale|buy this domain|domain is parked|parked (?:free,? )?(?:courtesy of|by)|this domain has been registered)\b/i;
 // "Should" is left out: as a condition it inverts the sentence ("Should our site go offline"), which the

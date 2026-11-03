@@ -126,6 +126,14 @@ describe("contact-form-present rule", () => {
     expect(contactFormFinding(`<a href="mailto:hello@clinic.test">Email us</a>`)).toBeUndefined();
   });
 
+  it("passes with an email address shown as plain text, but not a hidden one", () => {
+    expect(contactFormFinding(`<p>Email: info@clinic.test</p>`)).toBeUndefined();
+    expect(contactFormFinding(`<p style="display:none">info@clinic.test</p>`)).toBeDefined();
+    expect(contactFormFinding(`<a href="/cdn-cgi/l/email-protection#abc" class="__cf_email__">[email&#160;protected]</a>`)).toBeUndefined();
+    expect(contactFormFinding(`<p>info [at] clinic.test</p>`)).toBeUndefined();
+    expect(contactFormFinding(`<p>Look at clinic.test for more</p>`)).toBeDefined();
+  });
+
   it("fails when contact links point off-site or back to the same page", () => {
     expect(contactFormFinding(`<a href="https://webagency.test/contact">Website by Web Agency - contact us</a>`)).toBeDefined();
     expect(contactFormFinding(`<a href="#contact">Contact</a>`)).toBeDefined();
@@ -140,12 +148,12 @@ describe("contact-form-present rule", () => {
       severity: "medium",
       recommendation:
         "Add a short enquiry form or a clear link to a contact page so visitors who don't want to call can still reach you.",
-      evidence: [{ value: "No enquiry form, contact page link, or email link; only a newsletter signup form" }]
+      evidence: [{ value: "No enquiry form, contact page link, or email address; only a newsletter signup form" }]
     });
   });
 
   it("fails without any enquiry path", () => {
-    expect(contactFormFinding(`<p>Call 01234 567890</p>`)?.evidence[0]?.value).toBe("No enquiry form, contact page link, or email link");
+    expect(contactFormFinding(`<p>Call 01234 567890</p>`)?.evidence[0]?.value).toBe("No enquiry form, contact page link, or email address");
   });
 });
 

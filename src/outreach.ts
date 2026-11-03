@@ -107,7 +107,8 @@ export function configLink(config: OutreachConfig): string | undefined {
 // A first cold email from a pitch brief: the owner-visible points in plain words, the operator's offer, and the
 // sender's company details with an opt-out, as UK and EU rules expect from business marketing email.
 export function buildOutreachDraft(brief: PitchBrief, config: OutreachConfig, options: { to?: string; links: boolean }): OutreachDraft {
-  const name = brief.companyName;
+  // "the Baldwin Cox website" reads better than "the Baldwin Cox Ltd website"; the name alone stays as it is.
+  const name = brief.companyName.trim().replace(/(?<=\S)[\s,]+(?:ltd|limited|llp|plc)\.?$/i, "");
   const top = brief.points[0];
   const subject = fill(subjects.find(([pattern]) => top && pattern.test(top.findingId))?.[1] ?? "A few quick fixes for the {name} website", name);
   const where = options.links && brief.website ? brief.website : "the website";
