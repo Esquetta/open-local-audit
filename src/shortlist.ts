@@ -97,6 +97,7 @@ const explicitZoneTimestampPattern = /^(\d{4}-\d{2}-\d{2})T.+(?:[Zz]|[+-]\d{2}:\
 const suppressedReviewStatuses = new Set([
   "rejected",
   "contacted",
+  "followed-up",
   "not-fit",
   "not_a_fit",
   "do-not-contact",
@@ -267,7 +268,7 @@ function parseCalendarDate(value: string): number | undefined {
   return new Date(parsed).toISOString().slice(0, 10) === trimmed ? parsed : undefined;
 }
 
-function parseReviewTimestamp(value: string): number | undefined {
+export function parseReviewTimestamp(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) {
     return undefined;
@@ -406,6 +407,23 @@ function sortByMode(mode: ShortlistSort): (left: Omit<ShortlistLead, "rank">, ri
   }
 
   return sortLeads;
+}
+
+// The leads whose own review row says contacted, which shortlists leave out, for follow-ups. Shortlists also match
+// review rows by website or label; here that could read another lead's status and send a second follow-up.
+export function readContactedLeads(content: string, reviewRows: ShortlistReviewRow[]): ShortlistLead[] {
+  const seen = new Set<string>();
+  return parseOptionalRows(content)
+    .map(normalizeLead)
+    .flatMap((lead) => {
+      const reviews = reviewRows.filter((row) => row.leadKey === lead.leadKey);
+      if (!lead.leadKey || seen.has(lead.leadKey) || reviews.length === 0 || reviews.some((row) => row.reviewStatus?.trim().toLowerCase() !== "contacted")) {
+        return [];
+      }
+      seen.add(lead.leadKey);
+      return [{ ...lead, reviewStatus: "contacted", lastReviewedAt: reviews[0].lastReviewedAt?.trim() ?? "" }];
+    })
+    .map((lead, index) => ({ rank: index + 1, ...lead }));
 }
 
 export function buildLeadShortlist(content: string, options: ShortlistOptions = {}): ShortlistResult {

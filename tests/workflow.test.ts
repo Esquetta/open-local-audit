@@ -235,6 +235,7 @@ describe("workflow orchestrator", () => {
         "in-review": 0,
         qualified: 1,
         contacted: 0,
+        "followed-up": 0,
         rejected: 0,
         "not-fit": 0,
         "do-not-contact": 0,
