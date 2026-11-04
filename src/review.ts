@@ -8,6 +8,7 @@ export const reviewStatuses = [
   "in-review",
   "qualified",
   "contacted",
+  "followed-up",
   "rejected",
   "not-fit",
   "do-not-contact",

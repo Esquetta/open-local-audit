@@ -1673,7 +1673,7 @@ describe("CLI behavior helpers", () => {
 
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(
-        "review --status must be one of: new, pending, in-review, qualified, contacted, rejected, not-fit, do-not-contact, suppressed"
+        "review --status must be one of: new, pending, in-review, qualified, contacted, followed-up, rejected, not-fit, do-not-contact, suppressed"
       );
     } finally {
       removeTempDir(tmp);

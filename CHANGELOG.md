@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.95.0 - 2026-11-04
+
+- Added the `follow-ups` command. It takes leads marked `contacted` in a review CSV, after `--after-days` days (default 5), fetches each website again, and writes an unsent `.eml` follow-up that names only the problems a first email would have named and the fresh check found again, plus an `index.md` with the points that are no longer found and the reason for every lead without a draft. Each lead is matched to its review row by `leadKey`, and a second lead with the same address or website is skipped. It supports `--legal-status` and `--no-links`, and an optional `followUp` wording in the outreach file. Nothing is sent.
+- Added the `followed-up` review status. It is treated like `contacted`, so these leads stay out of shortlists and discovery, and `follow-ups` skips them.
+- Exported `runFollowUps` and `buildFollowUpDraft`.
+
 ## v0.94.0 - 2026-11-03
 
 - `visible-address-present` no longer flags an address split by line breaks, such as "6 Nottingham Road<br>Long Eaton", whose words the rule read as one, or one given by its postcode or an abbreviated street, such as "12 Bridgford Rd, NG2 6AB" or "12 High St, Leeds". Hidden text no longer counts as an address. The finding can disappear, so `compare` against earlier reports shows it as fixed even though the page did not change.

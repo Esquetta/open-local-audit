@@ -187,7 +187,7 @@ const googlePlacesTextSearchUrl = "https://places.googleapis.com/v1/places:searc
 const googlePlacesFieldMask = "places.id,places.displayName,places.websiteUri";
 const defaultGooglePlacesLimit = 10;
 const maxGooglePlacesLimit = 50;
-const suppressedReviewStatuses = new Set(["rejected", "contacted", "not-fit", "not_a_fit", "do-not-contact", "suppressed"]);
+const suppressedReviewStatuses = new Set(["rejected", "contacted", "followed-up", "not-fit", "not_a_fit", "do-not-contact", "suppressed"]);
 
 function firstCell(cells: string[], headers: string[], names: string[]): string | undefined {
   for (const name of names) {

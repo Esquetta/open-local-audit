@@ -1,5 +1,5 @@
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { LegalStatusIndex, OutreachConfig } from "./outreach.js";
 import { buildPitchBrief, meetsPitchStrength, pitchStrength, readLeadReport, renderPitchBriefsMarkdown, type PitchStrength } from "./pitch-brief.js";
 import {
@@ -84,25 +84,8 @@ export async function runShortlistReport(options: ShortlistRunOptions): Promise<
   if (options.emailDrafts) {
     const { dir, config, reportsDir, links, legal } = options.emailDrafts;
     // The .eml writer lives with monitoring, which loads the PDF renderer, so it is only imported when drafts are asked for.
-    const { planOutreachDrafts, readLeadEmails, renderOutreachEml, renderOutreachIndex } = await import("./outreach.js");
-    const planned = planOutreachDrafts(await readBriefs(reportsDir), config, { emails: readLeadEmails(input), links, legal });
-    await mkdir(dir, { recursive: true });
-    // Drafts from an earlier run are named by rank, so they would sit next to the new ones, including drafts for
-    // leads since marked contacted or do-not-contact. Only files with this command's naming are removed.
-    for (const name of await readdir(dir)) {
-      if (/^\d{2,}-[a-z0-9-]+\.eml$/.test(name)) {
-        await rm(join(dir, name), { force: true });
-      }
-    }
-    for (const { draft, file } of planned) {
-      if (draft && file) {
-        await writeWorkflowOutputFile(join(dir, file), renderOutreachEml(draft));
-      }
-    }
-    await writeWorkflowOutputFile(
-      join(dir, "index.md"),
-      renderOutreachIndex(planned.map(({ draft: _draft, ...entry }) => entry), new Date().toISOString())
-    );
+    const { planOutreachDrafts, readLeadEmails, writeOutreachDrafts } = await import("./outreach.js");
+    await writeOutreachDrafts(dir, planOutreachDrafts(await readBriefs(reportsDir), config, { emails: readLeadEmails(input), links, legal }));
   }
 
   return result;

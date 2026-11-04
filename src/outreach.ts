@@ -1,9 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { z } from "zod";
 import { cleanInputLines, parseCsvLine } from "./csv.js";
 import { renderClientEml } from "./monitor.js";
 import { isPlainEmailAddress } from "./monitor-service.js";
 import { meetsPitchStrength, type PitchBrief } from "./pitch-brief.js";
+import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 // The operator's own cold email wording and legal details; the tool only adds the audit's points.
 const text = (max: number) => z.string().trim().min(1).max(max);
@@ -19,6 +21,8 @@ const outreachSchema = z
     opener: text(400).optional(),
     offer: text(800),
     callToAction: text(400).optional(),
+    // Replaces callToAction in follow-ups.
+    followUp: text(800).optional(),
     signature: text(400).optional(),
     optOut: text(300).optional()
   })
@@ -123,13 +127,32 @@ export function buildOutreachDraft(brief: PitchBrief, config: OutreachConfig, op
     config.offer,
     ...(config.callToAction ? ["", config.callToAction] : []),
     "",
-    config.signature ?? `${config.senderName}\n${config.company}`,
-    "",
-    config.optOut ?? defaultOptOut,
-    legalLine(config),
-    ""
+    ...signOff(config)
   ].join("\n");
   return { ...(options.to ? { to: options.to } : {}), subject, body };
+}
+
+function signOff(config: OutreachConfig): string[] {
+  return [config.signature ?? `${config.senderName}\n${config.company}`, "", config.optOut ?? defaultOptOut, legalLine(config), ""];
+}
+
+// The one follow-up: only the points still on the page, in reply to the first email. firstBrief rebuilds that email's
+// subject, so a draft this tool wrote and its follow-up read as one thread.
+export function buildFollowUpDraft(brief: PitchBrief, firstBrief: PitchBrief, config: OutreachConfig, options: { to?: string; links: boolean }): OutreachDraft {
+  const where = options.links && brief.website ? brief.website : "your website";
+  const wording = config.followUp ?? config.callToAction;
+  const body = [
+    "Hi,",
+    "",
+    `Just following up on my earlier email about ${where}. ${brief.points.length === 1 ? "One thing is" : "These things are"} still on the page:`,
+    ...brief.points.map((point) => `- ${point.whyItMatters}`),
+    "",
+    ...(wording ? [wording, ""] : []),
+    "This is my only follow-up, so no worries if the timing isn't right.",
+    "",
+    ...signOff(config)
+  ].join("\n");
+  return { ...(options.to ? { to: options.to } : {}), subject: `Re: ${buildOutreachDraft(firstBrief, config, options).subject}`, body };
 }
 
 // The first plain email address in a lead's publicEmail cell, keyed by leadKey.
@@ -236,6 +259,7 @@ export interface OutreachDraftResult {
   company?: string;
   file?: string;
   skipped?: string;
+  note?: string;
 }
 
 function slug(value: string): string {
@@ -251,35 +275,54 @@ function slug(value: string): string {
   );
 }
 
+export type PlannedOutreachDraft = OutreachDraftResult & { draft?: OutreachDraft };
+
+function legalFor(lead: Pick<PitchBrief, "leadKey" | "companyName">, legal: LegalStatusIndex | undefined): LegalStatus | undefined {
+  return legal && (legal.byKey.get(lead.leadKey) ?? legal.byName.get(nameKey(lead.companyName)));
+}
+
+export function legalSkipReason(lead: Pick<PitchBrief, "leadKey" | "companyName">, legal: LegalStatusIndex | undefined): string | undefined {
+  return legal ? legalReason(legalFor(lead, legal)) : undefined;
+}
+
+// What an index row shows about a lead, with or without a draft.
+export function draftResultBase(
+  lead: Pick<PitchBrief, "rank" | "leadKey" | "companyName" | "strength">,
+  options: { emails: Map<string, string>; legal?: LegalStatusIndex }
+): OutreachDraftResult {
+  const to = options.emails.get(lead.leadKey);
+  const legal = legalFor(lead, options.legal);
+  return {
+    rank: lead.rank,
+    companyName: lead.companyName,
+    strength: lead.strength,
+    ...(to ? { to } : {}),
+    ...(legal ? { company: `${legal.companyNumber ? `${legal.companyNumber} ` : ""}(${legal.companyType || "type unknown"}, ${legal.companyStatus || "status unknown"})` } : {})
+  };
+}
+
 // Which shortlisted leads get a draft, and the draft file for each. Weak and unrated leads are not worth a cold email,
 // and a lead whose website domain does not resolve would bounce, so those are listed with the reason instead. With
 // Companies House results, only active companies and LLPs get a draft.
 export function planOutreachDrafts(
   briefs: PitchBrief[],
   config: OutreachConfig,
-  options: { emails: Map<string, string>; links: boolean; legal?: LegalStatusIndex }
-): Array<OutreachDraftResult & { draft?: OutreachDraft }> {
+  options: { emails: Map<string, string>; links: boolean; legal?: LegalStatusIndex; build?: (brief: PitchBrief, to: string | undefined) => OutreachDraft }
+): PlannedOutreachDraft[] {
   return briefs.map((brief) => {
-    const to = options.emails.get(brief.leadKey);
-    const legal = options.legal && (options.legal.byKey.get(brief.leadKey) ?? options.legal.byName.get(nameKey(brief.companyName)));
-    const base = {
-      rank: brief.rank,
-      companyName: brief.companyName,
-      strength: brief.strength,
-      ...(to ? { to } : {}),
-      ...(legal ? { company: `${legal.companyNumber ? `${legal.companyNumber} ` : ""}(${legal.companyType || "type unknown"}, ${legal.companyStatus || "status unknown"})` } : {})
-    };
+    const base = draftResultBase(brief, options);
+    const to = base.to;
     if (brief.reasons.some((reason) => /domain does not resolve/i.test(reason))) {
       return { ...base, skipped: "website domain does not resolve; email there may bounce, so phone or use another public channel" };
     }
     if (!meetsPitchStrength(brief.strength, "medium") || brief.points.length === 0) {
       return { ...base, skipped: `pitch strength ${brief.strength}: not worth a cold email` };
     }
-    const notCorporate = options.legal ? legalReason(legal) : undefined;
+    const notCorporate = legalSkipReason(brief, options.legal);
     if (notCorporate) {
       return { ...base, skipped: notCorporate };
     }
-    const draft = buildOutreachDraft(brief, config, { to, links: options.links });
+    const draft = options.build?.(brief, to) ?? buildOutreachDraft(brief, config, { to, links: options.links });
     const link = options.links ? undefined : findLink(`${draft.subject}\n${draft.body}`);
     if (link) {
       return { ...base, skipped: `the draft would contain "${link}", which --no-links leaves out` };
@@ -296,10 +339,30 @@ function cell(value: string): string {
   return value.replace(/[\r\n]+/g, " ").replace(/([`*_~&\[\]<>|\\])/g, "\\$1");
 }
 
-export function renderOutreachIndex(results: OutreachDraftResult[], generatedAt: string): string {
+// Writes the drafts and their index. Drafts from an earlier run are named by rank, so they would sit next to the new
+// ones, including drafts for leads since marked contacted or do-not-contact. Only files with this naming are removed.
+export async function writeOutreachDrafts(dir: string, planned: PlannedOutreachDraft[], followUps = false): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  for (const name of await readdir(dir)) {
+    if (/^\d{2,}-[a-z0-9-]+\.eml$/.test(name)) {
+      await rm(join(dir, name), { force: true });
+    }
+  }
+  for (const { draft, file } of planned) {
+    if (draft && file) {
+      await writeWorkflowOutputFile(join(dir, file), renderOutreachEml(draft));
+    }
+  }
+  await writeWorkflowOutputFile(
+    join(dir, "index.md"),
+    renderOutreachIndex(planned.map(({ draft: _draft, ...entry }) => entry), new Date().toISOString(), followUps)
+  );
+}
+
+export function renderOutreachIndex(results: OutreachDraftResult[], generatedAt: string, followUps = false): string {
   const drafted = results.filter((result) => result.file).length;
   return [
-    "# Outreach Drafts",
+    followUps ? "# Follow-up Drafts" : "# Outreach Drafts",
     "",
     `Generated ${generatedAt}: ${drafted} draft${drafted === 1 ? "" : "s"} for ${results.length} shortlisted lead${results.length === 1 ? "" : "s"}. Nothing has been sent.`,
     "",
@@ -308,6 +371,12 @@ export function renderOutreachIndex(results: OutreachDraftResult[], generatedAt:
     "- [ ] Re-check every point on the live site; audits can be wrong or out of date.",
     "- [ ] Confirm the business may receive cold email. In the UK (PECR) that means a corporate body, such as a limited company or LLP; sole traders and partnerships need prior consent. A Company entry only repeats your Companies House results; check that the record's name and address are this business.",
     "- [ ] Add a recipient where none was found, and edit the wording to sound like you.",
+    ...(followUps
+      ? [
+          "- [ ] Send it as a reply in the first email's thread; the file only copies the subject and is not linked to that email.",
+          "- [ ] Then mark the lead `followed-up` with the `review` command, because each draft promises this is the only follow-up."
+        ]
+      : []),
     "",
     "| # | Business | Strength | To | Company | Draft |",
     "| --- | --- | --- | --- | --- | --- |",
@@ -317,7 +386,7 @@ export function renderOutreachIndex(results: OutreachDraftResult[], generatedAt:
           result.company ? cell(result.company) : "not checked"
         } | ${
           result.file ? cell(result.file) : `skipped: ${cell(result.skipped ?? "")}`
-        } |`
+        }${result.note ? `; ${cell(result.note)}` : ""} |`
     ),
     ""
   ].join("\n");

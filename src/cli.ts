@@ -854,6 +854,59 @@ function renderReviewSummary(summary: ReviewSummary): string {
   ].join("\n");
 }
 
+const followUpsProgram = program
+  .command("follow-ups")
+  .description("Re-check the websites of leads marked contacted and write an unsent follow-up .eml draft for the problems still there.")
+  .requiredOption("--input <path>", "read the discovery or CRM CSV export the leads came from")
+  .requiredOption("--review-csv <path>", "read which leads are marked contacted, and when")
+  .requiredOption("--outreach <path>", "read your sender, company details, and wording from a JSON file")
+  .requiredOption("--out-dir <path>", "write the .eml drafts and an index.md to this directory")
+  .option("--after-days <days>", "wait this many days after the contact date", "5")
+  .option("--reports-dir <path>", "resolve the first audit's report paths from this directory (default: reports next to --input)")
+  .option("--legal-status <path>", "read Companies House results (leadKey or label, companyNumber, companyType, companyStatus) and draft only for active companies and LLPs")
+  .option("--no-links", "leave drafts free of URLs, domains, and email addresses; leads whose draft would contain one are skipped")
+  .action(async () => {
+    const options = followUpsProgram.opts() as {
+      input: string;
+      reviewCsv: string;
+      outreach: string;
+      outDir: string;
+      afterDays: string;
+      reportsDir?: string;
+      legalStatus?: string;
+      links: boolean;
+    };
+    try {
+      const afterDays = Number(options.afterDays);
+      if (!Number.isInteger(afterDays) || afterDays < 1 || afterDays > 3650) {
+        throw new Error("follow-ups --after-days must be a whole number from 1 to 3650");
+      }
+      const { configLink, readLegalStatus, readOutreachConfig } = await import("./outreach.js");
+      const config = await readOutreachConfig(options.outreach);
+      const link = options.links ? undefined : configLink(config);
+      if (link) {
+        throw new Error(`Outreach config ${options.outreach} contains "${link}", which --no-links leaves out of drafts`);
+      }
+      const { runFollowUps } = await import("./follow-ups.js");
+      const result = await runFollowUps({
+        input: options.input,
+        reviewCsv: options.reviewCsv,
+        reportsDir: options.reportsDir ?? defaultReportsDir(options.input),
+        outDir: options.outDir,
+        afterDays,
+        config,
+        links: options.links,
+        legal: options.legalStatus ? readLegalStatus(await readFile(options.legalStatus, "utf8")) : undefined
+      });
+      process.stdout.write(`Follow-up drafts: ${result.drafted} of ${result.contacted} contacted lead${result.contacted === 1 ? "" : "s"}\n`);
+      process.stdout.write(`Index: ${join(options.outDir, "index.md")}\n`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
 const reviewProgram = program
   .command("review")
   .description("Update local lead review state in a review CSV.")
