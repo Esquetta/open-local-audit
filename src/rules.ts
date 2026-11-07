@@ -603,7 +603,7 @@ const canonicalAddressTokens: Record<string, string> = {
 const compassLetters = new Set(["n", "s", "e", "w", "ne", "nw", "se", "sw"]);
 
 // Every street suffix the canonical map knows, so "12 S Crescent" keeps "S" as the street's name.
-const streetTypes = new Set([
+export const streetTypes = new Set([
   "street", "road", "avenue", "boulevard", "lane", "drive", "highway", "route", "parkway", "place", "court", "square",
   "crescent", "terrace", "circle", "trail", "alley", "plaza", "heights", "crossing", "expressway", "freeway", "turnpike",
   "gardens", "grove", "parade", "esplanade", "circuit", "way",
@@ -628,7 +628,7 @@ function asciiDigits(value: string): string {
   });
 }
 
-function addressTokens(value: string): string[] {
+export function addressTokens(value: string): string[] {
   return asciiDigits(value)
     .replace(/\s*([½¼¾])/gu, (_, fraction: string) => ` ${{ "½": "1/2", "¼": "1/4", "¾": "3/4" }[fraction]}`)
     // Keep fractional house numbers ("12 1/2") as one token so the fraction is not read as separate numbers.

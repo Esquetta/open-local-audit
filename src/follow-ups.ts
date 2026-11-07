@@ -30,7 +30,7 @@ function websiteKey(website: string): string {
 }
 
 // The same polite fetch as discovery: robots rules, public addresses only, and bounded requests.
-async function recheckSite(lead: ShortlistLead): Promise<AuditReport> {
+export async function recheckSite(lead: ShortlistLead): Promise<AuditReport> {
   const { enrichWebsite } = await import("./website-enrichment.js");
   const { auditSnapshot } = await import("./audit.js");
   const enriched = await enrichWebsite(lead.website);

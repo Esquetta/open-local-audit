@@ -34,7 +34,7 @@ import {
   type ReviewSummary
 } from "./review.js";
 import { cliOptionsSchema, inputUrlSchema } from "./schema.js";
-import { resolveGoogleMapsApiKey } from "./secrets.js";
+import { resolveCompaniesHouseApiKey, resolveGoogleMapsApiKey } from "./secrets.js";
 import type { LegalStatusIndex, OutreachConfig } from "./outreach.js";
 import { runShortlistReport } from "./shortlist-runner.js";
 import { type ShortlistFormat, type ShortlistSort } from "./shortlist.js";
@@ -689,6 +689,7 @@ const shortlistProgram = program
   .option("--outreach <path>", "read your sender, company details, and offer wording for --email-drafts from a JSON file")
   .option("--no-links", "leave drafts free of URLs, domains, and email addresses; leads whose draft would contain one are skipped")
   .option("--legal-status <path>", "read Companies House results (leadKey or label, companyNumber, companyType, companyStatus) and draft only for active companies and LLPs")
+  .option("--recheck", "fetch each website that would get a draft again and keep only the points it still shows")
   .action(async () => {
     const options = optsWithLocalCliPrecedence(shortlistProgram) as {
       input?: string;
@@ -701,6 +702,7 @@ const shortlistProgram = program
       legalStatus?: string;
       outreach?: string;
       links: boolean;
+      recheck?: boolean;
       top: string;
       minOpportunityScore?: string;
       minScore?: string;
@@ -754,6 +756,9 @@ const shortlistProgram = program
       if (options.legalStatus && !options.emailDrafts) {
         throw new Error("--legal-status is only used with --email-drafts");
       }
+      if (options.recheck && !options.emailDrafts) {
+        throw new Error("--recheck is only used with --email-drafts");
+      }
       let outreach: OutreachConfig | undefined;
       let legal: LegalStatusIndex | undefined;
       if (options.outreach) {
@@ -788,7 +793,7 @@ const shortlistProgram = program
           : undefined,
         emailDrafts:
           options.emailDrafts && outreach
-            ? { dir: options.emailDrafts, config: outreach, reportsDir: options.reportsDir ?? defaultReportsDir(options.input), links: options.links, legal }
+            ? { dir: options.emailDrafts, config: outreach, reportsDir: options.reportsDir ?? defaultReportsDir(options.input), links: options.links, legal, recheck: options.recheck }
             : undefined,
         format,
         shortlist: {
@@ -900,6 +905,38 @@ const followUpsProgram = program
       });
       process.stdout.write(`Follow-up drafts: ${result.drafted} of ${result.contacted} contacted lead${result.contacted === 1 ? "" : "s"}\n`);
       process.stdout.write(`Index: ${join(options.outDir, "index.md")}\n`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      process.stderr.write(`open-local-audit: ${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+const companiesHouseProgram = program
+  .command("companies-house")
+  .description("Look up leads with a public email on Companies House and write the CSV that shortlist --legal-status reads.")
+  .requiredOption("--input <path>", "read the discovery or CRM CSV export (leadKey, label, publicEmail, and address and locality when present)")
+  .requiredOption("--out <path>", "write the Companies House results CSV; rows already in this file are kept")
+  .action(async () => {
+    const options = companiesHouseProgram.opts() as { input: string; out: string };
+    try {
+      const apiKey = resolveCompaniesHouseApiKey();
+      if (!apiKey) {
+        throw new Error(
+          "companies-house needs a Companies House API key in COMPANIES_HOUSE_API_KEY; a free key comes from https://developer.company-information.service.gov.uk/"
+        );
+      }
+      const { companiesHouseClient, runCompaniesHouse } = await import("./companies-house.js");
+      const result = await runCompaniesHouse({ input: options.input, out: options.out, get: companiesHouseClient(apiKey) });
+      const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+      process.stdout.write(
+        `Companies House: ${plural(result.checked, "lead")} checked: ${result.matched} matched, ${result.check} to check by hand, ${result.notFound} not found, ${result.errors} failed\n`
+      );
+      if (result.kept > 0) {
+        process.stdout.write(`Kept from the existing file: ${plural(result.kept, "row")}\n`);
+      }
+      process.stdout.write(`Skipped: ${result.withoutEmail} without a public email, ${result.outsideUk} outside the UK\n`);
+      process.stdout.write(`Output: ${options.out}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       process.stderr.write(`open-local-audit: ${message}\n`);
