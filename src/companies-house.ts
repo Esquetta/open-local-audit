@@ -131,15 +131,23 @@ function nameTokens(value: string): string[] {
   return joined.split(" ").filter(Boolean);
 }
 
-// Every word and number of the listed street address is on the company's address, so "6 Nottingham Road" matches
-// "6 Nottingham Road, Long Eaton" but "12 High Street" does not match "12 High Road".
-function sameStreet(street: string, candidate: string): boolean {
-  const listed = addressTokens(street);
+// Every word and number of the listed street address, from its house number to its street type, is in the company's
+// street lines, so "6 Nottingham Road" matches "6 Nottingham Road, Long Eaton" but "12 High Street" does not match
+// "12 High Road". A building name before the number ("The Surgery, 14 Regent Street") is left out, and a district
+// after the street type ("22 Ruddington Lane Wilford") may be anywhere in the address.
+function sameStreet(street: string, item: SearchItem): boolean {
+  const tokens = addressTokens(street);
+  const listed = tokens.slice(Math.max(tokens.findIndex((token) => /\d/.test(token)), 0));
   if (!listed.some((token) => /\d/.test(token)) || !listed.some((token) => !/\d/.test(token))) {
     return false;
   }
-  const found = new Set(addressTokens(candidate));
-  return listed.every((token) => found.has(token));
+  let end = listed.length - 1;
+  while (end >= 0 && !streetTypes.has(listed[end])) {
+    end -= 1;
+  }
+  const streetLines = new Set(addressTokens(item.street));
+  const anywhere = new Set(addressTokens(item.address));
+  return listed.every((token, index) => (end >= 0 && index > end ? anywhere : streetLines).has(token));
 }
 
 function words(value: string): string[] {
@@ -171,7 +179,7 @@ export function matchCompany(lead: CompaniesHouseLead, items: SearchItem[]): { m
     const exact = name.join("") === listed.join("");
     const contains = !exact && listed.length >= 2 && listed.every((token) => name.includes(token));
     const town = sameTown(lead.locality, item.town);
-    const street = sameStreet(lead.address, item.street);
+    const street = sameStreet(lead.address, item);
     return { item, exact, contains, town, street, address: town && street };
   });
   const tiers: Array<[string, typeof scored]> = [

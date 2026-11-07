@@ -47,6 +47,18 @@ describe("Companies House matching", () => {
         item("DEVELLO LIMITED", "Wellington House, 15 Wellington Circus, Nottingham, NG1 5AL")
       ]).match
     ).toMatchObject({ item: { title: "DEVELLO LIMITED" } });
+    // A building name before the house number and a district after the street are not needed on the office address,
+    // with the address fields as the live search returns them.
+    expect(
+      matchCompany(lead("Brieley Grimsdell Falconer Ltd.", "The Surgery, 14 Regent Street"), [item("BRIELEY GRIMSDELL FALCONER LTD", "14 Regent Street, Kimberley, Nottingham, NG16 2LW")]).match
+    ).toBeDefined();
+    const pamtrad = item("PAMTRAD CUSTOMS LIMITED", "The Stables, 22 Ruddington Lane, Wilford, Nottingham, NG11 7BH", "active", "05077465", {
+      address_line_1: "Wilford",
+      locality: "Nottingham",
+      postal_code: "NG11 7BH",
+      premises: "The Stables, 22 Ruddington Lane"
+    });
+    expect(matchCompany(lead("Pamtrad Customs", "22 Ruddington Lane Wilford"), [pamtrad]).match).toMatchObject({ reason: "same name and address" });
     // Spacing, "&", and legal suffixes do not matter.
     expect(matchCompany(lead("R M Tax & Accountancy", "27 York Rd", "Long Eaton"), [item("RM TAX AND ACCOUNTANCY LTD", "27 York Road, Long Eaton, NG10 4NJ")]).match).toBeDefined();
   });
