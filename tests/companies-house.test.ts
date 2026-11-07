@@ -9,6 +9,7 @@ import {
   matchCompany,
   readCompaniesHouseLeads,
   runCompaniesHouse,
+  searchItems,
   type CompaniesHouseGet,
   type CompaniesHouseLead
 } from "../src/companies-house.js";
@@ -26,10 +27,9 @@ function lead(label: string, address: string, locality = "Nottingham"): Companie
   return { leadKey: `overture:${label}`, label, address, locality };
 }
 
-// A search result whose town is its address snippet without the first part and the parts holding numbers.
-function item(title: string, address: string, companyStatus = "active", companyNumber = title.slice(0, 8)) {
-  const town = address.split(",").slice(1).filter((part) => !/\d/.test(part)).join(",");
-  return { title, companyNumber, companyStatus, companyType: "ltd", address, town };
+// A search result read the way the command reads the API's answer, from its address snippet and optional fields.
+function item(title: string, address: string, companyStatus = "active", companyNumber = title.slice(0, 8), fields?: Record<string, string>) {
+  return searchItems({ items: [{ title, company_number: companyNumber, company_status: companyStatus, company_type: "ltd", address_snippet: address, address: fields }] })[0];
 }
 
 describe("Companies House matching", () => {
@@ -69,10 +69,22 @@ describe("Companies House matching", () => {
     expect(matchCompany(lead("J Smith Plumbing", "12 High Street", "Leeds"), [item("J SMITH PLUMBING LTD", "12 High Street, Bristol, BS1 1AA")]).check).toEqual([
       expect.objectContaining({ reason: "check: same name and street, another town" })
     ]);
-    // A town named in a street ("Nottingham Road") is not the company's town.
+    // A town named in a street ("Nottingham Road") is not the company's town, in the snippet or in a second address line.
     expect(matchCompany(lead("R M Tax & Accountancy", "6 Ashfield Ave"), [item("RM TAX & ACCOUNTANCY LIMITED", "27 Nottingham Road, Long Eaton, Derbyshire, England, NG10 4NJ")])).toEqual({
       check: [{ item: expect.objectContaining({ title: "RM TAX & ACCOUNTANCY LIMITED" }), reason: "check: same name, address and town differ" }]
     });
+    const park = item("SMITH PLUMBING LTD", "Unit 3, Trent Business Park, Nottingham Road, Long Eaton, NG10 1AA", "active", "01111111", {
+      premises: "Unit 3",
+      address_line_1: "Trent Business Park",
+      address_line_2: "Nottingham Road",
+      locality: "Long Eaton"
+    });
+    expect(park).toMatchObject({ town: "Long Eaton" });
+    expect(matchCompany(lead("Smith Plumbing", "3 Nottingham Road"), [park]).match).toBeUndefined();
+    // The street's words are looked for in the street part only, not in the district ("West Bridgford").
+    expect(matchCompany(lead("West Builders", "1 West Street"), [item("WEST BUILDERS LTD", "1 High Street, West Bridgford, Nottingham, NG2 1AA")]).check).toEqual([
+      expect.objectContaining({ reason: "check: same name, another address in the town" })
+    ]);
     // Every word of the street counts: a road is not a street.
     expect(matchCompany(lead("High Builders", "12 High Street", "Leeds"), [item("HIGH BUILDERS LTD", "12 High Road, Leeds, LS1 1AA")]).match).toBeUndefined();
     expect(
@@ -271,6 +283,8 @@ describe("companies-house command", () => {
 
   it("needs the lead columns and an API key", () => {
     expect(() => readCompaniesHouseLeads("leadKey,label\noverture:1,Smith\n")).toThrow("companies-house --input needs leadKey, label, and publicEmail columns");
+    // Excel's "CSV UTF-8" adds a byte order mark.
+    expect(readCompaniesHouseLeads(`${String.fromCharCode(0xfeff)}${header}\noverture:1,Smith,info@smith.test,,,GB\n`).leads).toHaveLength(1);
     const { input, out } = setup(["overture:1,Brooks Mayfield,info@brooks.test,12 Bridgford Road,Nottingham,GB"]);
     const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "companies-house", "--input", input, "--out", out], {
       encoding: "utf8",

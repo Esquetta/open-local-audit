@@ -2,7 +2,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { cleanInputLines, escapeCsvCell, parseCsvLine } from "./csv.js";
 import { isPlainEmailAddress } from "./monitor-service.js";
-import { addressTokens } from "./rules.js";
+import { addressTokens, streetTypes } from "./rules.js";
 import { writeWorkflowOutputFile } from "./workflow-output.js";
 
 // Companies House checks for leads with a public email, written as the CSV that shortlist --legal-status reads. Only a
@@ -69,7 +69,7 @@ export interface CompaniesHouseLead {
 
 // Leads with a plain public email in a discovery or CRM export, once each; only they can get a cold email draft.
 export function readCompaniesHouseLeads(csv: string): { leads: CompaniesHouseLead[]; withoutEmail: number; outsideUk: number } {
-  const lines = cleanInputLines(csv);
+  const lines = cleanInputLines(csv.replace(/^\uFEFF/, ""));
   const headers = parseCsvLine(lines[0] ?? "");
   const [key, label, email, address, locality, country] = ["leadKey", "label", "publicEmail", "address", "locality", "country"].map((name) => headers.indexOf(name));
   if (key < 0 || label < 0 || email < 0) {
@@ -101,13 +101,15 @@ export function readCompaniesHouseLeads(csv: string): { leads: CompaniesHouseLea
   return { leads, withoutEmail, outsideUk };
 }
 
-interface SearchItem {
+export interface SearchItem {
   title: string;
   companyNumber: string;
   companyStatus: string;
   companyType: string;
   address: string;
-  // The town part of the address (district, post town, county), without the premises, street, or postcode.
+  // The premises, streets, and postcode of the address.
+  street: string;
+  // The town part of the address (district, post town, county), without the premises, streets, or postcode.
   town: string;
 }
 
@@ -169,7 +171,8 @@ export function matchCompany(lead: CompaniesHouseLead, items: SearchItem[]): { m
     const exact = name.join("") === listed.join("");
     const contains = !exact && listed.length >= 2 && listed.every((token) => name.includes(token));
     const town = sameTown(lead.locality, item.town);
-    return { item, exact, contains, town, address: town && sameStreet(lead.address, item.address), street: sameStreet(lead.address, item.address) };
+    const street = sameStreet(lead.address, item.street);
+    return { item, exact, contains, town, street, address: town && street };
   });
   const tiers: Array<[string, typeof scored]> = [
     ["same name and address", scored.filter((entry) => entry.exact && entry.address)],
@@ -220,21 +223,30 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-// The town part comes from the result's address fields, or else from the address snippet without its first part
-// (premises or street) and without parts holding numbers (streets, postcodes).
-function townPart(item: Record<string, unknown>): string {
-  const address = record(item.address);
-  const fields = [address.address_line_2, address.locality, address.region].map(text).filter(Boolean);
-  return fields.length > 0
-    ? fields.join(", ")
-    : text(item.address_snippet)
-        .split(",")
-        .slice(1)
-        .filter((part) => !/\d/.test(part))
-        .join(",");
+// A part ending in a street type ("Nottingham Road", "Mill Ln") is a street, whichever address field holds it.
+function isStreet(part: string): boolean {
+  const tokens = addressTokens(part);
+  return streetTypes.has(tokens[tokens.length - 1] ?? "");
 }
 
-function searchItems(body: unknown): SearchItem[] {
+// The address snippet split into its street part (premises, streets, postcode) and its town part (district, post
+// town, county): the snippet's parts after the first that hold no number and are not a street. The result's own
+// address fields give the town part when it has them.
+function addressParts(item: Record<string, unknown>): { street: string; town: string } {
+  const parts = text(item.address_snippet)
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const isTown = (part: string, index: number) => index > 0 && !/\d/.test(part) && !isStreet(part);
+  const address = record(item.address);
+  const fields = [address.address_line_2, address.locality, address.region].map(text).filter((part) => part && !isStreet(part));
+  return {
+    street: parts.filter((part, index) => !isTown(part, index)).join(", "),
+    town: (fields.length > 0 ? fields : parts.filter(isTown)).join(", ")
+  };
+}
+
+export function searchItems(body: unknown): SearchItem[] {
   const items = record(body).items;
   return (Array.isArray(items) ? items : [])
     .map(record)
@@ -244,7 +256,7 @@ function searchItems(body: unknown): SearchItem[] {
       companyStatus: text(item.company_status),
       companyType: text(item.company_type),
       address: text(item.address_snippet),
-      town: townPart(item)
+      ...addressParts(item)
     }))
     .filter((item) => item.title && item.companyNumber);
 }
@@ -298,8 +310,8 @@ function row(lead: CompaniesHouseLead, company: CompanyRecord & { match: string 
 
 // kept holds the rows of an earlier file, written back unchanged before the new results.
 export function renderLegalStatusCsv(results: CompaniesHouseResult[], kept: string[], generatedAt: string): string {
-  // A comment line stays one spreadsheet cell, so a label cannot start a formula cell of its own.
-  const note = (value: string) => value.replace(/[\r\n,"]+/g, " ");
+  // A comment line stays one spreadsheet cell, also where ";" separates cells, so a label cannot start a formula cell.
+  const note = (value: string) => value.replace(/[\r\n\t,;"]+/g, " ");
   return [
     `# Companies House results, ${generatedAt}. shortlist --legal-status reads the rows; lines starting with "#" are ignored.`,
     `# A "# check:" line was not matched with confidence: confirm the company's name and address, then delete "# check: " to use it.`,
@@ -326,7 +338,8 @@ function labelKey(value: string): string {
 // The rows already in the output file, which a rerun keeps, and the leads they cover: by leadKey, or by label for a
 // row without one. A file with other columns is not merged, so no row is moved into the wrong column.
 function readKeptRows(csv: string, path: string): { lines: string[]; leadKeys: Set<string>; labels: Set<string> } {
-  const lines = cleanInputLines(csv);
+  // Excel's "CSV UTF-8" starts the file with a byte order mark.
+  const lines = cleanInputLines(csv.replace(/^\uFEFF/, ""));
   if (lines.length > 0 && lines[0] !== legalStatusHeaders.join(",")) {
     throw new Error(`${path} has other columns than companies-house writes; use another --out file`);
   }
