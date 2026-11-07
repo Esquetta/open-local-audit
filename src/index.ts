@@ -75,6 +75,8 @@ export { buildPitchBrief, meetsPitchStrength, pitchStrength, readLeadReport, ren
 export { buildFollowUpDraft, buildOutreachDraft, planOutreachDrafts, readLegalStatus, readOutreachConfig, renderOutreachEml, renderOutreachIndex } from "./outreach.js";
 export type { LegalStatus, LegalStatusIndex, OutreachConfig, OutreachDraft, OutreachDraftResult } from "./outreach.js";
 export { runFollowUps } from "./follow-ups.js";
+export { checkCompanies, companiesHouseClient, matchCompany, readCompaniesHouseLeads, renderLegalStatusCsv, runCompaniesHouse } from "./companies-house.js";
+export type { CompaniesHouseGet, CompaniesHouseLead, CompaniesHouseResult, CompaniesHouseRunResult, CompanyRecord } from "./companies-house.js";
 export type { FollowUpOptions, FollowUpResult } from "./follow-ups.js";
 export type { PitchBrief, PitchPoint, PitchReportStatus, PitchStrength } from "./pitch-brief.js";
 export { renderHtmlReport, renderJsonReport, renderMarkdownReport } from "./reporters.js";

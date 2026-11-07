@@ -2,6 +2,12 @@
 
 All notable changes to Open Local Audit will be documented here.
 
+## v0.96.0 - 2026-11-07
+
+- Added the `companies-house` command. It looks up every lead with a public email on the Companies House API and writes the CSV that `--legal-status` reads. A company gets a row when its name matches the lead's (ignoring case, punctuation, `&`/`and`, and suffixes such as Ltd) and its registered office is at the lead's street address or in its town, or when its name contains the lead's two-or-more-word name at the same street address. Rows add the company name, status detail (such as a proposal to strike off), overdue accounts or confirmation statement, registered address, and the reason for the match. Close candidates, such as the same name in another town, are written as commented `# check:` lines to confirm by hand, and leads without a candidate as `# not found:`. Rows already in the output file are kept and not looked up again. It needs a free API key in `COMPANIES_HOUSE_API_KEY`.
+- Added `shortlist --recheck` for `--email-drafts`. Before writing a draft, it fetches the lead's website again and keeps only the points the audit found and the fresh check found again, as `follow-ups` does. `index.md` lists the points that are no longer found, and a lead whose site cannot be fetched, whose points are all gone, or whose remaining points rate weak gets a reason instead of a draft.
+- Exported `runCompaniesHouse`, `checkCompanies`, `companiesHouseClient`, `matchCompany`, `readCompaniesHouseLeads`, `renderLegalStatusCsv`, and their types.
+
 ## v0.95.0 - 2026-11-04
 
 - Added the `follow-ups` command. It takes leads marked `contacted` in a review CSV, after `--after-days` days (default 5), fetches each website again, and writes an unsent `.eml` follow-up that names only the problems a first email would have named and the fresh check found again, plus an `index.md` with the points that are no longer found and the reason for every lead without a draft. Each lead is matched to its review row by `leadKey`, and a second lead with the same address or website is skipped. It supports `--legal-status` and `--no-links`, and an optional `followUp` wording in the outreach file. Nothing is sent.

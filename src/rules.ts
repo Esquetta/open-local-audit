@@ -628,7 +628,7 @@ function asciiDigits(value: string): string {
   });
 }
 
-function addressTokens(value: string): string[] {
+export function addressTokens(value: string): string[] {
   return asciiDigits(value)
     .replace(/\s*([½¼¾])/gu, (_, fraction: string) => ` ${{ "½": "1/2", "¼": "1/4", "¾": "3/4" }[fraction]}`)
     // Keep fractional house numbers ("12 1/2") as one token so the fraction is not read as separate numbers.
