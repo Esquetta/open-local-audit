@@ -133,8 +133,9 @@ function nameTokens(value: string): string[] {
 
 // Every word and number of the listed street address, from its house number to its street type, is in the company's
 // street lines, so "6 Nottingham Road" matches "6 Nottingham Road, Long Eaton" but "12 High Street" does not match
-// "12 High Road". A building name before the number ("The Surgery, 14 Regent Street") is left out, and a district
-// after the street type ("22 Ruddington Lane Wilford") may be anywhere in the address.
+// "12 High Road". A building name before the number ("The Surgery, 14 Regent Street") is left out, and words after
+// the street type may instead be a whole part of the address, as a district ("22 Ruddington Lane Wilford" against
+// "22 Ruddington Lane, Wilford"); "4 Grove Hill" does not match "4 Grove Road, Forest Hill".
 function sameStreet(street: string, item: SearchItem): boolean {
   const tokens = addressTokens(street);
   const listed = tokens.slice(Math.max(tokens.findIndex((token) => /\d/.test(token)), 0));
@@ -146,8 +147,9 @@ function sameStreet(street: string, item: SearchItem): boolean {
     end -= 1;
   }
   const streetLines = new Set(addressTokens(item.street));
-  const anywhere = new Set(addressTokens(item.address));
-  return listed.every((token, index) => (end >= 0 && index > end ? anywhere : streetLines).has(token));
+  const [head, tail] = end >= 0 ? [listed.slice(0, end + 1), listed.slice(end + 1)] : [listed, []];
+  const parts = item.address.split(",").map((part) => addressTokens(part).join(" "));
+  return head.every((token) => streetLines.has(token)) && (tail.every((token) => streetLines.has(token)) || parts.includes(tail.join(" ")));
 }
 
 function words(value: string): string[] {

@@ -59,6 +59,9 @@ describe("Companies House matching", () => {
       premises: "The Stables, 22 Ruddington Lane"
     });
     expect(matchCompany(lead("Pamtrad Customs", "22 Ruddington Lane Wilford"), [pamtrad]).match).toMatchObject({ reason: "same name and address" });
+    // Words after the street type must be a whole part of the address, not a word of a district.
+    expect(matchCompany(lead("Acme Joinery", "4 Grove Hill", "London"), [item("ACME JOINERY LTD", "4 Grove Road, Forest Hill, London, SE23 1AA")]).match).toBeUndefined();
+    expect(matchCompany(lead("West Builders", "1 High Street West"), [item("WEST BUILDERS LTD", "1 High Street, West Bridgford, Nottingham, NG2 1AA")]).match).toBeUndefined();
     // Spacing, "&", and legal suffixes do not matter.
     expect(matchCompany(lead("R M Tax & Accountancy", "27 York Rd", "Long Eaton"), [item("RM TAX AND ACCOUNTANCY LTD", "27 York Road, Long Eaton, NG10 4NJ")]).match).toBeDefined();
   });
