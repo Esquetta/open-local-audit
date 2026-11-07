@@ -26,10 +26,20 @@ export function companiesHouseClient(
   const authorization = `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`;
   return async (path) => {
     for (let attempt = 1; ; attempt += 1) {
-      const response = await fetchImpl(`${apiBase}${path}`, {
-        headers: { Authorization: authorization, Accept: "application/json" },
-        signal: AbortSignal.timeout(30_000)
-      });
+      let response: Response;
+      try {
+        response = await fetchImpl(`${apiBase}${path}`, {
+          headers: { Authorization: authorization, Accept: "application/json" },
+          signal: AbortSignal.timeout(30_000)
+        });
+      } catch (error) {
+        // A dropped connection or a timeout is retried like a server error.
+        if (attempt < 4) {
+          await sleep(attempt * 2000);
+          continue;
+        }
+        throw error;
+      }
       if (response.status === 404) {
         return undefined;
       }
@@ -65,26 +75,28 @@ export function readCompaniesHouseLeads(csv: string): { leads: CompaniesHouseLea
   if (key < 0 || label < 0 || email < 0) {
     throw new Error("companies-house --input needs leadKey, label, and publicEmail columns");
   }
-  const leads: CompaniesHouseLead[] = [];
-  const seen = new Set<string>();
-  let withoutEmail = 0;
-  let outsideUk = 0;
+  // A lead listed more than once is checked from its first row with an email.
+  const rows = new Map<string, { cells: string[]; hasEmail: boolean }>();
   for (const line of lines.slice(1)) {
     const cells = parseCsvLine(line);
     const leadKey = cells[key] ?? "";
-    if (!leadKey || !(cells[label] ?? "").trim() || seen.has(leadKey)) {
-      continue;
+    const hasEmail = (cells[email] ?? "").split(/[\s;,]+/).some((candidate) => candidate && isPlainEmailAddress(candidate));
+    const first = rows.get(leadKey);
+    if (leadKey && (cells[label] ?? "").trim() && (!first || (hasEmail && !first.hasEmail))) {
+      rows.set(leadKey, { cells, hasEmail });
     }
-    seen.add(leadKey);
-    if (!(cells[email] ?? "").split(/[\s;,]+/).some((candidate) => candidate && isPlainEmailAddress(candidate))) {
+  }
+  const leads: CompaniesHouseLead[] = [];
+  let withoutEmail = 0;
+  let outsideUk = 0;
+  for (const [leadKey, { cells, hasEmail }] of rows) {
+    if (!hasEmail) {
       withoutEmail += 1;
-      continue;
-    }
-    if (country >= 0 && cells[country] && !/^(?:gb|uk)$/i.test(cells[country].trim())) {
+    } else if (country >= 0 && cells[country] && !/^(?:gb|uk)$/i.test(cells[country].trim())) {
       outsideUk += 1;
-      continue;
+    } else {
+      leads.push({ leadKey, label: cells[label].trim(), address: address >= 0 ? cells[address] ?? "" : "", locality: locality >= 0 ? cells[locality] ?? "" : "" });
     }
-    leads.push({ leadKey, label: cells[label].trim(), address: address >= 0 ? cells[address] ?? "" : "", locality: locality >= 0 ? cells[locality] ?? "" : "" });
   }
   return { leads, withoutEmail, outsideUk };
 }
@@ -95,6 +107,8 @@ interface SearchItem {
   companyStatus: string;
   companyType: string;
   address: string;
+  // The town part of the address (district, post town, county), without the premises, street, or postcode.
+  town: string;
 }
 
 // Name words without legal suffixes, so "Smith & Co Ltd" and "SMITH AND COMPANY LIMITED" compare equal.
@@ -115,27 +129,26 @@ function nameTokens(value: string): string[] {
   return joined.split(" ").filter(Boolean);
 }
 
-// The listed street address is on the company's address: every house number and at least two of its words, or all of
-// them when it has fewer ("6 Nottingham Road" against "6 Nottingham Road, Long Eaton, NG10 1HP").
-function sameAddress(street: string, candidate: string): boolean {
+// Every word and number of the listed street address is on the company's address, so "6 Nottingham Road" matches
+// "6 Nottingham Road, Long Eaton" but "12 High Street" does not match "12 High Road".
+function sameStreet(street: string, candidate: string): boolean {
   const listed = addressTokens(street);
-  const numbers = listed.filter((token) => /\d/.test(token));
-  const words = listed.filter((token) => !/\d/.test(token));
-  if (numbers.length === 0 || words.length === 0) {
+  if (!listed.some((token) => /\d/.test(token)) || !listed.some((token) => !/\d/.test(token))) {
     return false;
   }
   const found = new Set(addressTokens(candidate));
-  return numbers.every((token) => found.has(token)) && words.filter((token) => found.has(token)).length >= Math.min(2, words.length);
+  return listed.every((token) => found.has(token));
 }
 
 function words(value: string): string[] {
   return value.toLowerCase().split(/[^\p{L}]+/u).filter((word) => word.length > 1);
 }
 
-function sameTown(locality: string, candidate: string): boolean {
-  const town = words(locality);
-  const found = new Set(words(candidate));
-  return town.length > 0 && town.every((word) => found.has(word));
+// The listed town is in the town part of the company's address, so a street such as "Nottingham Road" does not count.
+function sameTown(locality: string, town: string): boolean {
+  const listed = words(locality);
+  const found = new Set(words(town));
+  return listed.length > 0 && listed.every((word) => found.has(word));
 }
 
 export interface CompanyCandidate {
@@ -144,8 +157,8 @@ export interface CompanyCandidate {
 }
 
 // The search result that is this lead's company, or the close candidates to check by hand. A company name is unique
-// on the register, but a sole trader can trade under a company's name elsewhere, so a name alone is not enough: it
-// needs the listed address, or the listed town.
+// on the register, but a sole trader can trade under a company's name, even in the same town, so a match needs the
+// name and the listed street address and town.
 export function matchCompany(lead: CompaniesHouseLead, items: SearchItem[]): { match?: CompanyCandidate; check: CompanyCandidate[] } {
   const listed = nameTokens(lead.label);
   if (listed.length === 0) {
@@ -154,13 +167,13 @@ export function matchCompany(lead: CompaniesHouseLead, items: SearchItem[]): { m
   const scored = items.map((item) => {
     const name = nameTokens(item.title);
     const exact = name.join("") === listed.join("");
-    const contains = listed.length >= 2 && listed.every((token) => name.includes(token));
-    return { item, exact, contains, address: sameAddress(lead.address, item.address), town: sameTown(lead.locality, item.address) };
+    const contains = !exact && listed.length >= 2 && listed.every((token) => name.includes(token));
+    const town = sameTown(lead.locality, item.town);
+    return { item, exact, contains, town, address: town && sameStreet(lead.address, item.address), street: sameStreet(lead.address, item.address) };
   });
   const tiers: Array<[string, typeof scored]> = [
     ["same name and address", scored.filter((entry) => entry.exact && entry.address)],
-    ["name includes the listed name, same address", scored.filter((entry) => !entry.exact && entry.contains && entry.address)],
-    ["same name and town", scored.filter((entry) => entry.exact && !entry.address && entry.town)]
+    ["name includes the listed name, same address", scored.filter((entry) => entry.contains && entry.address)]
   ];
   const [reason, tier] = tiers.find(([, entries]) => entries.length > 0) ?? ["", []];
   const active = tier.filter((entry) => entry.item.companyStatus === "active");
@@ -170,9 +183,14 @@ export function matchCompany(lead: CompaniesHouseLead, items: SearchItem[]): { m
   }
   const check = [
     ...tier.map((entry) => ({ item: entry.item, reason: `check: several companies with ${reason}` })),
-    ...scored.filter((entry) => entry.exact && !entry.address && !entry.town).map((entry) => ({ item: entry.item, reason: "check: same name, address and town differ" })),
-    ...scored.filter((entry) => !entry.exact && entry.address && !entry.contains).map((entry) => ({ item: entry.item, reason: "check: same address, different name" })),
-    ...scored.filter((entry) => !entry.exact && entry.contains && !entry.address && entry.town).map((entry) => ({ item: entry.item, reason: "check: similar name, same town" }))
+    ...scored
+      .filter((entry) => entry.exact && !entry.address)
+      .map((entry) => ({
+        item: entry.item,
+        reason: entry.town ? "check: same name, another address in the town" : entry.street ? "check: same name and street, another town" : "check: same name, address and town differ"
+      })),
+    ...scored.filter((entry) => !entry.exact && !entry.contains && entry.address).map((entry) => ({ item: entry.item, reason: "check: same address, different name" })),
+    ...scored.filter((entry) => entry.contains && !entry.address && entry.town).map((entry) => ({ item: entry.item, reason: "check: similar name, same town" }))
   ];
   return { check: check.filter((entry, index) => check.findIndex((other) => other.item.companyNumber === entry.item.companyNumber) === index).slice(0, 3) };
 }
@@ -202,6 +220,20 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+// The town part comes from the result's address fields, or else from the address snippet without its first part
+// (premises or street) and without parts holding numbers (streets, postcodes).
+function townPart(item: Record<string, unknown>): string {
+  const address = record(item.address);
+  const fields = [address.address_line_2, address.locality, address.region].map(text).filter(Boolean);
+  return fields.length > 0
+    ? fields.join(", ")
+    : text(item.address_snippet)
+        .split(",")
+        .slice(1)
+        .filter((part) => !/\d/.test(part))
+        .join(",");
+}
+
 function searchItems(body: unknown): SearchItem[] {
   const items = record(body).items;
   return (Array.isArray(items) ? items : [])
@@ -211,7 +243,8 @@ function searchItems(body: unknown): SearchItem[] {
       companyNumber: text(item.company_number),
       companyStatus: text(item.company_status),
       companyType: text(item.company_type),
-      address: text(item.address_snippet)
+      address: text(item.address_snippet),
+      town: townPart(item)
     }))
     .filter((item) => item.title && item.companyNumber);
 }
@@ -263,20 +296,21 @@ function row(lead: CompaniesHouseLead, company: CompanyRecord & { match: string 
     .join(",");
 }
 
-// kept holds rows from an earlier file, by leadKey, written back unchanged.
-export function renderLegalStatusCsv(results: CompaniesHouseResult[], kept: Map<string, string>, generatedAt: string): string {
-  const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ");
+// kept holds the rows of an earlier file, written back unchanged before the new results.
+export function renderLegalStatusCsv(results: CompaniesHouseResult[], kept: string[], generatedAt: string): string {
+  // A comment line stays one spreadsheet cell, so a label cannot start a formula cell of its own.
+  const note = (value: string) => value.replace(/[\r\n,"]+/g, " ");
   return [
     `# Companies House results, ${generatedAt}. shortlist --legal-status reads the rows; lines starting with "#" are ignored.`,
     `# A "# check:" line was not matched with confidence: confirm the company's name and address, then delete "# check: " to use it.`,
     legalStatusHeaders.join(","),
-    ...[...kept.values()],
+    ...kept,
     ...results.flatMap((result) => {
       if (result.outcome === "error") {
-        return [`# error: ${oneLine(result.lead.label)} (${result.lead.leadKey}): ${oneLine(result.error ?? "")}`];
+        return [`# error: ${note(result.lead.label)} (${note(result.lead.leadKey)}): ${note(result.error ?? "")}`];
       }
       if (result.outcome === "not-found") {
-        return [`# not found: ${oneLine(result.lead.label)} (${result.lead.leadKey}): no company with this name; it may be a sole trader or partnership`];
+        return [`# not found: ${note(result.lead.label)} (${note(result.lead.leadKey)}): no company with this name; it may be a sole trader or partnership`];
       }
       return result.companies.map((company) => `${result.outcome === "check" ? "# check: " : ""}${row(result.lead, company)}`);
     }),
@@ -284,18 +318,25 @@ export function renderLegalStatusCsv(results: CompaniesHouseResult[], kept: Map<
   ].join("\n");
 }
 
-// Rows already in the output file: a rerun keeps the operator's confirmed rows instead of overwriting them.
-function readKeptRows(csv: string): Map<string, string> {
+// The key shortlist --legal-status matches labels by.
+function labelKey(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+// The rows already in the output file, which a rerun keeps, and the leads they cover: by leadKey, or by label for a
+// row without one. A file with other columns is not merged, so no row is moved into the wrong column.
+function readKeptRows(csv: string, path: string): { lines: string[]; leadKeys: Set<string>; labels: Set<string> } {
   const lines = cleanInputLines(csv);
-  const key = parseCsvLine(lines[0] ?? "").indexOf("leadKey");
-  const kept = new Map<string, string>();
-  for (const line of key < 0 ? [] : lines.slice(1)) {
-    const leadKey = parseCsvLine(line)[key];
-    if (leadKey && !kept.has(leadKey)) {
-      kept.set(leadKey, line);
-    }
+  if (lines.length > 0 && lines[0] !== legalStatusHeaders.join(",")) {
+    throw new Error(`${path} has other columns than companies-house writes; use another --out file`);
   }
-  return kept;
+  const rows = lines.slice(1);
+  const cells = rows.map(parseCsvLine);
+  return {
+    lines: rows,
+    leadKeys: new Set(cells.map((row) => row[0]).filter(Boolean)),
+    labels: new Set(cells.filter((row) => !row[0] && labelKey(row[1] ?? "")).map((row) => labelKey(row[1])))
+  };
 }
 
 export interface CompaniesHouseRunResult {
@@ -311,17 +352,21 @@ export interface CompaniesHouseRunResult {
 
 export async function runCompaniesHouse(options: { input: string; out: string; get: CompaniesHouseGet; now?: Date }): Promise<CompaniesHouseRunResult> {
   const { leads, withoutEmail, outsideUk } = readCompaniesHouseLeads(await readFile(options.input, "utf8"));
-  let kept = new Map<string, string>();
+  let existing = "";
   try {
-    kept = readKeptRows(await readFile(options.out, "utf8"));
+    existing = await readFile(options.out, "utf8");
   } catch (error) {
     if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) {
       throw error;
     }
   }
-  const results = await checkCompanies(leads.filter((lead) => !kept.has(lead.leadKey)), options.get);
+  const kept = readKeptRows(existing, options.out);
+  const results = await checkCompanies(
+    leads.filter((lead) => !kept.leadKeys.has(lead.leadKey) && !kept.labels.has(labelKey(lead.label))),
+    options.get
+  );
   await mkdir(dirname(options.out), { recursive: true });
-  await writeWorkflowOutputFile(options.out, renderLegalStatusCsv(results, kept, (options.now ?? new Date()).toISOString()));
+  await writeWorkflowOutputFile(options.out, renderLegalStatusCsv(results, kept.lines, (options.now ?? new Date()).toISOString()));
   const count = (outcome: CompaniesHouseResult["outcome"]) => results.filter((result) => result.outcome === outcome).length;
   return {
     checked: results.length,
@@ -329,7 +374,7 @@ export async function runCompaniesHouse(options: { input: string; out: string; g
     check: count("check"),
     notFound: count("not-found"),
     errors: count("error"),
-    kept: kept.size,
+    kept: kept.lines.length,
     withoutEmail,
     outsideUk
   };

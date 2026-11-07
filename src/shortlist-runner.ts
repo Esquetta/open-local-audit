@@ -97,7 +97,7 @@ export async function runShortlistReport(
     const planned = planOutreachDrafts(briefs, config, { emails, links, legal });
     if (options.emailDrafts.recheck) {
       const fetchSite = recheck ?? (await import("./follow-ups.js")).recheckSite;
-      // As with follow-ups, a point stays in a draft only when the audit found it and today's check finds it again.
+      // A point stays in a draft only when the audit found it and today's check finds it again.
       for (const [index, entry] of planned.entries()) {
         if (!entry.draft) {
           continue;

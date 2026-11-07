@@ -213,11 +213,11 @@ export function readLegalStatus(csv: string): LegalStatusIndex {
   for (const line of lines.slice(1)) {
     const cells = parseCsvLine(line);
     const row = { companyNumber: cells[number] ?? "", companyType: cells[type] ?? "", companyStatus: cells[status] ?? "" };
-    // A row is found by its leadKey first and by its label as well, in case the leads come from another export.
+    // A row with a leadKey is only that lead's; a row without one is found by its label. Otherwise a lead whose own
+    // check found no company would take the result of another lead with the same name.
     if (key >= 0 && cells[key]) {
       byKey.set(cells[key], row);
-    }
-    if (name >= 0 && nameKey(cells[name] ?? "")) {
+    } else if (name >= 0 && nameKey(cells[name] ?? "")) {
       byName.set(nameKey(cells[name]), row);
     }
   }

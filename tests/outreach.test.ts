@@ -199,7 +199,8 @@ describe("outreach drafts", () => {
       ["(partnership, active)", "not a company or LLP (partnership); UK PECR needs prior consent, so phone or use the contact form"],
       ["07654321 (private-limited-guarant-nsc, dissolved)", "company status is dissolved, not active"],
       [undefined, "legal form not confirmed: add the lead to --legal-status after a Companies House check"],
-      ["09999999 (Private limited company, active)", "06-renamed-key-ltd.eml"],
+      // A row with a leadKey is only that lead's, even when another lead has the same name.
+      [undefined, "legal form not confirmed: add the lead to --legal-status after a Companies House check"],
       ["LP012345 (limited-partnership, active)", "not a company or LLP (limited-partnership); UK PECR needs prior consent, so phone or use the contact form"],
       ["SL012345 (scottish-partnership, active)", "not a company or LLP (scottish-partnership); UK PECR needs prior consent, so phone or use the contact form"],
       ["(partnership (not ltd), active)", "not a company or LLP (partnership (not ltd)); UK PECR needs prior consent, so phone or use the contact form"]
